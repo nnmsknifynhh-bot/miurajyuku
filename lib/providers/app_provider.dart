@@ -509,9 +509,34 @@ class AppProvider extends ChangeNotifier {
   List<AdminReply> getAdminReplies(String threadType, String threadId) =>
       _adminReplies.where((r) => r.threadType == threadType && r.threadId == threadId).toList();
 
-  /// 管理者が返信を送信
+  /// 管理者が返信を送信（返信 or 新規起点どちらも）
   void sendAdminReply(AdminReply reply) {
     _adminReplies.add(reply);
+    notifyListeners();
+  }
+
+  /// 管理者が新規メッセージを複数宛先に一括送信
+  /// targetType: 'student' | 'parent'
+  /// targetIds : 対象の studentId のリスト
+  void sendAdminMessage({
+    required String targetType,
+    required List<String> targetIds,
+    required String text,
+    List<int>? imageBytes,
+  }) {
+    final now = DateTime.now();
+    for (final id in targetIds) {
+      _adminReplies.add(AdminReply(
+        id: 'adm_${now.millisecondsSinceEpoch}_$id',
+        threadType: targetType,
+        threadId: id,
+        text: text,
+        imageBytes: imageBytes,
+        adminInitiated: true,
+        createdAt: now,
+        isRead: false,
+      ));
+    }
     notifyListeners();
   }
 
@@ -528,6 +553,9 @@ class AppProvider extends ChangeNotifier {
   /// 管理者側の未読返信数（生徒/保護者からの未返信カウント用ではなく全体通知）
   int getUnreadAdminReplyCount(String threadType, String threadId) =>
       _adminReplies.where((r) => r.threadType == threadType && r.threadId == threadId && !r.isRead).length;
+
+  /// 管理者からの全スレッド一覧（講師閲覧用）
+  List<AdminReply> get allAdminReplies => List.unmodifiable(_adminReplies);
 
   // ---- Parent Messages ----
   List<ParentMessage> getParentMessagesForStudent(String studentId) =>

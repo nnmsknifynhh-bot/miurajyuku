@@ -1,5 +1,6 @@
-package com.studymaster.study_master
+package com.studymaster.study
 
 import io.flutter.embedding.android.FlutterActivity
 
 class MainActivity : FlutterActivity()
+

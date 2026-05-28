@@ -1113,7 +1113,27 @@ class _AdminContactTabState extends State<_AdminContactTab> with SingleTickerPro
     final unreadAbs = provider.unreadAbsenceCount;
 
     return Column(children: [
-      const SectionHeader(title: '連絡管理', subtitle: '生徒・保護者からの連絡'),
+      Row(
+        children: [
+          const Expanded(child: SectionHeader(title: '連絡管理', subtitle: '生徒・保護者からの連絡')),
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: ElevatedButton.icon(
+              onPressed: () => _showComposeSheet(context),
+              icon: const Icon(Icons.edit_square, size: 15),
+              label: const Text('新規作成', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.yellow,
+                foregroundColor: AppColors.navyDark,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ),
+        ],
+      ),
       Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         decoration: BoxDecoration(
@@ -1184,6 +1204,14 @@ class _AdminContactTabState extends State<_AdminContactTab> with SingleTickerPro
       context: context, backgroundColor: AppColors.card, isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => _ParentDetailSheet(student: student),
+    );
+  }
+
+  void _showComposeSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context, backgroundColor: AppColors.card, isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => const _ComposeMessageSheet(),
     );
   }
 }
@@ -1299,27 +1327,15 @@ class _StudentDetailSheet extends StatefulWidget {
 }
 
 class _StudentDetailSheetState extends State<_StudentDetailSheet> {
-  final _replyCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
 
   @override
   void dispose() {
-    _replyCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
   }
 
-  void _sendReply(AppProvider provider) {
-    final text = _replyCtrl.text.trim();
-    if (text.isEmpty) return;
-    provider.sendAdminReply(AdminReply(
-      id: 'ar_${DateTime.now().millisecondsSinceEpoch}',
-      threadType: 'student',
-      threadId: widget.student.id,
-      text: text,
-      createdAt: DateTime.now(),
-    ));
-    _replyCtrl.clear();
+  void _scrollToBottom() {
     Future.delayed(const Duration(milliseconds: 100), () {
       if (_scrollCtrl.hasClients) {
         _scrollCtrl.animateTo(_scrollCtrl.position.maxScrollExtent,
@@ -1338,7 +1354,8 @@ class _StudentDetailSheetState extends State<_StudentDetailSheet> {
     final allItems = [
       ...msgs.map((m) => _ChatItem(isAdmin: false, name: m.fromName, text: m.text ?? '', time: m.createdAt,
           isRead: m.isRead, onRead: () => provider.markMessageRead(m.id))),
-      ...replies.map((r) => _ChatItem(isAdmin: true, name: '管理者', text: r.text, time: r.createdAt, isRead: true)),
+      ...replies.map((r) => _ChatItem(isAdmin: true, name: '管理者', text: r.text,
+          imageBytes: r.imageBytes, imageUrl: r.imageUrl, time: r.createdAt, isRead: true)),
     ]..sort((a, b) => a.time.compareTo(b.time));
 
     return DraggableScrollableSheet(
@@ -1374,10 +1391,21 @@ class _StudentDetailSheetState extends State<_StudentDetailSheet> {
         ),
         // 返信入力エリア
         _ReplyInputBar(
-          controller: _replyCtrl,
           accentColor: AppColors.yellow,
           hintText: '${widget.student.name}さんへ返信...',
-          onSend: () => _sendReply(provider),
+          onSend: (text, bytes) {
+            if (text.isNotEmpty || bytes != null) {
+              provider.sendAdminReply(AdminReply(
+                id: 'ar_${DateTime.now().millisecondsSinceEpoch}',
+                threadType: 'student',
+                threadId: widget.student.id,
+                text: text.isNotEmpty ? text : '📷 画像を送信しました',
+                imageBytes: bytes,
+                createdAt: DateTime.now(),
+              ));
+              _scrollToBottom();
+            }
+          },
         ),
       ]),
     );
@@ -1393,40 +1421,12 @@ class _ParentDetailSheet extends StatefulWidget {
 }
 
 class _ParentDetailSheetState extends State<_ParentDetailSheet> {
-  final _replyCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
 
   @override
   void dispose() {
-    _replyCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
-  }
-
-  void _sendReply(AppProvider provider) {
-    final text = _replyCtrl.text.trim();
-    if (text.isEmpty) return;
-    provider.sendAdminReply(AdminReply(
-      id: 'ar_${DateTime.now().millisecondsSinceEpoch}',
-      threadType: 'parent',
-      threadId: widget.student.id,
-      text: text,
-      createdAt: DateTime.now(),
-    ));
-    _replyCtrl.clear();
-    _scrollToBottom();
-  }
-
-  void _sendImageReply(AppProvider provider, String imageUrl) {
-    provider.sendAdminReply(AdminReply(
-      id: 'ar_img_${DateTime.now().millisecondsSinceEpoch}',
-      threadType: 'parent',
-      threadId: widget.student.id,
-      text: '📷 画像を送信しました',
-      imageUrl: imageUrl,
-      createdAt: DateTime.now(),
-    ));
-    _scrollToBottom();
   }
 
   void _scrollToBottom() {
@@ -1449,7 +1449,8 @@ class _ParentDetailSheetState extends State<_ParentDetailSheet> {
     final allItems = [
       ...msgs.map((m) => _ChatItem(isAdmin: false, name: '${m.fromName}（保護者）', text: m.text ?? '', time: m.createdAt,
           isRead: m.isRead, onRead: () => provider.markParentMessageRead(m.id))),
-      ...replies.map((r) => _ChatItem(isAdmin: true, name: '管理者', text: r.text, imageUrl: r.imageUrl, time: r.createdAt, isRead: true)),
+      ...replies.map((r) => _ChatItem(isAdmin: true, name: '管理者', text: r.text,
+          imageUrl: r.imageUrl, imageBytes: r.imageBytes, time: r.createdAt, isRead: true)),
     ]..sort((a, b) => a.time.compareTo(b.time));
 
     return DraggableScrollableSheet(
@@ -1499,11 +1500,21 @@ class _ParentDetailSheetState extends State<_ParentDetailSheet> {
                 ),
         ),
         _ReplyInputBar(
-          controller: _replyCtrl,
           accentColor: AppColors.success,
           hintText: '${widget.student.name}の保護者へ返信...',
-          onSend: () => _sendReply(provider),
-          onSendImage: (url) => _sendImageReply(provider, url),
+          onSend: (text, bytes) {
+            if (text.isNotEmpty || bytes != null) {
+              provider.sendAdminReply(AdminReply(
+                id: 'ar_${DateTime.now().millisecondsSinceEpoch}',
+                threadType: 'parent',
+                threadId: widget.student.id,
+                text: text.isNotEmpty ? text : '📷 画像を送信しました',
+                imageBytes: bytes,
+                createdAt: DateTime.now(),
+              ));
+              _scrollToBottom();
+            }
+          },
         ),
       ]),
     );
@@ -1519,12 +1530,13 @@ class _ChatItem {
   final bool isAdmin;
   final String name;
   final String text;
-  final String? imageUrl; // 画像URL（管理者送信画像）
+  final String? imageUrl;       // 画像URL（後方互換）
+  final List<int>? imageBytes;  // バイナリ画像（カメラロール）
   final DateTime time;
   final bool isRead;
   final VoidCallback? onRead;
   _ChatItem({required this.isAdmin, required this.name, required this.text,
-    this.imageUrl, required this.time, required this.isRead, this.onRead});
+    this.imageUrl, this.imageBytes, required this.time, required this.isRead, this.onRead});
 }
 
 /// チャットバブル（左=相手、右=管理者）
@@ -1568,22 +1580,37 @@ class _ChatBubble extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (item.imageUrl != null) ...[
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.network(
-                          item.imageUrl!,
-                          width: 200, fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
-                            width: 200, height: 80,
-                            color: AppColors.navyCard,
-                            child: const Center(child: Icon(Icons.broken_image, color: AppColors.silverDim)),
+                    if (item.imageBytes != null) ...[
+                      GestureDetector(
+                        onTap: () => _showImageDialog(context, bytes: Uint8List.fromList(item.imageBytes!)),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.memory(
+                            Uint8List.fromList(item.imageBytes!),
+                            width: 200, fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                      if (item.text != '📷 画像を送信しました') const SizedBox(height: 6),
+                    ] else if (item.imageUrl != null) ...[
+                      GestureDetector(
+                        onTap: () => _showImageDialog(context, url: item.imageUrl),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.network(
+                            item.imageUrl!,
+                            width: 200, fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(
+                              width: 200, height: 80,
+                              color: AppColors.navyCard,
+                              child: const Center(child: Icon(Icons.broken_image, color: AppColors.silverDim)),
+                            ),
                           ),
                         ),
                       ),
                       if (item.text != '📷 画像を送信しました') const SizedBox(height: 6),
                     ],
-                    if (item.text != '📷 画像を送信しました' || item.imageUrl == null)
+                    if (item.text != '📷 画像を送信しました' || (item.imageBytes == null && item.imageUrl == null))
                       Text(item.text, style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.5)),
                   ],
                 ),
@@ -1645,67 +1672,73 @@ class _ChatBubble extends StatelessWidget {
     if (diff.inHours < 24) return '${diff.inHours}時間前';
     return '${dt.month}/${dt.day} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
+
+  void _showImageDialog(BuildContext context, {Uint8List? bytes, String? url}) {
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: GestureDetector(
+          onTap: () => Navigator.pop(context),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: bytes != null
+                ? Image.memory(bytes, fit: BoxFit.contain)
+                : Image.network(url!, fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, color: Colors.white, size: 64)),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
-/// 返信入力バー（画像送信ボタン付き）
-class _ReplyInputBar extends StatelessWidget {
-  final TextEditingController controller;
+/// 返信入力バー（ImagePicker対応・StatefulWidget）
+class _ReplyInputBar extends StatefulWidget {
   final Color accentColor;
   final String hintText;
-  final VoidCallback onSend;
-  final void Function(String imageUrl)? onSendImage; // 画像送信コールバック
+  final void Function(String text, List<int>? imageBytes) onSend;
   const _ReplyInputBar({
-    required this.controller,
     required this.accentColor,
     required this.hintText,
     required this.onSend,
-    this.onSendImage,
   });
+  @override
+  State<_ReplyInputBar> createState() => _ReplyInputBarState();
+}
 
-  void _showImageUrlDialog(BuildContext context) {
-    final urlCtrl = TextEditingController();
-    showDialog(
-      context: context,
-      useRootNavigator: true,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.card,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: const Text('画像URLを入力',
-            style: TextStyle(color: AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w700)),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('送信したい画像のURLを貼り付けてください',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-          const SizedBox(height: 10),
-          TextField(
-            controller: urlCtrl,
-            style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
-            decoration: InputDecoration(
-              hintText: 'https://example.com/image.jpg',
-              hintStyle: const TextStyle(color: AppColors.silverDim, fontSize: 12),
-              filled: true, fillColor: AppColors.navyCard,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            ),
-          ),
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx, rootNavigator: true).pop(),
-              child: const Text('キャンセル', style: TextStyle(color: AppColors.silverDim))),
-          ElevatedButton(
-            onPressed: () {
-              final url = urlCtrl.text.trim();
-              if (url.isNotEmpty) {
-                Navigator.of(ctx, rootNavigator: true).pop();
-                onSendImage?.call(url);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-                backgroundColor: accentColor, foregroundColor: AppColors.navyDark),
-            child: const Text('送信', style: TextStyle(fontWeight: FontWeight.w700)),
-          ),
-        ],
-      ),
-    );
+class _ReplyInputBarState extends State<_ReplyInputBar> {
+  final _ctrl = TextEditingController();
+  Uint8List? _imageBytes;
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickImage() async {
+    try {
+      final picker = ImagePicker();
+      final xFile = await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+      if (xFile == null) return;
+      final bytes = await xFile.readAsBytes();
+      setState(() => _imageBytes = bytes);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('画像の読み込みに失敗しました')),
+        );
+      }
+    }
+  }
+
+  void _send() {
+    final text = _ctrl.text.trim();
+    if (text.isEmpty && _imageBytes == null) return;
+    widget.onSend(text, _imageBytes != null ? List<int>.from(_imageBytes!) : null);
+    _ctrl.clear();
+    setState(() => _imageBytes = null);
   }
 
   @override
@@ -1716,48 +1749,306 @@ class _ReplyInputBar extends StatelessWidget {
         color: AppColors.navyDark,
         border: Border(top: BorderSide(color: AppColors.cardBorder, width: 0.5)),
       ),
-      child: Row(children: [
-        // 画像送信ボタン（onSendImage が設定されている場合のみ表示）
-        if (onSendImage != null) ...
-          [
-            GestureDetector(
-              onTap: () => _showImageUrlDialog(context),
-              child: Container(
-                width: 40, height: 40,
-                decoration: BoxDecoration(
-                  color: AppColors.navyCard,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.cardBorder),
-                ),
-                child: Icon(Icons.image_outlined, color: accentColor, size: 20),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        if (_imageBytes != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.memory(_imageBytes!, width: 72, height: 72, fit: BoxFit.cover),
               ),
-            ),
-            const SizedBox(width: 8),
-          ],
-        Expanded(
-          child: TextField(
-            controller: controller,
-            maxLines: 3, minLines: 1,
-            decoration: InputDecoration(
-              hintText: hintText,
-              hintStyle: const TextStyle(color: AppColors.silverDim, fontSize: 13),
-              filled: true, fillColor: AppColors.navyCard,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            ),
-            style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+              const SizedBox(width: 8),
+              Expanded(child: Text('画像を添付中', style: TextStyle(color: widget.accentColor, fontSize: 12))),
+              IconButton(
+                onPressed: () => setState(() => _imageBytes = null),
+                icon: const Icon(Icons.close, color: AppColors.silverDim, size: 18),
+              ),
+            ]),
           ),
-        ),
-        const SizedBox(width: 8),
-        GestureDetector(
-          onTap: onSend,
-          child: Container(
-            width: 44, height: 44,
-            decoration: BoxDecoration(color: accentColor, shape: BoxShape.circle),
-            child: const Icon(Icons.send_rounded, color: AppColors.navyDark, size: 20),
+        Row(children: [
+          GestureDetector(
+            onTap: _pickImage,
+            child: Container(
+              width: 40, height: 40,
+              decoration: BoxDecoration(
+                color: AppColors.navyCard, shape: BoxShape.circle,
+                border: Border.all(color: AppColors.cardBorder),
+              ),
+              child: Icon(Icons.image_outlined, color: widget.accentColor, size: 20),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextField(
+              controller: _ctrl,
+              maxLines: 3, minLines: 1,
+              decoration: InputDecoration(
+                hintText: widget.hintText,
+                hintStyle: const TextStyle(color: AppColors.silverDim, fontSize: 13),
+                filled: true, fillColor: AppColors.navyCard,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              ),
+              style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: _send,
+            child: Container(
+              width: 44, height: 44,
+              decoration: BoxDecoration(color: widget.accentColor, shape: BoxShape.circle),
+              child: const Icon(Icons.send_rounded, color: AppColors.navyDark, size: 20),
+            ),
+          ),
+        ]),
+      ]),
+    );
+  }
+}
+
+// ============================================================
+// 新規メッセージ作成ボトムシート
+// ============================================================
+class _ComposeMessageSheet extends StatefulWidget {
+  const _ComposeMessageSheet();
+  @override
+  State<_ComposeMessageSheet> createState() => _ComposeMessageSheetState();
+}
+
+class _ComposeMessageSheetState extends State<_ComposeMessageSheet> {
+  String _targetType = 'student';
+  final Set<String> _selectedIds = {};
+  final _bodyCtrl = TextEditingController();
+  Uint8List? _imageBytes;
+  bool _selectAll = false;
+
+  @override
+  void dispose() {
+    _bodyCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickImage() async {
+    try {
+      final xFile = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 80);
+      if (xFile == null) return;
+      final bytes = await xFile.readAsBytes();
+      setState(() => _imageBytes = bytes);
+    } catch (_) {}
+  }
+
+  void _toggleAll(List<AppUser> targets) {
+    setState(() {
+      _selectAll = !_selectAll;
+      if (_selectAll) {
+        _selectedIds.addAll(targets.map((t) => t.id));
+      } else {
+        _selectedIds.clear();
+      }
+    });
+  }
+
+  void _send(BuildContext context) {
+    final text = _bodyCtrl.text.trim();
+    if (_selectedIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('送信先を1人以上選択してください')));
+      return;
+    }
+    if (text.isEmpty && _imageBytes == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('本文または画像を入力してください')));
+      return;
+    }
+    context.read<AppProvider>().sendAdminMessage(
+      targetType: _targetType,
+      targetIds: _selectedIds.toList(),
+      text: text.isEmpty ? '📷 画像を送信しました' : text,
+      imageBytes: _imageBytes != null ? List<int>.from(_imageBytes!) : null,
+    );
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${_selectedIds.length}名に送信しました')));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<AppProvider>();
+    final students = provider.allStudents;
+    final targets = students;
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.85, maxChildSize: 0.95, minChildSize: 0.5, expand: false,
+      builder: (_, sc) => Column(children: [
+        Center(child: Container(width: 36, height: 4, margin: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(color: AppColors.cardBorder, borderRadius: BorderRadius.circular(2)))),
+        Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 10), child: Row(children: [
+          const Icon(Icons.edit_square, color: AppColors.yellow, size: 18),
+          const SizedBox(width: 8),
+          const Text('新規メッセージ作成',
+              style: TextStyle(color: AppColors.yellow, fontSize: 15, fontWeight: FontWeight.w800)),
+          const Spacer(),
+          IconButton(icon: const Icon(Icons.close, color: AppColors.silverDim, size: 20),
+              onPressed: () => Navigator.pop(context)),
+        ])),
+        const Divider(color: AppColors.cardBorder, height: 1),
+        Expanded(
+          child: SingleChildScrollView(
+            controller: sc,
+            padding: const EdgeInsets.all(16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              // 送信先種別
+              const Text('送信先', style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              Row(children: [
+                _TypeChip(
+                  label: '生徒', icon: Icons.school,
+                  selected: _targetType == 'student', color: AppColors.yellow,
+                  onTap: () => setState(() { _targetType = 'student'; _selectedIds.clear(); _selectAll = false; }),
+                ),
+                const SizedBox(width: 10),
+                _TypeChip(
+                  label: '保護者', icon: Icons.family_restroom,
+                  selected: _targetType == 'parent', color: AppColors.success,
+                  onTap: () => setState(() { _targetType = 'parent'; _selectedIds.clear(); _selectAll = false; }),
+                ),
+              ]),
+              const SizedBox(height: 14),
+              // 個別選択
+              Row(children: [
+                Text('個別選択', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
+                const Spacer(),
+                TextButton(
+                  onPressed: () => _toggleAll(targets),
+                  child: Text(_selectAll ? '選択解除' : '全選択',
+                      style: TextStyle(color: _targetType == 'student' ? AppColors.yellow : AppColors.success, fontSize: 12)),
+                ),
+              ]),
+              const SizedBox(height: 6),
+              Wrap(spacing: 8, runSpacing: 6, children: targets.map((t) {
+                final sel = _selectedIds.contains(t.id);
+                final color = _targetType == 'student' ? AppColors.yellow : AppColors.success;
+                return GestureDetector(
+                  onTap: () => setState(() {
+                    if (sel) { _selectedIds.remove(t.id); _selectAll = false; }
+                    else { _selectedIds.add(t.id); }
+                  }),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: sel ? color.withValues(alpha: 0.2) : AppColors.navyCard,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: sel ? color : AppColors.cardBorder),
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      if (sel) Icon(Icons.check_circle, color: color, size: 14),
+                      if (sel) const SizedBox(width: 4),
+                      Text('${_targetType == 'student' ? t.name : '${t.name}の保護者'}',
+                          style: TextStyle(color: sel ? color : AppColors.textSecondary, fontSize: 12, fontWeight: sel ? FontWeight.w700 : FontWeight.w400)),
+                    ]),
+                  ),
+                );
+              }).toList()),
+              const SizedBox(height: 14),
+              // 本文
+              const Text('本文', style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _bodyCtrl,
+                maxLines: 5, minLines: 3,
+                decoration: InputDecoration(
+                  hintText: 'メッセージを入力...',
+                  hintStyle: const TextStyle(color: AppColors.silverDim, fontSize: 13),
+                  filled: true, fillColor: AppColors.navyCard,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  contentPadding: const EdgeInsets.all(14),
+                ),
+                style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              // 画像添付
+              if (_imageBytes != null) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.memory(_imageBytes!, height: 140, width: double.infinity, fit: BoxFit.cover),
+                ),
+                const SizedBox(height: 6),
+                Row(children: [
+                  const Icon(Icons.check_circle, color: AppColors.success, size: 14),
+                  const SizedBox(width: 4),
+                  const Text('画像添付済み', style: TextStyle(color: AppColors.success, fontSize: 12)),
+                  const Spacer(),
+                  TextButton(onPressed: () => setState(() => _imageBytes = null),
+                      child: const Text('削除', style: TextStyle(color: AppColors.danger, fontSize: 12))),
+                ]),
+              ] else
+                OutlinedButton.icon(
+                  onPressed: _pickImage,
+                  icon: const Icon(Icons.image_outlined, size: 16),
+                  label: const Text('画像を添付', style: TextStyle(fontSize: 13)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.silverDim,
+                    side: const BorderSide(color: AppColors.cardBorder),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  ),
+                ),
+              const SizedBox(height: 20),
+              // 送信ボタン
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => _send(context),
+                  icon: const Icon(Icons.send_rounded, size: 18),
+                  label: Text(
+                    _selectedIds.isEmpty ? '送信先を選択してください' : '${_selectedIds.length}名に送信',
+                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _selectedIds.isEmpty ? AppColors.silverDim : AppColors.yellow,
+                    foregroundColor: AppColors.navyDark,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+            ]),
           ),
         ),
       ]),
+    );
+  }
+}
+
+class _TypeChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final Color color;
+  final VoidCallback onTap;
+  const _TypeChip({required this.label, required this.icon, required this.selected, required this.color, required this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: selected ? color.withValues(alpha: 0.15) : AppColors.navyCard,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: selected ? color : AppColors.cardBorder, width: selected ? 1.5 : 1),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, color: selected ? color : AppColors.silverDim, size: 16),
+          const SizedBox(width: 6),
+          Text(label, style: TextStyle(color: selected ? color : AppColors.silverDim,
+              fontSize: 13, fontWeight: selected ? FontWeight.w700 : FontWeight.w400)),
+        ]),
+      ),
     );
   }
 }

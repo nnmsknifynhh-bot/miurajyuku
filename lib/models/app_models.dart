@@ -283,12 +283,15 @@ class ParentMessage {
 // ---- Reply from admin to student/parent ----
 // threadType: 'student' or 'parent'
 // threadId  : studentId (student thread) or studentId (parent thread)
+// adminInitiated: true = 管理者から起点の新規メッセージ（返信でなく新規送信）
 class AdminReply {
   final String id;
   final String threadType; // 'student' | 'parent'
   final String threadId;   // studentId
   final String text;
-  final String? imageUrl;  // 管理者→保護者/生徒への画像
+  final String? imageUrl;      // 画像URL（後方互換）
+  final List<int>? imageBytes; // カメラロール画像バイナリ
+  final bool adminInitiated;   // true=管理者から起点
   final DateTime createdAt;
   bool isRead; // 生徒/保護者側既読
 
@@ -298,6 +301,8 @@ class AdminReply {
     required this.threadId,
     required this.text,
     this.imageUrl,
+    this.imageBytes,
+    this.adminInitiated = false,
     required this.createdAt,
     this.isRead = false,
   });

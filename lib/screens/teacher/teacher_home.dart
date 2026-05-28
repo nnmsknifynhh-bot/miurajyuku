@@ -1467,7 +1467,7 @@ class _TeacherProgressItemTile extends StatelessWidget {
 }
 
 // ============================================================
-// 生徒→管理者へのメッセージ閲覧タブ（2タブ：生徒連絡 / お知らせ）
+// 生徒→管理者へのメッセージ閲覧タブ（3タブ：生徒連絡 / チャット閲覧 / お知らせ）
 // ============================================================
 class _TeacherMessagesTab extends StatefulWidget {
   const _TeacherMessagesTab();
@@ -1483,7 +1483,7 @@ class _TeacherMessagesTabState extends State<_TeacherMessagesTab>
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 2, vsync: this);
+    _tabCtrl = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -1522,7 +1522,8 @@ class _TeacherMessagesTabState extends State<_TeacherMessagesTab>
             labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
             dividerColor: Colors.transparent,
             tabs: [
-              const Tab(text: '生徒からの連絡'),
+              const Tab(text: '生徒連絡'),
+              const Tab(text: 'チャット閲覧'),
               Tab(
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -1562,7 +1563,9 @@ class _TeacherMessagesTabState extends State<_TeacherMessagesTab>
             children: [
               // タブ1: 生徒からの連絡
               _TeacherMessagesListView(provider: provider),
-              // タブ2: お知らせ履歴
+              // タブ2: 生徒↔管理者チャット閲覧
+              _TeacherChatViewTab(provider: provider),
+              // タブ3: お知らせ履歴
               _TeacherAnnouncementHistoryTab(
                 teacher: teacher,
                 provider: provider,
@@ -1572,6 +1575,246 @@ class _TeacherMessagesTabState extends State<_TeacherMessagesTab>
         ),
       ],
     );
+  }
+}
+
+// ============================================================
+// チャット閲覧タブ（講師：生徒↔管理者のやり取りを閲覧のみ）
+// ============================================================
+class _TeacherChatViewTab extends StatelessWidget {
+  final AppProvider provider;
+  const _TeacherChatViewTab({required this.provider});
+
+  @override
+  Widget build(BuildContext context) {
+    final students = provider.allStudents;
+    if (students.isEmpty) {
+      return const Center(
+        child: EmptyState(message: '生徒が登録されていません', icon: Icons.school_outlined),
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      itemCount: students.length,
+      itemBuilder: (_, i) {
+        final s = students[i];
+        final msgs = provider.getMessagesFromStudent(s.id);
+        final replies = provider.getAdminReplies('student', s.id);
+        final total = msgs.length + replies.length;
+        return GlowCard(
+          margin: const EdgeInsets.only(bottom: 8),
+          onTap: () => _showChatSheet(context, s),
+          child: Row(children: [
+            CircleAvatar(
+              radius: 22,
+              backgroundColor: AppColors.yellow.withValues(alpha: 0.12),
+              child: Text(s.name[0],
+                  style: const TextStyle(color: AppColors.yellow, fontSize: 18, fontWeight: FontWeight.w800)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(s.name,
+                  style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 14)),
+              Text('メッセージ $total件（生徒${msgs.length} / 管理者${replies.length}）',
+                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+            ])),
+            const Icon(Icons.visibility_outlined, color: AppColors.silverDim, size: 18),
+          ]),
+        );
+      },
+    );
+  }
+
+  void _showChatSheet(BuildContext context, AppUser student) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.card,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => _TeacherChatDetailSheet(student: student),
+    );
+  }
+}
+
+/// 講師が生徒↔管理者のチャットを閲覧するシート（送信不可・閲覧専用）
+class _TeacherChatDetailSheet extends StatelessWidget {
+  final AppUser student;
+  const _TeacherChatDetailSheet({required this.student});
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<AppProvider>();
+    final msgs = provider.getMessagesFromStudent(student.id);
+    final replies = provider.getAdminReplies('student', student.id);
+
+    // 時系列ソート
+    final allItems = <_TchatItem>[
+      ...msgs.map((m) => _TchatItem(
+          isAdmin: false, name: m.fromName, text: m.text ?? '', time: m.createdAt)),
+      ...replies.map((r) => _TchatItem(
+          isAdmin: true, name: '管理者', text: r.text,
+          imageBytes: r.imageBytes, imageUrl: r.imageUrl, time: r.createdAt)),
+    ]..sort((a, b) => a.time.compareTo(b.time));
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.85, maxChildSize: 0.95, minChildSize: 0.5, expand: false,
+      builder: (_, sc) => Column(children: [
+        Center(child: Container(width: 36, height: 4, margin: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(color: AppColors.cardBorder, borderRadius: BorderRadius.circular(2)))),
+        Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 8), child: Row(children: [
+          CircleAvatar(radius: 20, backgroundColor: AppColors.yellow.withValues(alpha: 0.15),
+              child: Text(student.name[0],
+                  style: const TextStyle(color: AppColors.yellow, fontWeight: FontWeight.w800))),
+          const SizedBox(width: 10),
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(student.name,
+                style: const TextStyle(color: AppColors.yellow, fontSize: 15, fontWeight: FontWeight.w800)),
+            const Text('チャット閲覧（閲覧専用）',
+                style: TextStyle(color: AppColors.silverDim, fontSize: 11)),
+          ]),
+          const Spacer(),
+          IconButton(icon: const Icon(Icons.close, color: AppColors.silverDim, size: 20),
+              onPressed: () => Navigator.pop(context)),
+        ])),
+        // 閲覧専用バナー
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          color: AppColors.info.withValues(alpha: 0.1),
+          child: Row(children: [
+            const Icon(Icons.visibility, color: AppColors.info, size: 14),
+            const SizedBox(width: 6),
+            const Text('閲覧専用 — このチャットには返信できません',
+                style: TextStyle(color: AppColors.info, fontSize: 11)),
+          ]),
+        ),
+        const Divider(color: AppColors.cardBorder, height: 1),
+        Expanded(
+          child: allItems.isEmpty
+              ? const Center(child: EmptyState(message: 'まだメッセージがありません', icon: Icons.chat_bubble_outline))
+              : ListView.builder(
+                  controller: sc,
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                  itemCount: allItems.length,
+                  itemBuilder: (_, i) => _TchatBubble(item: allItems[i]),
+                ),
+        ),
+      ]),
+    );
+  }
+}
+
+/// チャット閲覧用データクラス
+class _TchatItem {
+  final bool isAdmin;
+  final String name;
+  final String text;
+  final List<int>? imageBytes;
+  final String? imageUrl;
+  final DateTime time;
+  _TchatItem({required this.isAdmin, required this.name, required this.text,
+      this.imageBytes, this.imageUrl, required this.time});
+}
+
+/// チャット閲覧バブル（読み取り専用）
+class _TchatBubble extends StatelessWidget {
+  final _TchatItem item;
+  const _TchatBubble({required this.item});
+
+  String _fmt(DateTime dt) {
+    final d = DateTime.now().difference(dt);
+    if (d.inMinutes < 1) return 'たった今';
+    if (d.inMinutes < 60) return '${d.inMinutes}分前';
+    if (d.inHours < 24) return '${d.inHours}時間前';
+    return '${dt.month}/${dt.day} ${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasImage = item.imageBytes != null || item.imageUrl != null;
+    final showText = item.text != '📷 画像を送信しました' || !hasImage;
+
+    if (item.isAdmin) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+            Text(_fmt(item.time), style: const TextStyle(color: AppColors.silverDim, fontSize: 10)),
+            const SizedBox(width: 6),
+            const Text('管理者', style: TextStyle(color: AppColors.yellow, fontSize: 11, fontWeight: FontWeight.w600)),
+            const SizedBox(width: 4),
+            const Icon(Icons.admin_panel_settings, color: AppColors.yellow, size: 12),
+          ]),
+          const SizedBox(height: 4),
+          Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+            const SizedBox(width: 60),
+            Flexible(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFB8860B), Color(0xFF8B6914)],
+                    begin: Alignment.topLeft, end: Alignment.bottomRight,
+                  ),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(14), topRight: Radius.circular(4),
+                    bottomLeft: Radius.circular(14), bottomRight: Radius.circular(14),
+                  ),
+                ),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                  if (item.imageBytes != null) ...[
+                    ClipRRect(borderRadius: BorderRadius.circular(8),
+                      child: Image.memory(Uint8List.fromList(item.imageBytes!), width: 200, fit: BoxFit.cover)),
+                    if (showText) const SizedBox(height: 6),
+                  ] else if (item.imageUrl != null) ...[
+                    ClipRRect(borderRadius: BorderRadius.circular(8),
+                      child: Image.network(item.imageUrl!, width: 200, fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(width: 200, height: 60,
+                          color: AppColors.navyCard,
+                          child: const Center(child: Icon(Icons.broken_image, color: AppColors.silverDim))))),
+                    if (showText) const SizedBox(height: 6),
+                  ],
+                  if (showText)
+                    Text(item.text, style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.5)),
+                ]),
+              ),
+            ),
+          ]),
+        ]),
+      );
+    } else {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const Icon(Icons.school, color: AppColors.yellow, size: 12),
+            const SizedBox(width: 4),
+            Text(item.name, style: const TextStyle(color: AppColors.yellow, fontSize: 11, fontWeight: FontWeight.w600)),
+            const SizedBox(width: 6),
+            Text(_fmt(item.time), style: const TextStyle(color: AppColors.silverDim, fontSize: 10)),
+          ]),
+          const SizedBox(height: 4),
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Flexible(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppColors.navyCard,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(4), topRight: Radius.circular(14),
+                    bottomLeft: Radius.circular(14), bottomRight: Radius.circular(14),
+                  ),
+                  border: Border.all(color: AppColors.cardBorder),
+                ),
+                child: Text(item.text, style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, height: 1.5)),
+              ),
+            ),
+            const SizedBox(width: 60),
+          ]),
+        ]),
+      );
+    }
   }
 }
 
