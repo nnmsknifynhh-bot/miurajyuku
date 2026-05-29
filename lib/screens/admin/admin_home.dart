@@ -7,7 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
 import '../../theme/app_theme.dart';
 import '../../providers/app_provider.dart';
 import '../../models/app_models.dart';
@@ -1719,11 +1721,18 @@ class _ReplyInputBarState extends State<_ReplyInputBar> {
 
   Future<void> _pickImage() async {
     try {
-      final picker = ImagePicker();
-      final xFile = await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
-      if (xFile == null) return;
-      final bytes = await xFile.readAsBytes();
-      setState(() => _imageBytes = bytes);
+      if (kIsWeb) {
+        final uploadInput = html.FileUploadInputElement()..accept = 'image/*';
+        uploadInput.click();
+        await uploadInput.onChange.first;
+        if (uploadInput.files!.isEmpty) return;
+        final file = uploadInput.files![0];
+        final reader = html.FileReader();
+        reader.readAsArrayBuffer(file);
+        await reader.onLoad.first;
+        final bytes = Uint8List.fromList(reader.result as List<int>);
+        setState(() => _imageBytes = bytes);
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1832,10 +1841,18 @@ class _ComposeMessageSheetState extends State<_ComposeMessageSheet> {
 
   Future<void> _pickImage() async {
     try {
-      final xFile = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 80);
-      if (xFile == null) return;
-      final bytes = await xFile.readAsBytes();
-      setState(() => _imageBytes = bytes);
+      if (kIsWeb) {
+        final uploadInput = html.FileUploadInputElement()..accept = 'image/*';
+        uploadInput.click();
+        await uploadInput.onChange.first;
+        if (uploadInput.files!.isEmpty) return;
+        final file = uploadInput.files![0];
+        final reader = html.FileReader();
+        reader.readAsArrayBuffer(file);
+        await reader.onLoad.first;
+        final bytes = Uint8List.fromList(reader.result as List<int>);
+        setState(() => _imageBytes = bytes);
+      }
     } catch (_) {}
   }
 
@@ -2299,21 +2316,25 @@ class _AdminAnnouncementTabState extends State<_AdminAnnouncementTab> {
     super.dispose();
   }
 
-  // 画像ピッカーを開く
+  // 画像ピッカーを開く（Web対応）
   Future<void> _pickImage() async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1200,
-      maxHeight: 1200,
-      imageQuality: 85,
-    );
-    if (picked == null) return;
-    final bytes = await picked.readAsBytes();
-    setState(() {
-      _pickedImageBytes = bytes;
-      _pickedImageName = picked.name;
-    });
+    try {
+      if (kIsWeb) {
+        final uploadInput = html.FileUploadInputElement()..accept = 'image/*';
+        uploadInput.click();
+        await uploadInput.onChange.first;
+        if (uploadInput.files!.isEmpty) return;
+        final file = uploadInput.files![0];
+        final reader = html.FileReader();
+        reader.readAsArrayBuffer(file);
+        await reader.onLoad.first;
+        final bytes = Uint8List.fromList(reader.result as List<int>);
+        setState(() {
+          _pickedImageBytes = bytes;
+          _pickedImageName = file.name;
+        });
+      }
+    } catch (_) {}
   }
 
   void _send(BuildContext context) {
