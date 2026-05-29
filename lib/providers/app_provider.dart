@@ -320,6 +320,35 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // 授業組みの編集
+  void updateLesson({
+    required String lessonId,
+    required String subject,
+    required String startTime,
+    required String endTime,
+    String? teacherId,
+    bool isWeekly = false,
+  }) {
+    final idx = _lessons.indexWhere((l) => l.id == lessonId);
+    if (idx < 0) return;
+    final old = _lessons[idx];
+    _lessons[idx] = Lesson(
+      id: old.id,
+      studentId: old.studentId,
+      date: old.date,
+      startTime: startTime,
+      endTime: endTime,
+      subject: subject,
+      memo: old.memo,
+      isAbsent: old.isAbsent,
+      absentReason: old.absentReason,
+      absentSender: old.absentSender,
+      teacherId: teacherId,
+      isWeekly: isWeekly,
+    );
+    notifyListeners();
+  }
+
   // ---- Lesson Subjects ----
   void addLessonSubject(String name) {
     if (!_lessonSubjects.contains(name)) {

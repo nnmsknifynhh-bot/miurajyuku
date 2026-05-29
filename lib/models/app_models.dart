@@ -241,6 +241,7 @@ class StudentMessage {
   final String fromName;
   final String? text;
   final String? imageUrl;
+  final List<int>? imageBytes; // Web対応：画像バイナリ
   final DateTime createdAt;
   bool isRead;
 
@@ -250,6 +251,7 @@ class StudentMessage {
     required this.fromName,
     this.text,
     this.imageUrl,
+    this.imageBytes,
     required this.createdAt,
     this.isRead = false,
   });
@@ -264,6 +266,7 @@ class ParentMessage {
   final String studentName; // 対象生徒名
   final String? text;
   final String? imageUrl;
+  final List<int>? imageBytes; // Web対応：画像バイナリ
   final DateTime createdAt;
   bool isRead;
 
@@ -275,6 +278,7 @@ class ParentMessage {
     required this.studentName,
     this.text,
     this.imageUrl,
+    this.imageBytes,
     required this.createdAt,
     this.isRead = false,
   });

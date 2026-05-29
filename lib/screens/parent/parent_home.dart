@@ -1,6 +1,9 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 import 'package:confetti/confetti.dart';
@@ -1108,6 +1111,7 @@ class _ParentContactTabState extends State<_ParentContactTab> with SingleTickerP
   final _textCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   bool _isSending = false;
+  Uint8List? _selectedImageBytes;
 
   @override
   void initState() {
@@ -1121,6 +1125,30 @@ class _ParentContactTabState extends State<_ParentContactTab> with SingleTickerP
     _textCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickImage() async {
+    try {
+      if (kIsWeb) {
+        final uploadInput = html.FileUploadInputElement()..accept = 'image/*';
+        uploadInput.click();
+        await uploadInput.onChange.first;
+        if (uploadInput.files == null || uploadInput.files!.isEmpty) return;
+        final file = uploadInput.files![0];
+        final reader = html.FileReader();
+        reader.readAsArrayBuffer(file);
+        await reader.onLoad.first;
+        final bytes = Uint8List.fromList(reader.result as List<int>);
+        setState(() => _selectedImageBytes = bytes);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('画像の読み込みに失敗しました: $e'),
+              behavior: SnackBarBehavior.floating),
+        );
+      }
+    }
   }
 
   @override
@@ -1246,8 +1274,21 @@ class _ParentContactTabState extends State<_ParentContactTab> with SingleTickerP
   Widget _buildChatTab(BuildContext context, AppProvider provider, List<ParentMessage> parentMsgs, List<AdminReply> adminReplies) {
     // 時系列マージ
     final allItems = [
-      ...parentMsgs.map((m) => _PChatItem(isMe: true, name: m.fromName, text: m.text ?? '', time: m.createdAt)),
-      ...adminReplies.map((r) => _PChatItem(isMe: false, name: '管理者', text: r.text, time: r.createdAt)),
+      ...parentMsgs.map((m) => _PChatItem(
+        isMe: true,
+        name: m.fromName,
+        text: m.text ?? '',
+        time: m.createdAt,
+        imageBytes: m.imageBytes != null ? Uint8List.fromList(m.imageBytes!) : null,
+      )),
+      ...adminReplies.map((r) => _PChatItem(
+        isMe: false,
+        name: '管理者',
+        text: r.text,
+        time: r.createdAt,
+        imageBytes: r.imageBytes != null ? Uint8List.fromList(r.imageBytes!) : null,
+        imageUrl: r.imageUrl,
+      )),
     ]..sort((a, b) => a.time.compareTo(b.time));
 
     // 管理者返信を既読にする
@@ -1273,55 +1314,97 @@ class _ParentContactTabState extends State<_ParentContactTab> with SingleTickerP
 
         // ── 入力エリア ──
         Container(
-          padding: EdgeInsets.fromLTRB(12, 10, 12, MediaQuery.of(context).viewInsets.bottom + 10),
+          padding: EdgeInsets.fromLTRB(12, 8, 12, MediaQuery.of(context).viewInsets.bottom + 10),
           decoration: BoxDecoration(
             color: AppColors.navyDark,
             border: Border(top: BorderSide(color: AppColors.cardBorder, width: 0.5)),
           ),
-          child: Row(children: [
-            // 写真アイコン（準備中）
-            GestureDetector(
-              onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('画像添付は近日対応予定'), behavior: SnackBarBehavior.floating),
-              ),
-              child: Container(
-                width: 40, height: 40,
-                decoration: BoxDecoration(color: AppColors.navyCard, shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.cardBorder)),
-                child: const Icon(Icons.photo_camera_outlined, color: AppColors.silverDim, size: 18),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: TextField(
-                controller: _textCtrl,
-                maxLines: 4, minLines: 1,
-                decoration: InputDecoration(
-                  hintText: '塾への連絡を入力...',
-                  hintStyle: const TextStyle(color: AppColors.silverDim, fontSize: 13),
-                  filled: true, fillColor: AppColors.navyCard,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 画像プレビュー
+              if (_selectedImageBytes != null) ...[
+                const SizedBox(height: 6),
+                Stack(
+                  alignment: Alignment.topRight,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.memory(
+                        _selectedImageBytes!,
+                        height: 120,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () => setState(() => _selectedImageBytes = null),
+                      child: Container(
+                        margin: const EdgeInsets.all(4),
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                        child: const Icon(Icons.close, color: Colors.white, size: 16),
+                      ),
+                    ),
+                  ],
                 ),
-                style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
-              ),
-            ),
-            const SizedBox(width: 8),
-            GestureDetector(
-              onTap: _isSending ? null : () => _sendMessage(context, provider),
-              child: Container(
-                width: 44, height: 44,
-                decoration: BoxDecoration(
-                  color: _isSending ? AppColors.silverDim : AppColors.info,
-                  shape: BoxShape.circle,
+                const SizedBox(height: 6),
+              ],
+              Row(children: [
+                // カメラアイコン（画像選択）
+                GestureDetector(
+                  onTap: _pickImage,
+                  child: Container(
+                    width: 40, height: 40,
+                    decoration: BoxDecoration(
+                      color: _selectedImageBytes != null
+                          ? AppColors.info.withValues(alpha: 0.18)
+                          : AppColors.navyCard,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: _selectedImageBytes != null ? AppColors.info : AppColors.cardBorder,
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.photo_camera_outlined,
+                      color: _selectedImageBytes != null ? AppColors.info : AppColors.silverDim,
+                      size: 18,
+                    ),
+                  ),
                 ),
-                child: _isSending
-                    ? const Padding(padding: EdgeInsets.all(12),
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Icon(Icons.send_rounded, color: Colors.white, size: 20),
-              ),
-            ),
-          ]),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _textCtrl,
+                    maxLines: 4, minLines: 1,
+                    decoration: InputDecoration(
+                      hintText: '塾への連絡を入力...',
+                      hintStyle: const TextStyle(color: AppColors.silverDim, fontSize: 13),
+                      filled: true, fillColor: AppColors.navyCard,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    ),
+                    style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: _isSending ? null : () => _sendMessage(context, provider),
+                  child: Container(
+                    width: 44, height: 44,
+                    decoration: BoxDecoration(
+                      color: _isSending ? AppColors.silverDim : AppColors.info,
+                      shape: BoxShape.circle,
+                    ),
+                    child: _isSending
+                        ? const Padding(padding: EdgeInsets.all(12),
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.send_rounded, color: Colors.white, size: 20),
+                  ),
+                ),
+              ]),
+            ],
+          ),
         ),
       ],
     );
@@ -1329,9 +1412,9 @@ class _ParentContactTabState extends State<_ParentContactTab> with SingleTickerP
 
   void _sendMessage(BuildContext context, AppProvider provider) {
     final text = _textCtrl.text.trim();
-    if (text.isEmpty) {
+    if (text.isEmpty && _selectedImageBytes == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('メッセージを入力してください'), behavior: SnackBarBehavior.floating),
+        const SnackBar(content: Text('メッセージまたは画像を入力してください'), behavior: SnackBarBehavior.floating),
       );
       return;
     }
@@ -1340,6 +1423,7 @@ class _ParentContactTabState extends State<_ParentContactTab> with SingleTickerP
 
     final parentUser = provider.currentUser!;
     final student = provider.getStudentById(widget.studentId);
+    final imageBytesCopy = _selectedImageBytes != null ? List<int>.from(_selectedImageBytes!) : null;
 
     provider.sendParentMessage(ParentMessage(
       id: 'pmsg_${DateTime.now().millisecondsSinceEpoch}',
@@ -1347,11 +1431,15 @@ class _ParentContactTabState extends State<_ParentContactTab> with SingleTickerP
       fromName: parentUser.name,
       studentId: widget.studentId,
       studentName: student?.name ?? '',
-      text: text,
+      text: text.isEmpty ? null : text,
+      imageBytes: imageBytesCopy,
       createdAt: DateTime.now(),
     ));
     _textCtrl.clear();
-    setState(() => _isSending = false);
+    setState(() {
+      _isSending = false;
+      _selectedImageBytes = null;
+    });
 
     Future.delayed(const Duration(milliseconds: 200), () {
       if (_scrollCtrl.hasClients) {
@@ -1399,7 +1487,9 @@ class _PChatItem {
   final String name;
   final String text;
   final DateTime time;
-  _PChatItem({required this.isMe, required this.name, required this.text, required this.time});
+  final Uint8List? imageBytes;
+  final String? imageUrl;
+  _PChatItem({required this.isMe, required this.name, required this.text, required this.time, this.imageBytes, this.imageUrl});
 }
 
 // ---- 保護者チャットバブル ----
@@ -1427,21 +1517,34 @@ class _ParentChatBubble extends StatelessWidget {
           Row(mainAxisAlignment: MainAxisAlignment.end, children: [
             const SizedBox(width: 60),
             Flexible(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF1E6FC5), Color(0xFF1A5BA8)],
-                    begin: Alignment.topLeft, end: Alignment.bottomRight,
+              child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                if (item.text.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF1E6FC5), Color(0xFF1A5BA8)],
+                        begin: Alignment.topLeft, end: Alignment.bottomRight,
+                      ),
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(14), topRight: Radius.circular(4),
+                        bottomLeft: Radius.circular(14), bottomRight: Radius.circular(14),
+                      ),
+                      boxShadow: [BoxShadow(color: AppColors.info.withValues(alpha: 0.2), blurRadius: 6, offset: const Offset(0, 2))],
+                    ),
+                    child: Text(item.text, style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.5)),
                   ),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(14), topRight: Radius.circular(4),
-                    bottomLeft: Radius.circular(14), bottomRight: Radius.circular(14),
+                if (item.imageBytes != null) ...[
+                  if (item.text.isNotEmpty) const SizedBox(height: 6),
+                  GestureDetector(
+                    onTap: () => _showImageDialog(context, imageBytes: item.imageBytes),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.memory(item.imageBytes!, width: 200, fit: BoxFit.cover),
+                    ),
                   ),
-                  boxShadow: [BoxShadow(color: AppColors.info.withValues(alpha: 0.2), blurRadius: 6, offset: const Offset(0, 2))],
-                ),
-                child: Text(item.text, style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.5)),
-              ),
+                ],
+              ]),
             ),
           ]),
           const SizedBox(height: 2),
@@ -1472,18 +1575,40 @@ class _ParentChatBubble extends StatelessWidget {
           Row(children: [
             const SizedBox(width: 34),
             Flexible(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  color: AppColors.navyCard,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(4), topRight: Radius.circular(14),
-                    bottomLeft: Radius.circular(14), bottomRight: Radius.circular(14),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.navyCard,
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(4), topRight: Radius.circular(14),
+                      bottomLeft: Radius.circular(14), bottomRight: Radius.circular(14),
+                    ),
+                    border: Border.all(color: AppColors.yellow.withValues(alpha: 0.4)),
                   ),
-                  border: Border.all(color: AppColors.yellow.withValues(alpha: 0.4)),
+                  child: Text(item.text, style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, height: 1.5)),
                 ),
-                child: Text(item.text, style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, height: 1.5)),
-              ),
+                if (item.imageBytes != null) ...[
+                  const SizedBox(height: 6),
+                  GestureDetector(
+                    onTap: () => _showImageDialog(context, imageBytes: item.imageBytes),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.memory(item.imageBytes!, width: 200, fit: BoxFit.cover),
+                    ),
+                  ),
+                ] else if (item.imageUrl != null) ...[
+                  const SizedBox(height: 6),
+                  GestureDetector(
+                    onTap: () => _showImageDialog(context, imageUrl: item.imageUrl),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.network(item.imageUrl!, width: 200, fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, color: AppColors.silverDim)),
+                    ),
+                  ),
+                ],
+              ]),
             ),
             const SizedBox(width: 60),
           ]),
@@ -1498,6 +1623,36 @@ class _ParentChatBubble extends StatelessWidget {
     if (diff.inMinutes < 60) return '${diff.inMinutes}分前';
     if (diff.inHours < 24) return '${diff.inHours}時間前';
     return '${dt.month}/${dt.day} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  }
+
+  void _showImageDialog(BuildContext context, {Uint8List? imageBytes, String? imageUrl}) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(children: [
+          InteractiveViewer(
+            child: imageBytes != null
+                ? Image.memory(imageBytes, fit: BoxFit.contain)
+                : Image.network(imageUrl!, fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Center(
+                      child: Icon(Icons.broken_image, color: Colors.white54, size: 64))),
+          ),
+          Positioned(
+            top: 8, right: 8,
+            child: GestureDetector(
+              onTap: () => Navigator.pop(ctx),
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                child: const Icon(Icons.close, color: Colors.white, size: 20),
+              ),
+            ),
+          ),
+        ]),
+      ),
+    );
   }
 }
 

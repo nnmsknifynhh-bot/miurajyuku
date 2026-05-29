@@ -1355,7 +1355,7 @@ class _StudentDetailSheetState extends State<_StudentDetailSheet> {
     // 時系列で合成
     final allItems = [
       ...msgs.map((m) => _ChatItem(isAdmin: false, name: m.fromName, text: m.text ?? '', time: m.createdAt,
-          isRead: m.isRead, onRead: () => provider.markMessageRead(m.id))),
+          imageBytes: m.imageBytes, isRead: m.isRead, onRead: () => provider.markMessageRead(m.id))),
       ...replies.map((r) => _ChatItem(isAdmin: true, name: '管理者', text: r.text,
           imageBytes: r.imageBytes, imageUrl: r.imageUrl, time: r.createdAt, isRead: true)),
     ]..sort((a, b) => a.time.compareTo(b.time));
@@ -1450,7 +1450,7 @@ class _ParentDetailSheetState extends State<_ParentDetailSheet> {
 
     final allItems = [
       ...msgs.map((m) => _ChatItem(isAdmin: false, name: '${m.fromName}（保護者）', text: m.text ?? '', time: m.createdAt,
-          isRead: m.isRead, onRead: () => provider.markParentMessageRead(m.id))),
+          imageBytes: m.imageBytes, isRead: m.isRead, onRead: () => provider.markParentMessageRead(m.id))),
       ...replies.map((r) => _ChatItem(isAdmin: true, name: '管理者', text: r.text,
           imageUrl: r.imageUrl, imageBytes: r.imageBytes, time: r.createdAt, isRead: true)),
     ]..sort((a, b) => a.time.compareTo(b.time));
@@ -3523,8 +3523,16 @@ class _ScheduleLessonCard extends StatelessWidget {
           if (teacher != null)
             Text('担当: ${teacher.name}', style: const TextStyle(color: AppColors.silverDim, fontSize: 11)),
         ])),
+        // 編集ボタン
+        IconButton(
+          icon: const Icon(Icons.edit_outlined, color: AppColors.info, size: 20),
+          tooltip: '編集',
+          onPressed: () => _showEditLessonDialog(context, provider, student, teacher),
+        ),
+        // 削除ボタン
         IconButton(
           icon: const Icon(Icons.delete_outline, color: AppColors.danger, size: 20),
+          tooltip: '削除',
           onPressed: () => showDialog(
             context: context,
             builder: (_) => AlertDialog(
@@ -3545,6 +3553,181 @@ class _ScheduleLessonCard extends StatelessWidget {
           ),
         ),
       ]),
+    );
+  }
+
+  void _showEditLessonDialog(BuildContext context, AppProvider provider, AppUser? student, AppUser? teacher) {
+    final subjects = provider.lessonSubjects;
+    final teachers = provider.allTeachers;
+
+    String selectedSubject = lesson.subject;
+    String startTime = lesson.startTime;
+    String endTime = lesson.endTime;
+    String? selectedTeacherId = lesson.teacherId;
+    bool isWeekly = lesson.isWeekly;
+
+    showDialog(
+      context: context,
+      useRootNavigator: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          backgroundColor: AppColors.card,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          titlePadding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+          contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+          title: Row(children: [
+            const Icon(Icons.edit_outlined, color: AppColors.info, size: 18),
+            const SizedBox(width: 8),
+            Expanded(child: Text(
+              '授業を編集：${student?.name ?? '---'}',
+              style: const TextStyle(color: AppColors.info, fontWeight: FontWeight.w700, fontSize: 15),
+            )),
+          ]),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+
+                // ── 科目選択 ──
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6, top: 4),
+                  child: Align(alignment: Alignment.centerLeft,
+                    child: Text('科目', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600))),
+                ),
+                Wrap(
+                  spacing: 6, runSpacing: 6,
+                  children: subjects.map((subj) => GestureDetector(
+                    onTap: () => setS(() => selectedSubject = subj),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: selectedSubject == subj ? AppColors.yellow : AppColors.navyDark,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: selectedSubject == subj ? AppColors.yellow : AppColors.cardBorder),
+                      ),
+                      child: Text(subj, style: TextStyle(
+                        color: selectedSubject == subj ? AppColors.navyDark : AppColors.textPrimary,
+                        fontSize: 13, fontWeight: selectedSubject == subj ? FontWeight.w700 : FontWeight.w400,
+                      )),
+                    ),
+                  )).toList(),
+                ),
+
+                const SizedBox(height: 14),
+                const Divider(color: AppColors.cardBorder, height: 1),
+                const SizedBox(height: 10),
+
+                // ── 時間 ──
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Align(alignment: Alignment.centerLeft,
+                    child: Text('授業時間', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600))),
+                ),
+                Row(children: [
+                  Expanded(child: _TimePicker(
+                    label: '開始',
+                    value: startTime,
+                    onChanged: (v) => setS(() => startTime = v),
+                  )),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 6),
+                    child: Text('〜', style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),
+                  ),
+                  Expanded(child: _TimePicker(
+                    label: '終了',
+                    value: endTime,
+                    onChanged: (v) => setS(() => endTime = v),
+                  )),
+                ]),
+
+                const SizedBox(height: 14),
+                const Divider(color: AppColors.cardBorder, height: 1),
+                const SizedBox(height: 10),
+
+                // ── 担当講師 ──
+                if (teachers.isNotEmpty) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Align(alignment: Alignment.centerLeft,
+                      child: Text('担当講師', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600))),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: AppColors.navyCard, borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.cardBorder),
+                    ),
+                    child: DropdownButton<String?>(
+                      value: selectedTeacherId,
+                      isExpanded: true,
+                      dropdownColor: AppColors.card,
+                      underline: const SizedBox(),
+                      style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                      items: [
+                        const DropdownMenuItem<String?>(value: null, child: Text('なし')),
+                        ...teachers.map((t) => DropdownMenuItem<String?>(value: t.id, child: Text(t.name))),
+                      ],
+                      onChanged: (v) => setS(() => selectedTeacherId = v),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+
+                // ── 毎週繰り返し ──
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.navyCard, borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.cardBorder),
+                  ),
+                  child: Row(children: [
+                    const Icon(Icons.repeat, color: AppColors.info, size: 16),
+                    const SizedBox(width: 8),
+                    const Expanded(child: Text('毎週繰り返す',
+                        style: TextStyle(color: AppColors.textPrimary, fontSize: 13))),
+                    Switch(
+                      value: isWeekly,
+                      onChanged: (v) => setS(() => isWeekly = v),
+                      activeThumbColor: AppColors.yellow,
+                    ),
+                  ]),
+                ),
+                const SizedBox(height: 4),
+              ]),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx, rootNavigator: true).pop(),
+              child: const Text('キャンセル', style: TextStyle(color: AppColors.silverDim)),
+            ),
+            ElevatedButton.icon(
+              onPressed: () {
+                provider.updateLesson(
+                  lessonId: lesson.id,
+                  subject: selectedSubject,
+                  startTime: startTime,
+                  endTime: endTime,
+                  teacherId: selectedTeacherId,
+                  isWeekly: isWeekly,
+                );
+                Navigator.of(ctx, rootNavigator: true).pop();
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text('${student?.name} の授業を更新しました'),
+                  backgroundColor: AppColors.success,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ));
+              },
+              icon: const Icon(Icons.check, size: 16),
+              label: const Text('保存', style: TextStyle(fontWeight: FontWeight.w700)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.info, foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
