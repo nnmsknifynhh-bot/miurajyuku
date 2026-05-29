@@ -106,7 +106,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                   const SizedBox(height: 28),
                   _buildLoginButton(),
                   const SizedBox(height: 20),
-                  _buildHintText(),
+                  _buildForgotPasswordLink(),
                 ],
               ),
             ),
@@ -293,52 +293,152 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     );
   }
 
-  Widget _buildHintText() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.navyCard.withValues(alpha: 0.8),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.cardBorder),
-      ),
-      child: Column(
-        children: [
-          const Text('【デモアカウント】',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 11,
-                  fontWeight: FontWeight.w700)),
-          const SizedBox(height: 6),
-          _hintRow('生徒', 's1 / 1234', AppColors.info),
-          _hintRow('保護者', 'parent1 / 1234', AppColors.success),
-          _hintRow('管理者', 'admin / miura2025', AppColors.yellow),
-          _hintRow('講師', 't1 / 1234', AppColors.warning),
-        ],
+  Widget _buildForgotPasswordLink() {
+    // 生徒・保護者ロール時のみ表示
+    if (_selectedRole != UserRole.student && _selectedRole != UserRole.parent) {
+      return const SizedBox.shrink();
+    }
+    return TextButton(
+      onPressed: () => _showPasswordResetDialog(),
+      child: const Text(
+        'パスワードを忘れた方はこちら',
+        style: TextStyle(
+          color: AppColors.silverDim,
+          fontSize: 13,
+          decoration: TextDecoration.underline,
+          decorationColor: AppColors.silverDim,
+        ),
       ),
     );
   }
 
-  Widget _hintRow(String role, String cred, Color color) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 44,
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: color.withValues(alpha: 0.3)),
-            ),
-            child: Text(
-              role,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w700),
+  void _showPasswordResetDialog() {
+    final idCtrl = TextEditingController(text: _idController.text.trim());
+    final newPwCtrl = TextEditingController();
+    final confirmPwCtrl = TextEditingController();
+    bool obscureNew = true;
+    bool obscureConfirm = true;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: AppColors.navyCard,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('パスワード再設定',
+              style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _selectedRole == UserRole.student ? '生徒IDと新しいパスワードを入力してください' : '保護者IDと新しいパスワードを入力してください',
+                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: idCtrl,
+                  decoration: InputDecoration(
+                    labelText: _selectedRole == UserRole.student ? '生徒ID' : '保護者ID',
+                    prefixIcon: const Icon(Icons.person_outline, color: AppColors.silverDim),
+                  ),
+                  style: const TextStyle(color: AppColors.textPrimary),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: newPwCtrl,
+                  obscureText: obscureNew,
+                  decoration: InputDecoration(
+                    labelText: '新しいパスワード',
+                    prefixIcon: const Icon(Icons.lock_outline, color: AppColors.silverDim),
+                    suffixIcon: IconButton(
+                      icon: Icon(obscureNew ? Icons.visibility_off : Icons.visibility, color: AppColors.silverDim),
+                      onPressed: () => setDialogState(() => obscureNew = !obscureNew),
+                    ),
+                  ),
+                  style: const TextStyle(color: AppColors.textPrimary),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: confirmPwCtrl,
+                  obscureText: obscureConfirm,
+                  decoration: InputDecoration(
+                    labelText: '確認用パスワード',
+                    prefixIcon: const Icon(Icons.lock_outline, color: AppColors.silverDim),
+                    suffixIcon: IconButton(
+                      icon: Icon(obscureConfirm ? Icons.visibility_off : Icons.visibility, color: AppColors.silverDim),
+                      onPressed: () => setDialogState(() => obscureConfirm = !obscureConfirm),
+                    ),
+                  ),
+                  style: const TextStyle(color: AppColors.textPrimary),
+                ),
+              ],
             ),
           ),
-          const SizedBox(width: 8),
-          Text(cred, style: const TextStyle(color: AppColors.silverDim, fontSize: 11)),
-        ],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('キャンセル', style: TextStyle(color: AppColors.silverDim)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.yellow,
+                foregroundColor: AppColors.navyDark,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () {
+                final id = idCtrl.text.trim();
+                final newPw = newPwCtrl.text.trim();
+                final confirmPw = confirmPwCtrl.text.trim();
+                if (id.isEmpty || newPw.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: const Text('IDとパスワードを入力してください'), backgroundColor: AppColors.danger,
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                  );
+                  return;
+                }
+                if (newPw != confirmPw) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: const Text('パスワードが一致しません'), backgroundColor: AppColors.danger,
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                  );
+                  return;
+                }
+                if (newPw.length < 4) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: const Text('パスワードは4文字以上で設定してください'), backgroundColor: AppColors.danger,
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                  );
+                  return;
+                }
+                final provider = context.read<AppProvider>();
+                final success = provider.changePassword(
+                  userId: id,
+                  role: _selectedRole,
+                  newPassword: newPw,
+                );
+                Navigator.pop(ctx);
+                if (success) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: const Text('パスワードを変更しました'), backgroundColor: AppColors.success,
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: const Text('IDが見つかりません'), backgroundColor: AppColors.danger,
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                  );
+                }
+              },
+              child: const Text('変更する', style: TextStyle(fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
       ),
     );
   }

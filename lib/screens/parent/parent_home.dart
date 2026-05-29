@@ -75,6 +75,11 @@ class _ParentHomeState extends State<ParentHome> {
               ),
             ),
           IconButton(
+            icon: const Icon(Icons.lock_reset, color: AppColors.silverDim),
+            tooltip: 'パスワード変更',
+            onPressed: () => _showChangePasswordDialog(context, provider),
+          ),
+          IconButton(
             icon: const Icon(Icons.logout, color: AppColors.silverDim),
             onPressed: () {
               provider.logout();
@@ -96,6 +101,111 @@ class _ParentHomeState extends State<ParentHome> {
       bottomNavigationBar: studentIds.isEmpty
           ? null
           : _buildNav(provider, studentId, selectedStudent),
+    );
+  }
+
+  void _showChangePasswordDialog(BuildContext context, AppProvider provider) {
+    final newPwCtrl = TextEditingController();
+    final confirmPwCtrl = TextEditingController();
+    bool obscureNew = true;
+    bool obscureConfirm = true;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: AppColors.navyCard,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('パスワード変更',
+              style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: newPwCtrl,
+                obscureText: obscureNew,
+                decoration: InputDecoration(
+                  labelText: '新しいパスワード',
+                  prefixIcon: const Icon(Icons.lock_outline, color: AppColors.silverDim),
+                  suffixIcon: IconButton(
+                    icon: Icon(obscureNew ? Icons.visibility_off : Icons.visibility, color: AppColors.silverDim),
+                    onPressed: () => setDialogState(() => obscureNew = !obscureNew),
+                  ),
+                ),
+                style: const TextStyle(color: AppColors.textPrimary),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: confirmPwCtrl,
+                obscureText: obscureConfirm,
+                decoration: InputDecoration(
+                  labelText: '確認用パスワード',
+                  prefixIcon: const Icon(Icons.lock_outline, color: AppColors.silverDim),
+                  suffixIcon: IconButton(
+                    icon: Icon(obscureConfirm ? Icons.visibility_off : Icons.visibility, color: AppColors.silverDim),
+                    onPressed: () => setDialogState(() => obscureConfirm = !obscureConfirm),
+                  ),
+                ),
+                style: const TextStyle(color: AppColors.textPrimary),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('キャンセル', style: TextStyle(color: AppColors.silverDim)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.info,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () {
+                final newPw = newPwCtrl.text.trim();
+                final confirmPw = confirmPwCtrl.text.trim();
+                if (newPw.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: const Text('パスワードを入力してください'),
+                    backgroundColor: AppColors.danger,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ));
+                  return;
+                }
+                if (newPw != confirmPw) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: const Text('パスワードが一致しません'),
+                    backgroundColor: AppColors.danger,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ));
+                  return;
+                }
+                if (newPw.length < 4) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: const Text('パスワードは4文字以上で設定してください'),
+                    backgroundColor: AppColors.danger,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ));
+                  return;
+                }
+                final userId = provider.currentUser?.id ?? '';
+                provider.changePassword(userId: userId, role: UserRole.parent, newPassword: newPw);
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: const Text('パスワードを変更しました'),
+                  backgroundColor: AppColors.success,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ));
+              },
+              child: const Text('変更する', style: TextStyle(fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

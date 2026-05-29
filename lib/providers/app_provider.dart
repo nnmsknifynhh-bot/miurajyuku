@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/app_models.dart';
 
 class AppProvider extends ChangeNotifier {
@@ -53,19 +55,20 @@ class AppProvider extends ChangeNotifier {
 
   AppProvider() {
     _initSampleData();
+    _loadData(); // SharedPreferencesから既存データを読み込む
   }
 
   void _initSampleData() {
     _allStudents.addAll([
-      AppUser(id: 's1', name: '田中 太郎', role: UserRole.student, grade: 2, className: 'A'),
-      AppUser(id: 's2', name: '鈴木 花子', role: UserRole.student, grade: 1, className: 'B'),
-      AppUser(id: 's3', name: '佐藤 次郎', role: UserRole.student, grade: 3, className: 'A'),
-      AppUser(id: 's4', name: '高橋 美咲', role: UserRole.student, grade: 2, className: 'B'),
+      AppUser(id: 's1', name: '田中 太郎', role: UserRole.student, grade: 2, className: 'A', password: '1234'),
+      AppUser(id: 's2', name: '鈴木 花子', role: UserRole.student, grade: 1, className: 'B', password: '1234'),
+      AppUser(id: 's3', name: '佐藤 次郎', role: UserRole.student, grade: 3, className: 'A', password: '1234'),
+      AppUser(id: 's4', name: '高橋 美咲', role: UserRole.student, grade: 2, className: 'B', password: '1234'),
     ]);
 
     _allTeachers.addAll([
-      AppUser(id: 't1', name: '山田 先生', role: UserRole.teacher),
-      AppUser(id: 't2', name: '佐々木 先生', role: UserRole.teacher),
+      AppUser(id: 't1', name: '山田 先生', role: UserRole.teacher, password: '1234'),
+      AppUser(id: 't2', name: '佐々木 先生', role: UserRole.teacher, password: '1234'),
     ]);
 
     // サンプル保護者アカウント（生徒と紐付け済み）
@@ -205,13 +208,13 @@ class AppProvider extends ChangeNotifier {
     }
     if (role == UserRole.teacher) {
       final t = _allTeachers.where((t) => t.id == userId).firstOrNull;
-      if (t != null && password == '1234') {
+      if (t != null && (t.password ?? '1234') == password) {
         _currentUser = t; notifyListeners(); return true;
       }
     }
     if (role == UserRole.student) {
       final s = _allStudents.where((s) => s.id == userId).firstOrNull;
-      if (s != null && password == '1234') {
+      if (s != null && (s.password ?? '1234') == password) {
         _currentUser = s; notifyListeners(); return true;
       }
     }
@@ -220,6 +223,50 @@ class AppProvider extends ChangeNotifier {
       if (p != null && (p.password ?? '1234') == password) {
         _currentUser = p; notifyListeners(); return true;
       }
+    }
+    return false;
+  }
+
+  /// パスワード変更（生徒・保護者・講師対応）
+  /// 成功=true, IDが見つからない=false
+  bool changePassword({
+    required String userId,
+    required UserRole role,
+    required String newPassword,
+  }) {
+    if (role == UserRole.student) {
+      final idx = _allStudents.indexWhere((s) => s.id == userId);
+      if (idx < 0) return false;
+      _allStudents[idx] = _allStudents[idx].copyWith(password: newPassword);
+      // ログイン中の生徒自身のパスワードが変わった場合 currentUser も更新
+      if (_currentUser?.id == userId) {
+        _currentUser = _allStudents[idx];
+      }
+      notifyListeners();
+      _saveUsers();
+      return true;
+    }
+    if (role == UserRole.parent) {
+      final idx = _allParents.indexWhere((p) => p.id == userId);
+      if (idx < 0) return false;
+      _allParents[idx] = _allParents[idx].copyWith(password: newPassword);
+      if (_currentUser?.id == userId) {
+        _currentUser = _allParents[idx];
+      }
+      notifyListeners();
+      _saveUsers();
+      return true;
+    }
+    if (role == UserRole.teacher) {
+      final idx = _allTeachers.indexWhere((t) => t.id == userId);
+      if (idx < 0) return false;
+      _allTeachers[idx] = _allTeachers[idx].copyWith(password: newPassword);
+      if (_currentUser?.id == userId) {
+        _currentUser = _allTeachers[idx];
+      }
+      notifyListeners();
+      _saveUsers();
+      return true;
     }
     return false;
   }
@@ -600,14 +647,27 @@ class AppProvider extends ChangeNotifier {
   int get unreadParentMessageCount => _parentMessages.where((m) => !m.isRead).length;
 
   // ---- Students / Teachers ----
-  void addStudent(AppUser student) { _allStudents.add(student); notifyListeners(); }
-  void addTeacher(AppUser teacher) { _allTeachers.add(teacher); notifyListeners(); }
-  void removeTeacher(String id) { _allTeachers.removeWhere((t) => t.id == id); notifyListeners(); }
+  void addStudent(AppUser student) {
+    _allStudents.add(student);
+    notifyListeners();
+    _saveUsers();
+  }
+  void addTeacher(AppUser teacher) {
+    _allTeachers.add(teacher);
+    notifyListeners();
+    _saveUsers();
+  }
+  void removeTeacher(String id) {
+    _allTeachers.removeWhere((t) => t.id == id);
+    notifyListeners();
+    _saveUsers();
+  }
 
   // ---- Parents ----
   void addParent(AppUser parent) {
     _allParents.add(parent);
     notifyListeners();
+    _saveUsers();
   }
 
   void updateParent(AppUser updated) {
@@ -617,12 +677,14 @@ class AppProvider extends ChangeNotifier {
       // ログイン中の保護者が自分自身を更新した場合、currentUserも更新
       if (_currentUser?.id == updated.id) _currentUser = updated;
       notifyListeners();
+      _saveUsers();
     }
   }
 
   void removeParent(String id) {
     _allParents.removeWhere((p) => p.id == id);
     notifyListeners();
+    _saveUsers();
   }
 
   AppUser? getParentById(String id) =>
@@ -665,6 +727,7 @@ class AppProvider extends ChangeNotifier {
   void removeStudent(String id) {
     _allStudents.removeWhere((s) => s.id == id);
     notifyListeners();
+    _saveUsers();
   }
 
   void updateStudent(AppUser updated) {
@@ -672,6 +735,7 @@ class AppProvider extends ChangeNotifier {
     if (idx >= 0) {
       _allStudents[idx] = updated;
       notifyListeners();
+      _saveUsers();
     }
   }
 
@@ -734,4 +798,100 @@ class AppProvider extends ChangeNotifier {
   /// 特定ユーザーの未読お知らせ数
   int getUnreadAnnouncementCount(String userId, String role) =>
       getAnnouncementsForUser(userId, role).where((a) => !a.isReadBy(userId)).length;
+
+  // ================================================================
+  // SharedPreferences 永続化（ユーザーアカウント情報のみ）
+  // 画像バイナリ等の大きなデータは対象外とする
+  // ================================================================
+
+  static const _kStudents = 'sp_students';
+  static const _kTeachers = 'sp_teachers';
+  static const _kParents  = 'sp_parents';
+
+  /// AppUserをJSONに変換
+  static Map<String, dynamic> _userToJson(AppUser u) => {
+    'id': u.id,
+    'name': u.name,
+    'role': u.role.name,
+    'studentIds': u.studentIds,
+    'password': u.password,
+    'grade': u.grade,
+    'className': u.className,
+    'club': u.club,
+    'currentScore': u.currentScore,
+    'targetSchool': u.targetSchool,
+  };
+
+  /// JSONからAppUserを復元
+  static AppUser _userFromJson(Map<String, dynamic> j) => AppUser(
+    id: j['id'] as String,
+    name: j['name'] as String,
+    role: UserRole.values.firstWhere((r) => r.name == j['role'], orElse: () => UserRole.student),
+    studentIds: (j['studentIds'] as List<dynamic>? ?? []).cast<String>(),
+    password: j['password'] as String?,
+    grade: j['grade'] as int?,
+    className: j['className'] as String?,
+    club: j['club'] as String?,
+    currentScore: j['currentScore'] as String?,
+    targetSchool: j['targetSchool'] as String?,
+  );
+
+  /// ユーザーリストをSharedPreferencesに保存
+  Future<void> _saveUsers() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_kStudents, jsonEncode(_allStudents.map(_userToJson).toList()));
+      await prefs.setString(_kTeachers, jsonEncode(_allTeachers.map(_userToJson).toList()));
+      await prefs.setString(_kParents,  jsonEncode(_allParents.map(_userToJson).toList()));
+    } catch (e) {
+      if (kDebugMode) debugPrint('[AppProvider] _saveUsers error: $e');
+    }
+  }
+
+  /// SharedPreferencesからユーザーリストを読み込み（起動時）
+  Future<void> _loadData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // 生徒
+      final studentsJson = prefs.getString(_kStudents);
+      if (studentsJson != null) {
+        final list = (jsonDecode(studentsJson) as List<dynamic>)
+            .map((j) => _userFromJson(j as Map<String, dynamic>))
+            .toList();
+        if (list.isNotEmpty) {
+          _allStudents.clear();
+          _allStudents.addAll(list);
+        }
+      }
+
+      // 講師
+      final teachersJson = prefs.getString(_kTeachers);
+      if (teachersJson != null) {
+        final list = (jsonDecode(teachersJson) as List<dynamic>)
+            .map((j) => _userFromJson(j as Map<String, dynamic>))
+            .toList();
+        if (list.isNotEmpty) {
+          _allTeachers.clear();
+          _allTeachers.addAll(list);
+        }
+      }
+
+      // 保護者
+      final parentsJson = prefs.getString(_kParents);
+      if (parentsJson != null) {
+        final list = (jsonDecode(parentsJson) as List<dynamic>)
+            .map((j) => _userFromJson(j as Map<String, dynamic>))
+            .toList();
+        if (list.isNotEmpty) {
+          _allParents.clear();
+          _allParents.addAll(list);
+        }
+      }
+
+      notifyListeners();
+    } catch (e) {
+      if (kDebugMode) debugPrint('[AppProvider] _loadData error: $e');
+    }
+  }
 }
