@@ -3927,13 +3927,16 @@ class _StudentRegisterTab extends StatelessWidget {
   // 追加・編集共通ダイアログ（student==nullで追加モード）
   void _showStudentDialog(BuildContext context, AppProvider provider, AppUser? student) {
     final isEdit = student != null;
+    final idCtrl     = TextEditingController(text: student?.id ?? '');
     final nameCtrl   = TextEditingController(text: student?.name   ?? '');
+    final pwCtrl     = TextEditingController(text: student?.password ?? '');
     final schoolCtrl = TextEditingController(text: student?.className ?? '');
     final gradeCtrl  = TextEditingController(
         text: student?.grade != null ? '中${student!.grade}' : '');
     final clubCtrl   = TextEditingController(text: student?.club   ?? '');
     final scoreCtrl  = TextEditingController(text: student?.currentScore ?? '');
     final targetCtrl = TextEditingController(text: student?.targetSchool ?? '');
+    bool obscurePw = true;
 
     showDialog(
       context: context,
@@ -3950,10 +3953,48 @@ class _StudentRegisterTab extends StatelessWidget {
             width: double.maxFinite,
             child: SingleChildScrollView(
               child: Column(mainAxisSize: MainAxisSize.min, children: [
-                // 名前フィールドだけ onChanged でボタン有効化を再評価
+                // ── ログインID（新規時のみ編集可）──
+                TextField(
+                  controller: idCtrl,
+                  enabled: !isEdit,
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                  decoration: InputDecoration(
+                    labelText: 'ログインID *',
+                    hintText: '例：s5',
+                    labelStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    hintStyle: const TextStyle(color: AppColors.silverDim, fontSize: 12),
+                    filled: true,
+                    fillColor: isEdit ? AppColors.navyDark.withValues(alpha: 0.5) : AppColors.navyCard,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
+                  onChanged: (_) => setS(() {}),
+                ),
+                const SizedBox(height: 8),
+                // ── 名前 ──
                 _field('名前 *', nameCtrl,
                     hint: '例：山田太郎',
                     onChanged: (_) => setS(() {})),
+                const SizedBox(height: 8),
+                // ── パスワード ──
+                TextField(
+                  controller: pwCtrl,
+                  obscureText: obscurePw,
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                  decoration: InputDecoration(
+                    labelText: isEdit ? 'パスワード（変更する場合のみ入力）' : 'パスワード *',
+                    hintText: '例：pass1234',
+                    labelStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    hintStyle: const TextStyle(color: AppColors.silverDim, fontSize: 12),
+                    filled: true, fillColor: AppColors.navyCard,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    suffixIcon: IconButton(
+                      icon: Icon(obscurePw ? Icons.visibility_off : Icons.visibility, color: AppColors.silverDim, size: 18),
+                      onPressed: () => setS(() => obscurePw = !obscurePw),
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 8),
                 _field('学校', schoolCtrl, hint: '例：○○中学校'),
                 const SizedBox(height: 8),
@@ -3972,17 +4013,24 @@ class _StudentRegisterTab extends StatelessWidget {
                 onPressed: () => Navigator.of(ctx, rootNavigator: true).pop(),
                 child: const Text('キャンセル', style: TextStyle(color: AppColors.silverDim))),
             ElevatedButton(
-              onPressed: nameCtrl.text.trim().isEmpty ? null : () {
+              onPressed: (nameCtrl.text.trim().isEmpty ||
+                          (!isEdit && idCtrl.text.trim().isEmpty) ||
+                          (!isEdit && pwCtrl.text.trim().isEmpty)) ? null : () {
                 int? gradeNum;
                 final g = gradeCtrl.text.trim();
                 if (g.contains('1')) { gradeNum = 1; }
                 else if (g.contains('2')) { gradeNum = 2; }
                 else if (g.contains('3')) { gradeNum = 3; }
 
+                // 既存パスワードを引き継ぐ（編集時に空のままなら変更しない）
+                final newPw = pwCtrl.text.trim();
+                final pw = newPw.isNotEmpty ? newPw : (student?.password ?? '1234');
+
                 final built = AppUser(
-                  id: isEdit ? student.id : 's_${DateTime.now().millisecondsSinceEpoch}',
+                  id: isEdit ? student.id : idCtrl.text.trim(),
                   name: nameCtrl.text.trim(),
                   role: UserRole.student,
+                  password: pw,
                   grade: gradeNum,
                   className: schoolCtrl.text.trim(),
                   club: clubCtrl.text.trim().isEmpty ? null : clubCtrl.text.trim(),

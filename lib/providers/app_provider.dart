@@ -53,9 +53,35 @@ class AppProvider extends ChangeNotifier {
       _parentMessages.where((m) => !m.isRead).length;
   int get unreadAbsenceCount => _absenceNotifications.where((a) => !a.isRead).length;
 
+  /// ローディング完了フラグ（UIで起動スプラッシュ制御に使用可能）
+  bool _isReady = false;
+  bool get isReady => _isReady;
+
   AppProvider() {
-    _initSampleData();
-    _loadData(); // SharedPreferencesから既存データを読み込む
+    _initialize();
+  }
+
+  /// 起動時の初期化：SharedPreferences優先、なければサンプルデータ
+  Future<void> _initialize() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final hasStudents = prefs.containsKey(_kStudents);
+
+      if (hasStudents) {
+        // ── 既存データあり: SharedPreferencesから復元 ──
+        await _loadFromPrefs(prefs);
+      } else {
+        // ── 初回起動: サンプルデータを投入して保存 ──
+        _initSampleData();
+        await _saveUsersToPrefs(prefs);
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('[AppProvider] _initialize error: $e');
+      // フォールバック: メモリのみで動作
+      if (_allStudents.isEmpty) _initSampleData();
+    }
+    _isReady = true;
+    notifyListeners();
   }
 
   void _initSampleData() {
@@ -837,61 +863,57 @@ class AppProvider extends ChangeNotifier {
   );
 
   /// ユーザーリストをSharedPreferencesに保存
+  /// SharedPreferencesに現在のユーザーリストを書き込む（外部prefs利用版）
+  Future<void> _saveUsersToPrefs(SharedPreferences prefs) async {
+    await prefs.setString(_kStudents, jsonEncode(_allStudents.map(_userToJson).toList()));
+    await prefs.setString(_kTeachers, jsonEncode(_allTeachers.map(_userToJson).toList()));
+    await prefs.setString(_kParents,  jsonEncode(_allParents.map(_userToJson).toList()));
+  }
+
+  /// SharedPreferencesに現在のユーザーリストを書き込む（変更時呼び出し用）
   Future<void> _saveUsers() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_kStudents, jsonEncode(_allStudents.map(_userToJson).toList()));
-      await prefs.setString(_kTeachers, jsonEncode(_allTeachers.map(_userToJson).toList()));
-      await prefs.setString(_kParents,  jsonEncode(_allParents.map(_userToJson).toList()));
+      await _saveUsersToPrefs(prefs);
     } catch (e) {
       if (kDebugMode) debugPrint('[AppProvider] _saveUsers error: $e');
     }
   }
 
-  /// SharedPreferencesからユーザーリストを読み込み（起動時）
-  Future<void> _loadData() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-
-      // 生徒
-      final studentsJson = prefs.getString(_kStudents);
-      if (studentsJson != null) {
-        final list = (jsonDecode(studentsJson) as List<dynamic>)
-            .map((j) => _userFromJson(j as Map<String, dynamic>))
-            .toList();
-        if (list.isNotEmpty) {
-          _allStudents.clear();
-          _allStudents.addAll(list);
-        }
+  /// SharedPreferencesからユーザーリストを読み込み（内部用）
+  Future<void> _loadFromPrefs(SharedPreferences prefs) async {
+    // 生徒
+    final studentsJson = prefs.getString(_kStudents);
+    if (studentsJson != null) {
+      final list = (jsonDecode(studentsJson) as List<dynamic>)
+          .map((j) => _userFromJson(j as Map<String, dynamic>))
+          .toList();
+      if (list.isNotEmpty) {
+        _allStudents.clear();
+        _allStudents.addAll(list);
       }
-
-      // 講師
-      final teachersJson = prefs.getString(_kTeachers);
-      if (teachersJson != null) {
-        final list = (jsonDecode(teachersJson) as List<dynamic>)
-            .map((j) => _userFromJson(j as Map<String, dynamic>))
-            .toList();
-        if (list.isNotEmpty) {
-          _allTeachers.clear();
-          _allTeachers.addAll(list);
-        }
+    }
+    // 講師
+    final teachersJson = prefs.getString(_kTeachers);
+    if (teachersJson != null) {
+      final list = (jsonDecode(teachersJson) as List<dynamic>)
+          .map((j) => _userFromJson(j as Map<String, dynamic>))
+          .toList();
+      if (list.isNotEmpty) {
+        _allTeachers.clear();
+        _allTeachers.addAll(list);
       }
-
-      // 保護者
-      final parentsJson = prefs.getString(_kParents);
-      if (parentsJson != null) {
-        final list = (jsonDecode(parentsJson) as List<dynamic>)
-            .map((j) => _userFromJson(j as Map<String, dynamic>))
-            .toList();
-        if (list.isNotEmpty) {
-          _allParents.clear();
-          _allParents.addAll(list);
-        }
+    }
+    // 保護者
+    final parentsJson = prefs.getString(_kParents);
+    if (parentsJson != null) {
+      final list = (jsonDecode(parentsJson) as List<dynamic>)
+          .map((j) => _userFromJson(j as Map<String, dynamic>))
+          .toList();
+      if (list.isNotEmpty) {
+        _allParents.clear();
+        _allParents.addAll(list);
       }
-
-      notifyListeners();
-    } catch (e) {
-      if (kDebugMode) debugPrint('[AppProvider] _loadData error: $e');
     }
   }
 }
