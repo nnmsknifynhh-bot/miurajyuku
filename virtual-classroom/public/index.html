@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>三浦塾 バーチャル教室</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- 入室画面 -->
+  <div id="login">
+    <form id="login-form" class="card">
+      <h1>三浦塾 <span>バーチャル教室</span></h1>
+      <label>名前<input id="name" maxlength="20" required placeholder="例：山田 太郎"></label>
+      <div class="roles">
+        <label class="role"><input type="radio" name="role" value="student" checked><span>🎒 生徒</span></label>
+        <label class="role"><input type="radio" name="role" value="teacher"><span>👩‍🏫 先生</span></label>
+      </div>
+      <label id="pass-row" hidden>先生用パスコード<input id="passcode" type="password"></label>
+      <label class="row">アバターの色<input id="color" type="color" value="#64b5f6"></label>
+      <label class="check"><input id="autoseat" type="checkbox" checked> 入室したら空いている席に座る</label>
+      <p class="hint">入室時にマイクの使用許可を求められます。近くの人と話せるようになります。</p>
+      <button type="submit" id="join-btn">入室する</button>
+      <p id="login-error" class="error"></p>
+    </form>
+  </div>
+
+  <!-- メイン画面 -->
+  <div id="app" hidden>
+    <canvas id="world"></canvas>
+
+    <div id="zone-info"><b id="zone-name">-</b><span id="zone-desc"></span></div>
+    <div id="videos"></div>
+    <div id="announce" hidden></div>
+    <div id="toasts"></div>
+
+    <div id="toolbar">
+      <button id="btn-mic" title="マイク (M)">🎤<span>マイク</span></button>
+      <button id="btn-cam" title="カメラ">📷<span>カメラ</span></button>
+      <button id="btn-screen" title="画面共有">🖥️<span>画面共有</span></button>
+      <button id="btn-sit" title="座る / 立つ (Space)">🪑<span>座る</span></button>
+      <span class="teacher-only sep"></span>
+      <button id="btn-broadcast" class="teacher-only" title="同じ部屋の全員に声を届けます">📢<span>部屋全体に話す</span></button>
+      <button id="btn-bots" class="teacher-only" title="デモ用の生徒を入室させます">🤖<span>デモ生徒</span></button>
+      <span class="sep"></span>
+      <button id="btn-chat" title="チャット">💬<span>チャット</span></button>
+      <button id="btn-people" title="参加者">👥<span id="people-count">0</span></button>
+    </div>
+
+    <aside id="side" hidden>
+      <div class="tabs"><button data-tab="chat" class="active">チャット</button><button data-tab="people">参加者</button><button id="side-close">✕</button></div>
+      <div id="tab-chat" class="tab">
+        <div id="messages"></div>
+        <form id="chat-form">
+          <label class="teacher-only check small"><input id="announce-check" type="checkbox"> 全員にアナウンス</label>
+          <div class="chat-input"><input id="chat-input" maxlength="500" placeholder="メッセージを入力" autocomplete="off"><button>送信</button></div>
+        </form>
+      </div>
+      <div id="tab-people" class="tab" hidden><ul id="people"></ul></div>
+    </aside>
+
+    <div id="menu" hidden></div>
+
+    <div id="viewer" hidden>
+      <div class="viewer-bar"><span id="viewer-title"></span><button id="viewer-close">✕ 閉じる</button></div>
+      <video id="viewer-video" autoplay playsinline muted></video>
+    </div>
+
+    <div id="help">移動: WASD / 矢印キー / クリック　座る: Space　マイク: M　ズーム: マウスホイール</div>
+  </div>
+  <div id="audio-sink" hidden></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="shared/map.js"></script>
+  <script src="js/rtc.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
