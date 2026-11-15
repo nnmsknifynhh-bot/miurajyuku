@@ -1,0 +1,9 @@
+{
+  "name": "藤橋JVC 会計",
+  "short_name": "JVC会計",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f6fa",
+  "theme_color": "#1f5fbf",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
