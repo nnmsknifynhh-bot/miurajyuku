@@ -1,0 +1,17 @@
+{
+  "name": "miurajyuku-metaverse",
+  "version": "0.1.0",
+  "private": true,
+  "description": "三浦塾 2Dメタバース オンライン教室",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server/server.js",
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "dependencies": {
+    "express": "^4.22.3"
+  }
+}

@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>三浦塾 オンライン教室</title>
+  <meta name="theme-color" content="#2f7de1">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="stylesheet" href="/css/common.css">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body class="world">
+  <canvas id="world" aria-label="塾の2Dマップ"></canvas>
+
+  <header class="hud-top">
+    <div class="place" id="place"><span class="place-icon">📍</span><span id="place-name">ロビー</span><span id="place-cap" class="place-cap"></span></div>
+    <button class="me-btn" id="me-btn" aria-haspopup="menu"><span class="dot" id="me-dot"></span><span id="me-name"></span><span class="badge" id="me-role"></span></button>
+  </header>
+  <div class="stage-note" id="stage-note">テスト版（第1段階）：ほかの人の表示・通話はまだ使えません</div>
+
+  <nav class="me-menu" id="me-menu" hidden>
+    <a href="/admin" id="menu-admin" hidden>⚙️ 管理画面</a>
+    <button id="menu-password">🔑 パスワードを変える</button>
+    <button id="menu-logout">🚪 ログアウト</button>
+  </nav>
+
+  <div class="zoom">
+    <button id="zoom-in" aria-label="大きくする">＋</button>
+    <button id="zoom-out" aria-label="小さくする">－</button>
+  </div>
+
+  <div class="joystick" id="joystick" hidden><div class="knob" id="knob"></div></div>
+
+  <footer class="hud-bottom">
+    <button class="big-btn" id="btn-rooms"><span>🏫</span>へやをえらぶ</button>
+    <button class="big-btn" id="btn-sit"><span>🪑</span><b id="sit-label">すわる</b></button>
+  </footer>
+
+  <dialog id="rooms-dialog">
+    <div class="dialog-body">
+      <h2>どこへ行く？</h2>
+      <div class="room-list" id="room-list"></div>
+      <div class="dialog-actions"><button class="btn secondary" value="close" id="rooms-close">とじる</button></div>
+    </div>
+  </dialog>
+
+  <dialog id="pw-dialog">
+    <form class="dialog-body" id="pw-form">
+      <h2>パスワードを変える</h2>
+      <label class="field">今のパスワード<input type="password" id="pw-current" autocomplete="current-password" required></label>
+      <label class="field">新しいパスワード<input type="password" id="pw-new" autocomplete="new-password" minlength="8" required><small>8文字以上</small></label>
+      <p class="error" id="pw-error"></p>
+      <div class="dialog-actions">
+        <button type="button" class="btn secondary" id="pw-cancel">やめる</button>
+        <button type="submit" class="btn">変更する</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/shared/map.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/render.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>

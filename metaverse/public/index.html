@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>三浦塾 オンライン教室</title>
+  <meta name="theme-color" content="#2f7de1">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="stylesheet" href="/css/common.css">
+  <link rel="stylesheet" href="/css/login.css">
+</head>
+<body>
+  <main class="login-wrap">
+    <div class="login-card">
+      <div class="logo">
+        <img src="/icons/icon.svg" alt="" width="72" height="72">
+        <h1>三浦塾<span>オンライン教室</span></h1>
+      </div>
+
+      <form id="login-form" hidden>
+        <label class="field">ログインID
+          <input id="login-id" autocomplete="username" autocapitalize="off" spellcheck="false" required>
+        </label>
+        <label class="field">パスワード
+          <span class="pw"><input id="login-pw" type="password" autocomplete="current-password" required><button type="button" class="pw-toggle" aria-label="パスワードを表示">👁</button></span>
+        </label>
+        <p class="error" id="login-error" role="alert"></p>
+        <button class="btn big" type="submit">ログイン</button>
+        <p class="help">IDやパスワードがわからないときは、塾の先生に聞いてね。</p>
+      </form>
+
+      <form id="setup-form" hidden>
+        <div class="notice"><b>はじめての設定</b><br>最初に、塾の管理者（オーナー）のアカウントを作ります。先生・生徒のアカウントはこのあと管理画面で作成できます。</div>
+        <label class="field">表示名<input id="setup-name" maxlength="20" required placeholder="例：三浦"></label>
+        <label class="field">ログインID<input id="setup-id" autocapitalize="off" spellcheck="false" required pattern="[a-zA-Z0-9_.\-]{3,32}"><small>半角英数字と _ . - の3〜32文字</small></label>
+        <label class="field">パスワード<input id="setup-pw" type="password" autocomplete="new-password" minlength="8" required><small>8文字以上</small></label>
+        <p class="error" id="setup-error" role="alert"></p>
+        <button class="btn big" type="submit">オーナーアカウントを作成</button>
+      </form>
+    </div>
+  </main>
+  <script src="/js/api.js"></script>
+  <script src="/js/login.js"></script>
+</body>
+</html>

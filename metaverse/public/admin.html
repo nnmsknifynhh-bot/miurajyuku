@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>管理画面｜三浦塾 オンライン教室</title>
+  <meta name="theme-color" content="#2f7de1">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/common.css">
+  <link rel="stylesheet" href="/css/admin.css">
+</head>
+<body>
+  <header class="admin-head">
+    <a href="/app" class="back">← 教室へもどる</a>
+    <h1>管理画面</h1>
+    <span id="who" class="who"></span>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button data-tab="users" id="tab-users-btn">👥 ユーザー</button>
+    <button data-tab="rooms" id="tab-rooms-btn">🏫 教室の設定</button>
+    <button data-tab="status" id="tab-status-btn">📊 入室状況</button>
+    <button data-tab="logs" id="tab-logs-btn">📝 操作ログ</button>
+  </nav>
+
+  <main>
+    <!-- ユーザー -->
+    <section id="tab-users" class="tab" hidden>
+      <div class="toolbar">
+        <div class="filters" id="role-filter">
+          <button data-role="" class="chip active">すべて</button>
+          <button data-role="teacher" class="chip">先生</button>
+          <button data-role="student" class="chip">生徒</button>
+        </div>
+        <input id="search" class="search" placeholder="名前・IDで検索" type="search">
+        <button class="btn" id="add-user">＋ ユーザーを追加</button>
+      </div>
+      <div id="user-list" class="user-list"></div>
+    </section>
+
+    <!-- 教室の設定 -->
+    <section id="tab-rooms" class="tab" hidden>
+      <p class="lead">各部屋の定員を設定します。定員は座席数が上限です。<br><span class="muted">※ 定員による入室制限は、複数人がリアルタイムで入室できるようになる第2段階から有効になります。</span></p>
+      <div id="room-list" class="room-grid"></div>
+    </section>
+
+    <!-- 入室状況 -->
+    <section id="tab-status" class="tab" hidden>
+      <div class="notice"><b>準備中（第2段階で実装します）</b><br>各教室の現在の入室人数・入室者の名前・不審な接続の切断は、リアルタイム機能を追加する第2段階で表示・操作できるようになります。現時点では「ユーザー」タブの<b>強制ログアウト</b>と<b>無効化</b>で利用を止められます。</div>
+    </section>
+
+    <!-- 操作ログ -->
+    <section id="tab-logs" class="tab" hidden>
+      <p class="lead">ログインと管理操作の記録（新しい順・最大200件）</p>
+      <div class="table-wrap"><table class="logs"><thead><tr><th>日時</th><th>操作した人</th><th>内容</th><th>対象</th><th>IP</th></tr></thead><tbody id="log-body"></tbody></table></div>
+    </section>
+  </main>
+
+  <!-- ユーザー追加・編集 -->
+  <dialog id="user-dialog">
+    <form class="dialog-body" id="user-form" novalidate>
+      <h2 id="user-dialog-title">ユーザーを追加</h2>
+      <div class="role-pick" id="role-pick">
+        <label><input type="radio" name="role" value="student" checked><span>🎒 生徒</span></label>
+        <label><input type="radio" name="role" value="teacher"><span>👩‍🏫 先生</span></label>
+      </div>
+      <label class="field">表示名（アバターの上に出る名前）<input id="f-name" maxlength="20" required><small>生徒は本名ではなく、名字だけやニックネームにすると安心です</small></label>
+      <label class="field">ログインID<input id="f-login" autocapitalize="off" spellcheck="false" required><small>半角英数字と _ . - の3〜32文字</small></label>
+      <label class="field"><span id="f-pw-label">パスワード</span>
+        <span class="pw-row"><input id="f-pw" autocomplete="new-password" spellcheck="false"><button type="button" class="btn small secondary" id="gen-pw">自動で作る</button></span>
+        <small id="f-pw-help">8文字以上</small>
+      </label>
+      <label class="field color-field">アバターの色<input id="f-color" type="color" value="#64b5f6"></label>
+
+      <fieldset id="rooms-field">
+        <legend>担当する教室</legend>
+        <div id="f-rooms" class="checks"></div>
+      </fieldset>
+      <fieldset>
+        <legend>権限</legend>
+        <div id="f-perms" class="checks"></div>
+        <small class="muted" id="perm-note"></small>
+      </fieldset>
+
+      <p class="error" id="user-error"></p>
+      <div class="dialog-actions">
+        <button type="button" class="btn secondary" id="user-cancel">やめる</button>
+        <button type="submit" class="btn" id="user-save">保存する</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 作成したログイン情報 -->
+  <dialog id="cred-dialog">
+    <div class="dialog-body">
+      <h2>アカウントを作成しました</h2>
+      <p>次のログイン情報を本人に伝えてください。<b>パスワードはこの画面を閉じると二度と表示されません。</b></p>
+      <pre class="cred" id="cred-text"></pre>
+      <div class="dialog-actions">
+        <button class="btn secondary" id="cred-copy">コピー</button>
+        <button class="btn" id="cred-close">閉じる</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/admin.js"></script>
+</body>
+</html>
