@@ -1,5 +1,5 @@
 // オフライン時の表示用キャッシュ。API は常にネットワークから取得し、保存しない。
-const CACHE = 'juku-v1';
+const CACHE = 'juku-v2';
 const ASSETS = [
   '/', '/app', '/admin', '/css/common.css', '/css/login.css', '/css/app.css', '/css/admin.css',
   '/js/api.js', '/js/login.js', '/js/app.js', '/js/render.js', '/js/admin.js', '/shared/map.js',
@@ -14,7 +14,7 @@ self.addEventListener('activate', (e) => {
 // ネットワーク優先（更新がすぐ反映されるように）、つながらないときだけキャッシュを使う
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
-  if (e.request.method !== 'GET' || url.origin !== location.origin || url.pathname.startsWith('/api/')) return;
+  if (e.request.method !== 'GET' || url.origin !== location.origin || url.pathname.startsWith('/api/') || url.pathname.startsWith('/socket.io/')) return;
   e.respondWith(
     fetch(e.request).then(res => {
       if (res.ok && res.type === 'basic') { const copy = res.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); }

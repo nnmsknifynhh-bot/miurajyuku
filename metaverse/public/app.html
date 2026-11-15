@@ -19,7 +19,8 @@
     <div class="place" id="place"><span class="place-icon">📍</span><span id="place-name">ロビー</span><span id="place-cap" class="place-cap"></span></div>
     <button class="me-btn" id="me-btn" aria-haspopup="menu"><span class="dot" id="me-dot"></span><span id="me-name"></span><span class="badge" id="me-role"></span></button>
   </header>
-  <div class="stage-note" id="stage-note">テスト版（第1段階）：ほかの人の表示・通話はまだ使えません</div>
+  <div class="stage-note" id="stage-note">テスト版（第2段階）：通話・画面共有はまだ使えません</div>
+  <div class="conn" id="conn" hidden>サーバーにつないでいます…</div>
 
   <nav class="me-menu" id="me-menu" hidden>
     <a href="/admin" id="menu-admin" hidden>⚙️ 管理画面</a>
@@ -35,15 +36,34 @@
   <div class="joystick" id="joystick" hidden><div class="knob" id="knob"></div></div>
 
   <footer class="hud-bottom">
-    <button class="big-btn" id="btn-rooms"><span>🏫</span>へやをえらぶ</button>
+    <button class="big-btn" id="btn-rooms"><span>🏫</span><b>へや</b></button>
     <button class="big-btn" id="btn-sit"><span>🪑</span><b id="sit-label">すわる</b></button>
+    <button class="big-btn student-only" id="btn-hand"><span>✋</span><b id="hand-label">手をあげる</b></button>
+    <button class="big-btn student-only" id="btn-react"><span>😊</span><b>リアクション</b></button>
+    <button class="big-btn staff-only" id="btn-hands"><span>🙋</span><b>挙手</b><i class="count" id="hands-count" hidden>0</i></button>
+    <button class="big-btn staff-only" id="btn-people"><span>👥</span><b>入室者</b></button>
   </footer>
+
+  <div class="react-pop" id="react-pop" hidden></div>
+
+  <!-- 先生・オーナー用パネル -->
+  <aside class="panel" id="panel" hidden>
+    <div class="panel-tabs">
+      <button data-tab="hands" class="active">🙋 挙手</button>
+      <button data-tab="people">👥 入室者</button>
+      <button id="panel-close" aria-label="とじる">✕</button>
+    </div>
+    <div class="panel-body" id="panel-hands"></div>
+    <div class="panel-body" id="panel-people" hidden></div>
+  </aside>
+
+  <div class="user-pop" id="user-pop" hidden></div>
 
   <dialog id="rooms-dialog">
     <div class="dialog-body">
       <h2>どこへ行く？</h2>
       <div class="room-list" id="room-list"></div>
-      <div class="dialog-actions"><button class="btn secondary" value="close" id="rooms-close">とじる</button></div>
+      <div class="dialog-actions"><button class="btn secondary" id="rooms-close">とじる</button></div>
     </div>
   </dialog>
 
@@ -60,6 +80,7 @@
     </form>
   </dialog>
 
+  <script src="/socket.io/socket.io.js"></script>
   <script src="/shared/map.js"></script>
   <script src="/js/api.js"></script>
   <script src="/js/render.js"></script>

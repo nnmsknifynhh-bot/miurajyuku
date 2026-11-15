@@ -58,3 +58,8 @@ pre.cred { background: #f7f2ea; padding: 14px; border-radius: 12px; font-size: 1
   .user-row { grid-template-columns: 34px minmax(0, 1fr); }
   .user-row .actions { grid-column: 1 / -1; justify-content: flex-start; }
 }
+
+h3.sec { margin: 22px 0 8px; font-size: 17px; }
+.room-box .big { font-size: 28px; font-weight: 800; }
+.room-box .big.full { color: var(--danger); }
+.room-box ul { margin: 0; padding-left: 18px; font-size: 14px; }

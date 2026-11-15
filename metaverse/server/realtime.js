@@ -1,0 +1,318 @@
+// 第2段階：リアルタイム機能（Socket.IO）
+// - 接続はログイン中の Cookie で認証
+// - 位置・入室・着席・挙手はすべてサーバーが判定（画面側の判定は表示用）
+const { Server } = require('socket.io');
+const SM = require('../public/shared/map.js');
+const auth = require('./auth');
+const { db, now } = require('./db');
+const { can, canEnterRoom } = require('./permissions');
+
+const T = SM.TILE;
+const REACTIONS = ['👍', '👏', '😊', '❓', '💡', '🙏'];
+const ROOM_TYPES = new Set(['classroom', 'study']);
+
+let io = null;
+const online = new Map();  // userId -> presence
+const lastPos = new Map(); // userId -> { x, y }（再接続時に元の場所へ）
+
+const getRooms = () => db.prepare('SELECT id, name, type, capacity FROM rooms ORDER BY sort_order').all();
+const getRoom = (id) => db.prepare('SELECT id, name, type, capacity FROM rooms WHERE id = ?').get(id);
+const roomIdAt = (x, y) => {
+  const z = SM.zoneAtPx(x, y);
+  return z && ROOM_TYPES.has(z.type) ? z.id : null;
+};
+const isStaff = (p) => p.user.role === 'owner' || p.user.role === 'teacher';
+const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : NaN);
+const DIRS = new Set(['up', 'down', 'left', 'right']);
+
+function pub(p) {
+  return {
+    id: p.id, name: p.user.display_name, role: p.user.role, color: p.user.avatar_color,
+    x: p.x, y: p.y, dir: p.dir, moving: p.moving, room: p.room, seat: p.seat, hand: p.hand, handAt: p.handAt,
+  };
+}
+
+// 部屋ごとの人数（定員の対象は生徒のみ。先生・オーナーは数えない）
+function roomCounts() {
+  const c = {};
+  for (const r of getRooms()) c[r.id] = { name: r.name, type: r.type, capacity: r.capacity, students: 0, staff: 0 };
+  for (const p of online.values()) {
+    if (!p.room || !c[p.room]) continue;
+    if (p.user.role === 'student') c[p.room].students++; else c[p.room].staff++;
+  }
+  return c;
+}
+let roomsTimer = null;
+function broadcastRooms() {
+  if (roomsTimer || !io) return;
+  roomsTimer = setTimeout(() => { roomsTimer = null; io.emit('rooms', roomCounts()); }, 100);
+}
+
+// 入室チェック：権限と定員
+function entryError(p, roomId) {
+  const room = getRoom(roomId);
+  if (!room) return null;
+  if (!canEnterRoom(p.user, room)) {
+    return p.user.role === 'teacher' ? `${room.name}には入れません（担当の教室ではありません）` : `${room.name}には入れません`;
+  }
+  if (p.user.role === 'student') {
+    let n = 0;
+    for (const o of online.values()) if (o !== p && o.room === roomId && o.user.role === 'student') n++;
+    if (n >= room.capacity) return `${room.name}は満員です（定員${room.capacity}人）`;
+  }
+  return null;
+}
+
+function spawnPos(p) {
+  const saved = lastPos.get(p.id);
+  if (saved && SM.isWalkable(Math.floor(saved.x / T), Math.floor(saved.y / T))) {
+    const r = roomIdAt(saved.x, saved.y);
+    if (!r || !entryError(p, r)) return saved;
+  }
+  const others = [...online.values()];
+  const free = SM.SPAWN.filter(t => !others.some(o => Math.abs(o.x - (t.x + .5) * T) < T && Math.abs(o.y - (t.y + .5) * T) < T));
+  const list = free.length ? free : SM.SPAWN;
+  const t = list[Math.floor(Math.random() * list.length)];
+  return SM.tileCenter(t.x, t.y);
+}
+
+// 先生（挙手に対応できる人）か
+function canHandle(staff, roomId) {
+  if (!isStaff(staff) || !can(staff.user, 'handle_students')) return false;
+  const room = getRoom(roomId);
+  return !!room && canEnterRoom(staff.user, room);
+}
+
+function lowerHand(p, byName) {
+  if (!p.hand) return;
+  p.hand = false; p.handAt = 0;
+  io.emit('user-updated', { id: p.id, hand: false, handAt: 0 });
+  if (byName) p.socket.emit('hand-lowered', { by: byName });
+}
+
+function setRoom(p, roomId) {
+  if (p.room === roomId) return;
+  if (p.hand) lowerHand(p);
+  p.room = roomId;
+  io.emit('user-updated', { id: p.id, room: roomId });
+  broadcastRooms();
+}
+
+// 部屋から外へ出す（権限がなくなったときなど）
+function forceOut(p, reason) {
+  const exit = SM.EXIT[p.room] || SM.ENTRY.lobby;
+  const c = SM.tileCenter(exit.x, exit.y);
+  p.x = c.x; p.y = c.y; p.seat = null;
+  setRoom(p, null);
+  io.emit('user-updated', { id: p.id, x: p.x, y: p.y, seat: null });
+  p.socket.emit('force-move', { x: p.x, y: p.y, reason });
+}
+
+function clientIp(socket) {
+  if (process.env.TRUST_PROXY) {
+    const xf = socket.handshake.headers['x-forwarded-for'];
+    if (xf) return String(xf).split(',')[0].trim();
+  }
+  return socket.handshake.address;
+}
+function deviceLabel(ua) {
+  ua = String(ua || '');
+  const os = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' : /Mac OS X/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : /CrOS/.test(ua) ? 'Chromebook' : /Linux/.test(ua) ? 'Linux' : 'その他';
+  const br = /Edg\//.test(ua) ? 'Edge' : /CriOS|Chrome\//.test(ua) ? 'Chrome' : /FxiOS|Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : '';
+  return br ? `${os} / ${br}` : os;
+}
+
+function attach(httpServer) {
+  io = new Server(httpServer, { maxHttpBufferSize: 10_000, pingInterval: 20_000, pingTimeout: 20_000 });
+
+  // 認証：ログイン中の Cookie が必要。他サイトからの接続は拒否
+  io.use((socket, next) => {
+    const req = socket.request;
+    const origin = req.headers.origin;
+    if (origin) {
+      let ok = false;
+      try { ok = new URL(origin).host === req.headers.host; } catch { ok = false; }
+      if (!ok) return next(new Error('forbidden'));
+    }
+    const u = auth.userFromRequest(req);
+    if (!u) return next(new Error('unauthorized'));
+    socket.data.user = u;
+    next();
+  });
+
+  io.on('connection', (socket) => {
+    const user = socket.data.user;
+
+    // 同じユーザーの古い接続は切る（1人1接続）
+    const old = online.get(user.id);
+    if (old) kickPresence(old, '別の端末（またはタブ）で入室したため、こちらは切断しました');
+
+    const p = {
+      id: user.id, user, socket, tokenHash: user.sessionTokenHash,
+      x: 0, y: 0, dir: 'down', moving: false, room: null, seat: null, hand: false, handAt: 0,
+      connectedAt: Date.now(), ip: clientIp(socket), device: deviceLabel(socket.handshake.headers['user-agent']),
+      lastMoveAt: 0, lastReactionAt: 0,
+    };
+    Object.assign(p, spawnPos(p));
+    p.room = roomIdAt(p.x, p.y);
+    online.set(p.id, p);
+    if (isStaff(p)) socket.join('staff');
+
+    socket.emit('init', {
+      me: pub(p), users: [...online.values()].filter(o => o !== p).map(pub), rooms: roomCounts(), reactions: REACTIONS,
+    });
+    socket.broadcast.emit('user-joined', pub(p));
+    broadcastRooms();
+
+    const reject = (reason) => socket.emit('move-rejected', { x: p.x, y: p.y, reason: reason || null });
+
+    socket.on('move', (d) => {
+      if (!d || typeof d !== 'object') return;
+      const x = num(d.x), y = num(d.y);
+      if (Number.isNaN(x) || Number.isNaN(y)) return;
+      const t = Date.now();
+      if (t - p.lastMoveAt < 20) return; // 送りすぎは無視（最大 50回/秒）
+      p.lastMoveAt = t;
+      if (Math.hypot(x - p.x, y - p.y) > T * 4) return reject('移動が速すぎます');
+      if (!SM.isWalkable(Math.floor(x / T), Math.floor(y / T))) return reject(null);
+      const newRoom = roomIdAt(x, y);
+      if (newRoom && newRoom !== p.room) {
+        const err = entryError(p, newRoom);
+        if (err) return reject(err);
+      }
+      p.x = x; p.y = y;
+      if (DIRS.has(d.dir)) p.dir = d.dir;
+      p.moving = !!d.moving;
+      if (p.seat) {
+        const [sx, sy] = p.seat.split(',').map(Number);
+        const c = SM.tileCenter(sx, sy);
+        if (Math.hypot(c.x - x, c.y - y) > 8) { p.seat = null; io.emit('user-updated', { id: p.id, seat: null }); }
+      }
+      socket.broadcast.volatile.emit('user-moved', { id: p.id, x, y, dir: p.dir, moving: p.moving });
+      if (newRoom !== p.room) setRoom(p, newRoom);
+    });
+
+    socket.on('sit', (seat, ack) => {
+      if (typeof ack !== 'function') ack = () => {};
+      const m = /^(\d{1,3}),(\d{1,3})$/.exec(String(seat || ''));
+      if (!m) return ack({ ok: false, error: 'そこには座れません' });
+      const sx = Number(m[1]), sy = Number(m[2]);
+      if (!SM.isSeat(sx, sy)) return ack({ ok: false, error: 'そこには座れません' });
+      const c = SM.tileCenter(sx, sy);
+      if (Math.hypot(c.x - p.x, c.y - p.y) > T * 1.6) return ack({ ok: false, error: '席が遠すぎます' });
+      const seatRoom = roomIdAt(c.x, c.y);
+      if (seatRoom !== p.room) return ack({ ok: false, error: '先に部屋に入ってください' });
+      const id = SM.seatId(sx, sy);
+      for (const o of online.values()) if (o !== p && o.seat === id) return ack({ ok: false, error: 'その席はほかの人が使っています' });
+      p.seat = id; p.x = c.x; p.y = c.y; p.dir = SM.seatFacing(sx, sy); p.moving = false;
+      ack({ ok: true, x: p.x, y: p.y, dir: p.dir });
+      socket.broadcast.emit('user-updated', { id: p.id, seat: id, x: p.x, y: p.y, dir: p.dir, moving: false });
+    });
+
+    socket.on('stand', () => {
+      if (!p.seat) return;
+      p.seat = null;
+      io.emit('user-updated', { id: p.id, seat: null });
+    });
+
+    // ── 挙手 ──
+    socket.on('hand', (d, ack) => {
+      if (typeof ack !== 'function') ack = () => {};
+      const raised = !!(d && d.raised);
+      if (!raised) { lowerHand(p); return ack({ ok: true }); }
+      if (p.user.role !== 'student') return ack({ ok: false, error: '挙手は生徒の機能です' });
+      const room = p.room && getRoom(p.room);
+      if (!room || room.type !== 'classroom') return ack({ ok: false, error: '授業の教室に入ってから手をあげてね' });
+      if (p.hand) return ack({ ok: true });
+      p.hand = true; p.handAt = Date.now();
+      io.emit('user-updated', { id: p.id, hand: true, handAt: p.handAt });
+      for (const s of online.values()) {
+        if (s !== p && canHandle(s, room.id)) s.socket.emit('hand-raised', { id: p.id, name: p.user.display_name, room: room.id, roomName: room.name });
+      }
+      ack({ ok: true });
+    });
+
+    socket.on('lower-hand', (targetId, ack) => {
+      if (typeof ack !== 'function') ack = () => {};
+      const target = online.get(Number(targetId));
+      if (!target || !target.hand) return ack({ ok: false, error: '手をあげている生徒が見つかりません' });
+      if (!canHandle(p, target.room)) return ack({ ok: false, error: 'この操作は許可されていません' });
+      lowerHand(target, p.user.display_name);
+      ack({ ok: true });
+    });
+
+    // ── リアクション ──
+    socket.on('reaction', (kind) => {
+      if (!REACTIONS.includes(kind)) return;
+      const t = Date.now();
+      if (t - p.lastReactionAt < 1200) return;
+      p.lastReactionAt = t;
+      io.emit('reaction', { id: p.id, kind });
+    });
+
+    socket.on('disconnect', () => {
+      if (online.get(p.id) !== p) return;
+      lastPos.set(p.id, { x: p.x, y: p.y });
+      online.delete(p.id);
+      io.emit('user-left', { id: p.id });
+      broadcastRooms();
+    });
+  });
+
+  // ログインが無効になった接続を定期的に切る（強制ログアウト・期限切れの取りこぼし防止）
+  setInterval(() => {
+    for (const p of online.values()) {
+      const s = db.prepare('SELECT expires_at FROM sessions WHERE token_hash = ?').get(p.tokenHash);
+      const u = db.prepare('SELECT is_active FROM users WHERE id = ?').get(p.id);
+      if (!s || s.expires_at < now() || !u || !u.is_active) kickPresence(p, 'ログインが切れました。もう一度ログインしてください');
+    }
+  }, 30_000).unref();
+
+  return io;
+}
+
+function kickPresence(p, reason) {
+  p.socket.emit('kicked', { reason });
+  if (online.get(p.id) === p) {
+    lastPos.set(p.id, { x: p.x, y: p.y });
+    online.delete(p.id);
+    if (io) { io.emit('user-left', { id: p.id }); broadcastRooms(); }
+  }
+  p.socket.disconnect(true);
+}
+
+// ── 管理機能から呼ばれる ──
+function kick(userId, reason) {
+  const p = online.get(Number(userId));
+  if (!p) return false;
+  kickPresence(p, reason || '管理者によって接続が切断されました');
+  return true;
+}
+
+// 権限・担当教室・名前などが変わったとき
+function refreshUser(userId) {
+  const p = online.get(Number(userId));
+  if (!p) return;
+  const u = auth.loadUser(p.id);
+  if (!u || !u.is_active) return kick(p.id, 'このアカウントは使えなくなりました');
+  p.user = { ...u, sessionTokenHash: p.tokenHash };
+  io.emit('user-updated', { id: p.id, name: u.display_name, color: u.avatar_color });
+  p.socket.emit('me-updated');
+  if (p.room) {
+    const room = getRoom(p.room);
+    if (!canEnterRoom(p.user, room)) forceOut(p, `${room.name}に入る権限がなくなったため、ろうかへ移動しました`);
+  }
+}
+
+function refreshRooms() { broadcastRooms(); }
+
+function presence() {
+  return [...online.values()].map(p => ({
+    ...pub(p), loginId: p.user.login_id, zone: (SM.zoneAtPx(p.x, p.y) || {}).id || null,
+    connectedAt: new Date(p.connectedAt).toISOString(), ip: p.ip, device: p.device,
+  }));
+}
+
+function _reset() { online.clear(); lastPos.clear(); }
+
+module.exports = { attach, kick, refreshUser, refreshRooms, presence, roomCounts, REACTIONS, _reset, _online: online };

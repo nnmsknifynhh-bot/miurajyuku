@@ -13,6 +13,7 @@
     $('#tab-users-btn').hidden = !meta.canManageUsers;
     $('#tab-logs-btn').hidden = !meta.canManageUsers;
     $('#tab-rooms-btn').hidden = !meta.canManageRooms;
+    $('#tab-status-btn').hidden = !meta.canManageRooms;
     document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => showTab(b.dataset.tab));
     showTab(meta.canManageUsers ? 'users' : 'rooms');
   })();
@@ -23,7 +24,10 @@
     $('#tabs').hidden = true;
   }
 
+  let statusTimer = null;
   function showTab(tab) {
+    clearInterval(statusTimer); statusTimer = null;
+    if (tab === 'status') { loadStatus(); statusTimer = setInterval(loadStatus, 5000); }
     document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
     document.querySelectorAll('.tab').forEach(s => { s.hidden = s.id !== 'tab-' + tab; });
     if (tab === 'users') loadUsers();
@@ -215,11 +219,59 @@
     }
   }
 
+  // ═════════ 入室状況 ═════════
+  const ROOM_LABEL = { class1: '教室1', class2: '教室2', class3: '教室3', study: '自習室', hall: 'ろうか', lobby: 'ロビー' };
+  async function loadStatus() {
+    let data;
+    try { data = await api('GET', '/api/admin/presence'); } catch (e) { return toast(e.message); }
+    const isOwner = me.role === 'owner';
+    $('#status-note').textContent = isOwner ? '不審な接続は「切断」で止められます。' : '（接続の切断はオーナーのみ）';
+    $('#ip-col').hidden = !isOwner;
+    const box = $('#status-rooms'); box.textContent = '';
+    for (const [id, r] of Object.entries(data.rooms)) {
+      const card = el('div', 'room-box');
+      card.append(el('h3', null, (r.type === 'study' ? '📚 ' : '🏫 ') + r.name));
+      card.append(el('div', 'big' + (r.students >= r.capacity ? ' full' : ''), `${r.students} / ${r.capacity}人`));
+      card.append(el('div', 'muted', r.staff ? `先生・オーナー ${r.staff}人` : '先生はいません'));
+      const names = data.users.filter(u => u.room === id);
+      if (names.length) {
+        const ul = el('ul');
+        names.forEach(u => ul.append(el('li', null, (u.role !== 'student' ? ROLE_LABEL[u.role] + ' ' : '') + u.name + (u.hand ? ' ✋' : ''))));
+        card.append(ul);
+      }
+      box.append(card);
+    }
+    const body = $('#status-body'); body.textContent = '';
+    for (const u of data.users.sort((a, b) => (a.room || 'z').localeCompare(b.room || 'z') || a.name.localeCompare(b.name, 'ja'))) {
+      const tr = el('tr');
+      const t = new Date(u.connectedAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+      [u.name, ROLE_LABEL[u.role], ROOM_LABEL[u.room || u.zone] || '出入口', (u.seat ? '着席' : '') + (u.hand ? ' ✋挙手' : ''), u.device, t].forEach(v => tr.append(el('td', null, v)));
+      if (isOwner) tr.append(el('td', null, u.ip || ''));
+      const td = el('td');
+      if (isOwner && u.id !== me.id) {
+        const b1 = el('button', 'btn small secondary', '切断'); b1.onclick = () => disconnect(u, false);
+        const b2 = el('button', 'btn small danger', '切断してログアウト'); b2.onclick = () => disconnect(u, true);
+        td.append(b1, document.createTextNode(' '), b2);
+      }
+      tr.append(td);
+      body.append(tr);
+    }
+    if (!data.users.length) { const tr = el('tr'); const td = el('td', 'empty', 'いま接続している人はいません'); td.colSpan = 8; tr.append(td); body.append(tr); }
+  }
+  async function disconnect(u, revoke) {
+    const msg = revoke ? `${u.name} さんの接続を切り、すべての端末からログアウトさせますか？\n（もう一度ログインすれば入れます。入れなくするには「ユーザー」タブで無効にしてください）`
+      : `${u.name} さんの接続を切りますか？（再ログインせずにページを開き直すと再接続できます）`;
+    if (!confirm(msg)) return;
+    try { await api('POST', `/api/admin/presence/${u.id}/disconnect`, { revoke }); toast('切断しました'); loadStatus(); }
+    catch (e) { toast(e.message); }
+  }
+
   // ═════════ 操作ログ ═════════
   const ACTION_LABEL = {
     'login.success': 'ログイン', 'login.failed': 'ログイン失敗', 'setup.owner_created': '初期セットアップ',
     'user.created': 'ユーザー作成', 'user.updated': 'ユーザー編集', 'user.sessions_revoked': '強制ログアウト',
     'user.password_changed_self': 'パスワード変更（本人）', 'room.capacity_changed': '定員の変更',
+    'presence.disconnected': '接続の切断', 'presence.disconnected_and_revoked': '切断＋ログアウト',
   };
   async function loadLogs() {
     let logs;

@@ -5,6 +5,7 @@ const express = require('express');
 const { db, now, transaction, audit } = require('./db');
 const auth = require('./auth');
 const { PERMISSIONS, KEYS, STUDENT_FORBIDDEN, defaultPermissions, can, canEnterRoom } = require('./permissions');
+const realtime = require('./realtime');
 
 const PORT = Number(process.env.PORT || 3000);
 const app = express();
@@ -15,7 +16,7 @@ if (process.env.TRUST_PROXY) app.set('trust proxy', Number(process.env.TRUST_PRO
 app.use((req, res, next) => {
   res.setHeader('Content-Security-Policy', [
     "default-src 'self'", "script-src 'self'", "style-src 'self'", "img-src 'self' data: blob:",
-    "media-src 'self' blob:", "connect-src 'self'", "font-src 'self'", "object-src 'none'",
+    "media-src 'self' blob:", `connect-src 'self' ws://${req.headers.host} wss://${req.headers.host}`, "font-src 'self'", "object-src 'none'",
     "base-uri 'self'", "form-action 'self'", "frame-ancestors 'none'",
   ].join('; '));
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -236,7 +237,12 @@ admin.patch('/users/:id', requireOwner, (req, res) => {
   });
   if (result) return bad(res, result);
   // 無効化・パスワード変更時はログイン中の端末をすべてログアウトさせる
-  if ((b.isActive === false || b.password) && !isSelf) auth.revokeUserSessions(id);
+  if ((b.isActive === false || b.password) && !isSelf) {
+    auth.revokeUserSessions(id);
+    realtime.kick(id, b.isActive === false ? 'このアカウントは使えなくなりました' : 'パスワードが変更されたため、もう一度ログインしてください');
+  } else {
+    realtime.refreshUser(id);
+  }
   audit(req.user.id, 'user.updated', target.login_id, { changes }, req.ip);
   res.json({ user: publicUser(auth.loadUser(id)) });
 });
@@ -246,6 +252,7 @@ admin.post('/users/:id/revoke-sessions', requireOwner, (req, res) => {
   if (!target) return bad(res, 'ユーザーが見つかりません', 404);
   if (target.id === req.user.id) return bad(res, '自分自身は強制ログアウトできません');
   const n = auth.revokeUserSessions(target.id);
+  realtime.kick(target.id, '管理者によってログアウトされました');
   audit(req.user.id, 'user.sessions_revoked', target.login_id, { count: n }, req.ip);
   res.json({ revoked: n });
 });
@@ -260,8 +267,28 @@ admin.patch('/rooms/:id', requireRoomManager, (req, res) => {
   const cap = Number(req.body.capacity);
   if (!Number.isInteger(cap) || cap < 1 || cap > room.max_capacity) return bad(res, `定員は1〜${room.max_capacity}人で設定してください（座席数が上限です）`);
   db.prepare('UPDATE rooms SET capacity = ? WHERE id = ?').run(cap, room.id);
+  realtime.refreshRooms();
   audit(req.user.id, 'room.capacity_changed', room.id, { from: room.capacity, to: cap }, req.ip);
   res.json({ room: { id: room.id, capacity: cap } });
+});
+
+// ── 入室状況（第2段階） ──
+admin.get('/presence', requireRoomManager, (req, res) => {
+  const isOwner = req.user.role === 'owner';
+  const users = realtime.presence().map(u => (isOwner ? u : { ...u, ip: undefined }));
+  res.json({ rooms: realtime.roomCounts(), users });
+});
+
+// 不審な接続を止める（オーナーのみ）。revoke: true ならその人のログインもすべて無効にする
+admin.post('/presence/:id/disconnect', requireOwner, (req, res) => {
+  const target = auth.loadUser(Number(req.params.id));
+  if (!target) return bad(res, 'ユーザーが見つかりません', 404);
+  if (target.id === req.user.id) return bad(res, '自分自身は切断できません');
+  const revoke = !!req.body.revoke;
+  if (revoke) auth.revokeUserSessions(target.id);
+  const was = realtime.kick(target.id, revoke ? '管理者によってログアウトされました' : '管理者によって接続が切断されました');
+  audit(req.user.id, revoke ? 'presence.disconnected_and_revoked' : 'presence.disconnected', target.login_id, null, req.ip);
+  res.json({ disconnected: was });
 });
 
 admin.get('/logs', requireOwner, (req, res) => {
@@ -282,7 +309,14 @@ app.use((err, req, res, _next) => {
   res.status(500).send('Server error');
 });
 
+function createServer() {
+  const server = http.createServer(app);
+  realtime.attach(server);
+  return server;
+}
+
 if (require.main === module) {
-  http.createServer(app).listen(PORT, () => console.log(`三浦塾メタバース: http://localhost:${PORT}`));
+  createServer().listen(PORT, () => console.log(`三浦塾メタバース: http://localhost:${PORT}`));
 }
 module.exports = app;
+module.exports.createServer = createServer;

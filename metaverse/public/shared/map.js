@@ -87,6 +87,8 @@
     class1: { x: 14, y: 13 }, class2: { x: 31, y: 13 }, class3: { x: 48, y: 13 },
     study: { x: 16, y: 21 }, lobby: { x: 42, y: 26 }, hall: { x: 25, y: 16 },
   };
+  // 部屋から出されたときの移動先（扉の外の廊下）
+  const EXIT = { class1: { x: 14, y: 15 }, class2: { x: 31, y: 15 }, class3: { x: 48, y: 15 }, study: { x: 16, y: 18 } };
   // 教壇の立ち位置
   const PODIUM = { class1: { x: 8, y: 1 }, class2: { x: 25, y: 1 }, class3: { x: 42, y: 1 } };
 
@@ -145,7 +147,7 @@
   for (let y = 28; y <= 31; y++) for (let x = 40; x <= 45; x++) SPAWN.push({ x, y });
 
   return {
-    W, H, TILE, grid, ZONES, ENTRY, PODIUM, SPAWN, classroomSeats,
+    W, H, TILE, grid, ZONES, ENTRY, EXIT, PODIUM, SPAWN, classroomSeats,
     tileAt, isWalkable, isSeat, zoneAt, zoneAtPx, seatId, tileCenter, seatFacing, findPath, seatCount,
   };
 });

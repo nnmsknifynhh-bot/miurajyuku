@@ -224,10 +224,25 @@
     ctx.beginPath(); ctx.roundRect(x - tw / 2, by - 42, tw, 17, 8.5); ctx.fill();
     ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(label, x, by - 33, 150);
-    if (opts.isMe) { // 自分の目印
+    if (opts.isMe && !u.hand) { // 自分の目印
       ctx.fillStyle = '#ffcf3d';
       const ay = by - 50 + Math.sin(t * 4) * 2;
       ctx.beginPath(); ctx.moveTo(x - 6, ay - 6); ctx.lineTo(x + 6, ay - 6); ctx.lineTo(x, ay); ctx.fill();
+    }
+    // 挙手
+    if (u.hand) {
+      const hy = by - 60 + Math.sin(t * 6) * 3;
+      ctx.fillStyle = '#ffcf3d'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(x, hy, 14, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.font = '18px sans-serif'; ctx.fillText('✋', x, hy + 1);
+    }
+    // リアクション（ふわっと上がって消える）
+    if (u.reaction && opts.now < u.reaction.until) {
+      const k = 1 - (u.reaction.until - opts.now) / 2500;
+      ctx.globalAlpha = Math.min(1, (1 - k) * 2.5);
+      ctx.font = '26px sans-serif';
+      ctx.fillText(u.reaction.kind, x + (u.hand ? 24 : 0), by - 62 - k * 30);
+      ctx.globalAlpha = 1;
     }
     ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
   }

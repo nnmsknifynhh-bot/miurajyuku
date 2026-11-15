@@ -7,7 +7,7 @@ const app = require('../server/server.js');
 
 let base, server;
 test.before(async () => {
-  server = http.createServer(app);
+  server = app.createServer();
   await new Promise(r => server.listen(0, r));
   base = `http://127.0.0.1:${server.address().port}`;
 });

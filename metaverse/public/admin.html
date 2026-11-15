@@ -41,13 +41,16 @@
 
     <!-- 教室の設定 -->
     <section id="tab-rooms" class="tab" hidden>
-      <p class="lead">各部屋の定員を設定します。定員は座席数が上限です。<br><span class="muted">※ 定員による入室制限は、複数人がリアルタイムで入室できるようになる第2段階から有効になります。</span></p>
+      <p class="lead">各部屋の定員を設定します。定員は座席数が上限です。<br><span class="muted">定員は生徒の人数です（先生・オーナーは数えません）。変更はすぐに入室制限に反映されます。</span></p>
       <div id="room-list" class="room-grid"></div>
     </section>
 
     <!-- 入室状況 -->
     <section id="tab-status" class="tab" hidden>
-      <div class="notice"><b>準備中（第2段階で実装します）</b><br>各教室の現在の入室人数・入室者の名前・不審な接続の切断は、リアルタイム機能を追加する第2段階で表示・操作できるようになります。現時点では「ユーザー」タブの<b>強制ログアウト</b>と<b>無効化</b>で利用を止められます。</div>
+      <p class="lead">いま入室している人（5秒ごとに自動更新）。<span class="muted" id="status-note"></span></p>
+      <div id="status-rooms" class="room-grid"></div>
+      <h3 class="sec">接続中のユーザー</h3>
+      <div class="table-wrap"><table class="logs"><thead><tr><th>名前</th><th>役割</th><th>場所</th><th>状態</th><th>端末</th><th>接続時刻</th><th id="ip-col">IP</th><th></th></tr></thead><tbody id="status-body"></tbody></table></div>
     </section>
 
     <!-- 操作ログ -->
