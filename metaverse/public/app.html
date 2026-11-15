@@ -19,7 +19,14 @@
     <div class="place" id="place"><span class="place-icon">📍</span><span id="place-name">ロビー</span><span id="place-cap" class="place-cap"></span></div>
     <button class="me-btn" id="me-btn" aria-haspopup="menu"><span class="dot" id="me-dot"></span><span id="me-name"></span><span class="badge" id="me-role"></span></button>
   </header>
-  <div class="stage-note" id="stage-note">テスト版（第2段階）：通話・画面共有はまだ使えません</div>
+  <div class="stage-note" id="stage-note">テスト版（第3段階）：個別通話はまだ使えません</div>
+  <div class="class-bar" id="class-bar" hidden></div>
+
+  <section class="screen-view" id="screen-view" hidden>
+    <div class="screen-head"><span id="screen-title">🖥 先生の画面</span><button id="screen-big">⛶ 大きく</button></div>
+    <video id="screen-video" autoplay playsinline muted></video>
+  </section>
+  <div id="lk-audio" hidden></div>
   <div class="conn" id="conn" hidden>サーバーにつないでいます…</div>
 
   <nav class="me-menu" id="me-menu" hidden>
@@ -81,9 +88,11 @@
   </dialog>
 
   <script src="/socket.io/socket.io.js"></script>
+  <script src="/vendor/livekit-client.umd.js"></script>
   <script src="/shared/map.js"></script>
   <script src="/js/api.js"></script>
   <script src="/js/render.js"></script>
+  <script src="/js/classcall.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>

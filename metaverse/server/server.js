@@ -6,6 +6,7 @@ const { db, now, transaction, audit } = require('./db');
 const auth = require('./auth');
 const { PERMISSIONS, KEYS, STUDENT_FORBIDDEN, defaultPermissions, can, canEnterRoom } = require('./permissions');
 const realtime = require('./realtime');
+const livekit = require('./livekit');
 
 const PORT = Number(process.env.PORT || 3000);
 const app = express();
@@ -16,7 +17,7 @@ if (process.env.TRUST_PROXY) app.set('trust proxy', Number(process.env.TRUST_PRO
 app.use((req, res, next) => {
   res.setHeader('Content-Security-Policy', [
     "default-src 'self'", "script-src 'self'", "style-src 'self'", "img-src 'self' data: blob:",
-    "media-src 'self' blob:", `connect-src 'self' ws://${req.headers.host} wss://${req.headers.host}`, "font-src 'self'", "object-src 'none'",
+    "media-src 'self' blob:", `connect-src 'self' ws://${req.headers.host} wss://${req.headers.host} ${livekit.cspSources().join(' ')}`.trim(), "font-src 'self'", "object-src 'none'",
     "base-uri 'self'", "form-action 'self'", "frame-ancestors 'none'",
   ].join('; '));
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -122,7 +123,7 @@ app.post('/api/logout', (req, res) => {
 });
 
 app.get('/api/me', auth.requireAuth, (req, res) => {
-  res.json({ user: publicUser(req.user), rooms: listRooms(req.user) });
+  res.json({ user: publicUser(req.user), rooms: listRooms(req.user), features: { classCall: livekit.enabled } });
 });
 
 app.post('/api/me/password', auth.requireAuth, (req, res) => {
@@ -276,7 +277,14 @@ admin.patch('/rooms/:id', requireRoomManager, (req, res) => {
 admin.get('/presence', requireRoomManager, (req, res) => {
   const isOwner = req.user.role === 'owner';
   const users = realtime.presence().map(u => (isOwner ? u : { ...u, ip: undefined }));
-  res.json({ rooms: realtime.roomCounts(), users });
+  res.json({ rooms: realtime.roomCounts(), classes: realtime.classState(), users });
+});
+
+// 授業（全体通話）を管理者が終了させる（オーナーのみ）
+admin.post('/classes/:roomId/end', requireOwner, (req, res) => {
+  const ok = realtime.endClass(req.params.roomId, '管理者が授業を終了しました', req.user.id);
+  if (!ok) return bad(res, 'その教室は授業中ではありません', 404);
+  res.json({ ok: true });
 });
 
 // 不審な接続を止める（オーナーのみ）。revoke: true ならその人のログインもすべて無効にする
@@ -301,6 +309,11 @@ app.use('/api/admin', admin);
 app.use('/api', (req, res) => bad(res, '見つかりません', 404));
 
 // ── 画面 ──
+// LiveKit のブラウザ用ライブラリ（外部CDNを使わず、このサーバーから配信）
+const LK_DIST = path.join(path.dirname(require.resolve('livekit-client')), '');
+app.get(['/vendor/livekit-client.umd.js', '/vendor/livekit-client.umd.js.map'], (req, res) => {
+  res.sendFile(path.join(LK_DIST, path.basename(req.path)), { maxAge: '1d' });
+});
 app.use(express.static(path.join(__dirname, '..', 'public'), { extensions: ['html'], index: 'index.html' }));
 
 app.use((err, req, res, _next) => {

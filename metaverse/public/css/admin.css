@@ -63,3 +63,4 @@ h3.sec { margin: 22px 0 8px; font-size: 17px; }
 .room-box .big { font-size: 28px; font-weight: 800; }
 .room-box .big.full { color: var(--danger); }
 .room-box ul { margin: 0; padding-left: 18px; font-size: 14px; }
+.room-box .live { color: var(--danger); font-weight: 800; font-size: 14px; }

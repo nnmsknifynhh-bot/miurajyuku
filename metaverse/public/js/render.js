@@ -186,6 +186,11 @@
 
     ctx.fillStyle = 'rgba(0,0,0,.2)';
     ctx.beginPath(); ctx.ellipse(x, y + 12, 11, 4, 0, 0, Math.PI * 2); ctx.fill();
+    // 話している人（授業の音声）
+    if (opts.speaking) {
+      ctx.strokeStyle = 'rgba(47,163,107,.95)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(x, by - 8, 21 + Math.sin(t * 10) * 1.5, 0, Math.PI * 2); ctx.stroke();
+    }
     // 足
     if (!seated) {
       const step = u.moving ? Math.sin(t * 14) * 3 : 0;

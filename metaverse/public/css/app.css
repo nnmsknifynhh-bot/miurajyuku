@@ -78,3 +78,30 @@ body:not(.is-student) .student-only, body:not(.is-staff) .staff-only { display: 
   .big-btn { min-width: 0; flex: 1; padding: 4px 4px; font-size: 12px; }
   .panel { width: 100vw; top: auto; height: 62dvh; border-radius: 20px 20px 0 0; }
 }
+
+/* 第3段階：授業バー・画面共有 */
+.class-bar { position: fixed; top: calc(env(safe-area-inset-top) + 92px); left: 10px; right: 70px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; z-index: 12; pointer-events: none; }
+.class-bar > * { pointer-events: auto; }
+.cb-live { background: #d64545; color: #fff; font-weight: 800; padding: 8px 14px; border-radius: 999px; box-shadow: var(--shadow); }
+.cb-live small { font-weight: 700; opacity: .85; }
+.cb-note { background: rgba(255,255,255,.95); padding: 8px 12px; border-radius: 12px; font-size: 14px; font-weight: 700; box-shadow: var(--shadow); }
+.cb-note.ok { color: var(--success); }
+.cb-note.warn { color: var(--danger); }
+.cb-btn { border: 0; min-height: 44px; padding: 0 16px; border-radius: 999px; background: #fff; font-weight: 800; font-size: 15px; box-shadow: 0 4px 0 #d7cbb8, var(--shadow); }
+.cb-btn.primary { background: var(--primary); color: #fff; box-shadow: 0 4px 0 var(--primary-dark); }
+.cb-btn.on { background: var(--success); color: #fff; box-shadow: 0 4px 0 #1f7a4f; }
+.cb-btn.off { background: #6b7280; color: #fff; box-shadow: 0 4px 0 #4b5563; }
+.cb-btn.danger { background: var(--danger); color: #fff; box-shadow: 0 4px 0 #a83232; }
+.cb-btn.pulse { animation: pulse 1.2s ease-in-out infinite; font-size: 17px; min-height: 52px; }
+@keyframes pulse { 50% { transform: scale(1.06); } }
+
+.screen-view { position: fixed; right: 10px; top: calc(env(safe-area-inset-top) + 150px); width: min(480px, calc(100vw - 20px)); background: #111; border-radius: 16px; overflow: hidden; box-shadow: 0 12px 30px rgba(0,0,0,.4); z-index: 14; display: flex; flex-direction: column; }
+.screen-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; color: #fff; font-weight: 800; font-size: 14px; }
+.screen-head button { border: 0; border-radius: 999px; padding: 6px 12px; font-weight: 800; background: #fff; }
+.screen-view video { width: 100%; aspect-ratio: 16 / 9; background: #000; object-fit: contain; display: block; }
+.screen-view.big { inset: env(safe-area-inset-top) 0 0 0; width: auto; top: 0; border-radius: 0; z-index: 40; }
+.screen-view.big video { flex: 1; aspect-ratio: auto; min-height: 0; height: 100%; }
+@media (max-width: 520px) {
+  .class-bar { right: 10px; top: calc(env(safe-area-inset-top) + 92px); }
+  .screen-view { left: 10px; right: 10px; width: auto; top: calc(env(safe-area-inset-top) + 150px); }
+}

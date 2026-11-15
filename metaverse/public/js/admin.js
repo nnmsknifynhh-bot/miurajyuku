@@ -233,6 +233,19 @@
       card.append(el('h3', null, (r.type === 'study' ? '📚 ' : '🏫 ') + r.name));
       card.append(el('div', 'big' + (r.students >= r.capacity ? ' full' : ''), `${r.students} / ${r.capacity}人`));
       card.append(el('div', 'muted', r.staff ? `先生・オーナー ${r.staff}人` : '先生はいません'));
+      const cls = data.classes && data.classes[id];
+      if (cls) {
+        const mins = Math.floor((Date.now() - cls.startedAt) / 60000);
+        card.append(el('div', 'live', `🔴 授業中：${cls.teacherName}先生（${mins}分）${cls.screen ? '・画面共有中' : ''}`));
+        if (isOwner) {
+          const b = el('button', 'btn small danger', '授業を終了させる');
+          b.onclick = async () => {
+            if (!confirm(`${r.name}の授業（通話・画面共有）を終了させますか？`)) return;
+            try { await api('POST', `/api/admin/classes/${id}/end`); toast('授業を終了しました'); loadStatus(); } catch (e) { toast(e.message); }
+          };
+          card.append(b);
+        }
+      }
       const names = data.users.filter(u => u.room === id);
       if (names.length) {
         const ul = el('ul');
@@ -271,7 +284,7 @@
     'login.success': 'ログイン', 'login.failed': 'ログイン失敗', 'setup.owner_created': '初期セットアップ',
     'user.created': 'ユーザー作成', 'user.updated': 'ユーザー編集', 'user.sessions_revoked': '強制ログアウト',
     'user.password_changed_self': 'パスワード変更（本人）', 'room.capacity_changed': '定員の変更',
-    'presence.disconnected': '接続の切断', 'presence.disconnected_and_revoked': '切断＋ログアウト',
+    'presence.disconnected': '接続の切断', 'class.started': '授業（通話）を開始', 'class.ended': '授業（通話）を終了', 'presence.disconnected_and_revoked': '切断＋ログアウト',
   };
   async function loadLogs() {
     let logs;

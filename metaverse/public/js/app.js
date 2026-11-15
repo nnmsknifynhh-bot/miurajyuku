@@ -1,4 +1,4 @@
-// 2D空間（第2段階：複数人のリアルタイム同期・入室チェック・挙手・リアクション）
+// 2D空間（第2段階：複数人のリアルタイム同期・入室チェック・挙手・リアクション／第3段階：授業の通話・画面共有）
 (function () {
   const SM = window.SchoolMap, { api, toast, ROLE_LABEL } = window.App;
   const T = SM.TILE, SPEED = 140;
@@ -9,6 +9,7 @@
     user: null, rooms: [], counts: {}, reactions: [], me: null, others: new Map(),
     zoom: 1, cam: { x: 0, y: 0 }, keys: new Set(), path: [], pathSeat: null, joy: { x: 0, y: 0 },
     lastBlockToast: 0, lastSent: 0, lastSentKey: '', socket: null, ready: false, panelTab: 'hands',
+    classes: {}, classCall: false, call: null,
   };
   const canvas = $('#world'), ctx = canvas.getContext('2d');
   let mapCanvas = null;
@@ -41,6 +42,7 @@
   function connect() {
     const socket = io({ transports: ['websocket', 'polling'] });
     state.socket = socket;
+    state.call = window.ClassCall.create({ socket, getState: () => state, toast });
     $('#conn').hidden = false;
 
     socket.on('connect', () => { $('#conn').hidden = true; });
@@ -58,8 +60,13 @@
       state.cam = { x: d.me.x, y: d.me.y };
       state.others = new Map(d.users.map(u => [u.id, { ...u, rx: u.x, ry: u.y }]));
       state.counts = d.rooms; state.reactions = d.reactions;
+      state.classes = d.classes || {}; state.classCall = !!d.classCall;
       state.path = []; state.pathSeat = null; state.ready = true;
       buildReactions(); updateAll();
+    });
+    socket.on('class-state', (c) => { state.classes = c; state.call.sync(); });
+    socket.on('class-ended', ({ room, reason }) => {
+      if (state.me && state.me.room === room) toast(reason || '授業が終わりました', 4500);
     });
     socket.on('rooms', (c) => { state.counts = c; updatePlace(true); renderPanel(); });
     socket.on('user-joined', (u) => { state.others.set(u.id, { ...u, rx: u.x, ry: u.y }); renderPanel(); });
@@ -93,6 +100,7 @@
     socket.on('me-updated', async () => { try { await loadMe(); updateAll(); } catch (e) {} });
     socket.on('kicked', ({ reason }) => {
       state.ready = false;
+      state.call.leave();
       alert(reason || '接続が切断されました');
       location.replace('/');
     });
@@ -146,6 +154,7 @@
     const me = state.me;
     const reason = zoneBlockReason(SM.zoneAt(tx, ty));
     if (reason) { blockToast(reason); return false; }
+    if (leavingWhileTeaching(SM.tileCenter(tx, ty).x, SM.tileCenter(tx, ty).y)) return false;
     if (seat && occupiedSeats().has(SM.seatId(tx, ty))) { toast('その席はほかの人が使っています'); return false; }
     const p = SM.findPath(Math.floor(me.x / T), Math.floor(me.y / T), tx, ty, tileAllowed);
     if (!p) return false;
@@ -210,8 +219,8 @@
       standUp();
       const sp = SPEED * Math.min(1, len) * dt;
       const nx = me.x + dx / len * sp, ny = me.y + dy / len * sp;
-      if (canStand(nx, me.y)) me.x = nx; else checkBlocked(nx + Math.sign(dx) * 9, me.y);
-      if (canStand(me.x, ny)) me.y = ny; else checkBlocked(me.x, ny + Math.sign(dy) * 9);
+      if (canStand(nx, me.y) && !leavingWhileTeaching(nx, me.y)) me.x = nx; else checkBlocked(nx + Math.sign(dx) * 9, me.y);
+      if (canStand(me.x, ny) && !leavingWhileTeaching(me.x, ny)) me.y = ny; else checkBlocked(me.x, ny + Math.sign(dy) * 9);
       me.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
       me.moving = true;
     } else if (state.path.length) {
@@ -231,7 +240,16 @@
   }
 
   // ───────── 表示の更新 ─────────
-  function updateAll() { updatePlace(true); updateButtons(); renderPanel(); }
+  function updateAll() { updatePlace(true); updateButtons(); renderPanel(); if (state.call) state.call.sync(); }
+
+  // 授業中の先生は教室から出られない（出ると授業が終わってしまうため）
+  function leavingWhileTeaching(x, y) {
+    if (!state.call || !state.call.isTeachingHere()) return false;
+    const z = SM.zoneAtPx(x, y);
+    if (z && z.id === state.me.room) return false;
+    blockToast('授業中は教室から出られません。先に「授業を終わる」を押してください');
+    return true;
+  }
 
   let lastPlaceKey = '';
   function updatePlace(force) {
@@ -396,7 +414,7 @@
       const card = el('div', 'room-card' + (ok ? '' : ' locked') + (here === r.id ? ' here' : ''));
       const info = el('div');
       info.append(el('h3', null, r.name));
-      info.append(el('p', null, c ? `生徒 ${c.students}/${c.capacity}人` + (c.staff ? `・先生 ${c.staff}人` : '') + (!r.canEnter ? '・入れません' : full ? '・満員' : '') : 'みんなの入口'));
+      info.append(el('p', null, (state.classes[r.id] ? '🎙 授業中・' : '') + (c ? `生徒 ${c.students}/${c.capacity}人` + (c.staff ? `・先生 ${c.staff}人` : '') + (!r.canEnter ? '・入れません' : full ? '・満員' : '') : 'みんなの入口')));
       const btn = el('button', 'btn small' + (ok ? '' : ' secondary'), here === r.id ? 'ここにいます' : !r.canEnter ? '🔒' : full ? '満員' : '行く');
       btn.disabled = !ok || here === r.id;
       btn.onclick = () => { $('#rooms-dialog').close(); goToRoom(r); };
@@ -592,7 +610,7 @@
     const list = [...state.others.values()].map(u => ({ u, x: u.rx, y: u.ry, isMe: false }));
     list.push({ u: me, x: me.x, y: me.y, isMe: true });
     list.sort((a, b) => a.y - b.y);
-    for (const it of list) window.Render.drawAvatar(ctx, it.u, it.x, it.y, { isMe: it.isMe, time: time / 1000, now: time });
+    for (const it of list) window.Render.drawAvatar(ctx, it.u, it.x, it.y, { isMe: it.isMe, time: time / 1000, now: time, speaking: state.call && state.call.isSpeaking(it.u.id) });
     ctx.restore();
   }
 

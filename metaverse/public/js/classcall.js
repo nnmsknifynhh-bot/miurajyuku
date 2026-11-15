@@ -1,0 +1,229 @@
+// 第3段階：授業の全体通話・画面共有（LiveKit）
+// - 授業中の教室に入ると自動で接続。生徒は「聞く・見る」だけ（送信はサーバーが許可しない）
+// - 先生は「授業を始める」→ マイク・画面共有を送信。教室を出ると切断
+(function () {
+  const LK = window.LivekitClient;
+  const $ = (s) => document.querySelector(s);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const canShareScreen = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+
+  function create({ socket, getState, toast }) {
+    const cs = {
+      room: null, joinedRoom: null, connecting: false, error: null, publisher: false, canScreen: false,
+      micOn: false, screenOn: false, audioBlocked: false, speaking: new Set(), retryAt: 0, screenOwner: null,
+    };
+
+    // ── 接続の管理 ──
+    function desiredRoom() {
+      const st = getState();
+      if (!st.classCall || !st.me || !st.me.room) return null;
+      return st.classes[st.me.room] ? st.me.room : null;
+    }
+
+    async function sync() {
+      const want = desiredRoom();
+      if (!want) { if (cs.room || cs.connecting) leave(); render(); return; }
+      if (cs.room && cs.joinedRoom === want) { render(); return; }
+      if (cs.connecting || Date.now() < cs.retryAt) { render(); return; }
+      if (cs.room) leave();
+      await join(want);
+    }
+
+    function ask(ev) { return new Promise(r => socket.emit(ev, {}, r)); }
+
+    async function join(roomId) {
+      if (!LK) { cs.error = '通話の部品を読み込めませんでした'; render(); return; }
+      cs.connecting = true; cs.error = null; render();
+      const res = await ask('lk-token');
+      if (!res || !res.ok || desiredRoom() !== roomId) {
+        cs.connecting = false;
+        if (res && !res.ok) { cs.error = res.error; cs.retryAt = Date.now() + 3000; }
+        render(); return;
+      }
+      const room = new LK.Room({ adaptiveStream: true, dynacast: true });
+      bindRoom(room);
+      try {
+        await room.connect(res.url, res.token, { autoSubscribe: true });
+      } catch (e) {
+        console.warn('LiveKit connect failed', e);
+        cs.connecting = false; cs.error = '通話サーバーにつながりません'; cs.retryAt = Date.now() + 5000;
+        render(); return;
+      }
+      if (desiredRoom() !== roomId) { room.disconnect(); cs.connecting = false; render(); return; }
+      Object.assign(cs, { room, joinedRoom: roomId, connecting: false, publisher: res.publisher, canScreen: res.canScreen && canShareScreen });
+      cs.audioBlocked = !room.canPlaybackAudio;
+      if (cs.publisher) await setMic(true);
+      render();
+    }
+
+    function leave() {
+      const room = cs.room;
+      Object.assign(cs, { room: null, joinedRoom: null, connecting: false, publisher: false, micOn: false, screenOn: false, audioBlocked: false });
+      cs.speaking.clear();
+      if (room) room.disconnect();
+      $('#lk-audio').textContent = '';
+      hideScreen();
+    }
+
+    function bindRoom(room) {
+      room
+        .on(LK.RoomEvent.TrackSubscribed, (track, pub, participant) => {
+          if (track.kind === 'audio') {
+            const a = track.attach();
+            a.dataset.sid = track.sid;
+            $('#lk-audio').appendChild(a);
+          } else if (track.source === LK.Track.Source.ScreenShare) {
+            showScreen(track, participant);
+          }
+        })
+        .on(LK.RoomEvent.TrackUnsubscribed, (track) => {
+          track.detach().forEach(e => e.remove());
+          if (track.source === LK.Track.Source.ScreenShare) hideScreen();
+        })
+        .on(LK.RoomEvent.AudioPlaybackStatusChanged, () => { cs.audioBlocked = !room.canPlaybackAudio; render(); })
+        .on(LK.RoomEvent.ActiveSpeakersChanged, (speakers) => {
+          cs.speaking = new Set(speakers.map(s => s.identity));
+        })
+        .on(LK.RoomEvent.LocalTrackUnpublished, (pub) => {
+          if (pub.source === LK.Track.Source.ScreenShare) { cs.screenOn = false; reportMedia(); render(); }
+        })
+        .on(LK.RoomEvent.Disconnected, () => {
+          if (cs.room !== room) return;
+          Object.assign(cs, { room: null, joinedRoom: null, micOn: false, screenOn: false });
+          $('#lk-audio').textContent = ''; hideScreen();
+          cs.retryAt = Date.now() + 2000;
+          render();
+        });
+    }
+
+    // ── 先生の操作 ──
+    async function setMic(on) {
+      if (!cs.room || !cs.publisher) return;
+      try {
+        await cs.room.localParticipant.setMicrophoneEnabled(on, { echoCancellation: true, noiseSuppression: true });
+        cs.micOn = on;
+      } catch (e) {
+        cs.micOn = false;
+        toast('マイクが使えません。ブラウザの設定でマイクを許可してください', 5000);
+      }
+      reportMedia(); render();
+    }
+    async function setScreen(on) {
+      if (!cs.room || !cs.canScreen) return;
+      try {
+        await cs.room.localParticipant.setScreenShareEnabled(on, { audio: false, contentHint: 'detail' });
+        cs.screenOn = on;
+      } catch (e) {
+        cs.screenOn = false;
+        if (e && e.name !== 'NotAllowedError') toast('画面共有を開始できませんでした');
+      }
+      reportMedia(); render();
+    }
+    function reportMedia() { socket.emit('class-media', { mic: cs.micOn, screen: cs.screenOn }); }
+
+    async function startClass() {
+      const res = await ask('class-start');
+      if (!res || !res.ok) return toast((res && res.error) || '授業を始められませんでした');
+      toast('授業を始めました。教室にいる生徒にあなたの声が届きます');
+    }
+    async function endClass() {
+      if (!confirm('授業（通話・画面共有）を終わりますか？')) return;
+      const res = await ask('class-end');
+      if (!res || !res.ok) toast((res && res.error) || '終了できませんでした');
+    }
+
+    // ── 画面共有の表示 ──
+    function showScreen(track, participant) {
+      const v = $('#screen-video');
+      track.attach(v);
+      cs.screenOwner = participant.name || '先生';
+      $('#screen-title').textContent = `🖥 ${cs.screenOwner}先生の画面`;
+      $('#screen-view').hidden = false;
+    }
+    function hideScreen() {
+      const v = $('#screen-video');
+      v.srcObject = null;
+      $('#screen-view').hidden = true;
+      $('#screen-view').classList.remove('big');
+    }
+    $('#screen-big').onclick = () => {
+      const view = $('#screen-view');
+      view.classList.toggle('big');
+      $('#screen-big').textContent = view.classList.contains('big') ? '小さく' : '⛶ 大きく';
+    };
+
+    // ── 表示 ──
+    function render() {
+      const bar = $('#class-bar');
+      const st = getState();
+      bar.textContent = '';
+      if (!st.me || !st.me.room) { bar.hidden = true; return; }
+      const roomInfo = st.rooms.find(r => r.id === st.me.room);
+      const cls = st.classes[st.me.room];
+      const u = st.user;
+      const mayStart = u.role !== 'student' && u.permissions.start_class_call && roomInfo && roomInfo.type === 'classroom' && roomInfo.canEnter;
+
+      if (!cls) {
+        if (!mayStart) { bar.hidden = true; return; }
+        bar.hidden = false;
+        if (!st.classCall) {
+          bar.append(el('span', 'cb-note', '通話サーバー（LiveKit）が未設定のため、授業の通話は使えません'));
+          return;
+        }
+        const b = el('button', 'cb-btn primary', '📢 授業を始める（声・画面共有）');
+        b.onclick = startClass;
+        bar.append(b);
+        return;
+      }
+
+      bar.hidden = false;
+      const isTeacher = cls.teacherId === st.me.id;
+      const head = el('span', 'cb-live', isTeacher ? '🔴 授業中' : `🎙 授業中：${cls.teacherName}先生`);
+      const mins = Math.floor((Date.now() - cls.startedAt) / 60000);
+      head.append(el('small', null, ` ${mins}分`));
+      bar.append(head);
+
+      if (cs.connecting) { bar.append(el('span', 'cb-note', 'つないでいます…')); }
+      else if (cs.error && !cs.room) {
+        bar.append(el('span', 'cb-note warn', cs.error));
+        const r = el('button', 'cb-btn', 'もう一度'); r.onclick = () => { cs.retryAt = 0; cs.error = null; sync(); }; bar.append(r);
+      } else if (cs.room) {
+        if (cs.audioBlocked && !isTeacher) {
+          const b = el('button', 'cb-btn primary pulse', '🔊 タップして音声をきく');
+          b.onclick = async () => { try { await cs.room.startAudio(); } catch (e) {} cs.audioBlocked = !cs.room.canPlaybackAudio; render(); };
+          bar.append(b);
+        } else if (!isTeacher) {
+          bar.append(el('span', 'cb-note ok', cls.mic ? '🔊 先生の声がきこえます' : '🔇 先生のマイクはOFFです'));
+        }
+      }
+
+      if (isTeacher && cs.room) {
+        const mic = el('button', 'cb-btn' + (cs.micOn ? ' on' : ' off'), cs.micOn ? '🎤 マイクON' : '🔇 マイクOFF');
+        mic.onclick = () => setMic(!cs.micOn);
+        bar.append(mic);
+        if (cs.canScreen) {
+          const sc = el('button', 'cb-btn' + (cs.screenOn ? ' on' : ''), cs.screenOn ? '🖥 共有をやめる' : '🖥 画面共有');
+          sc.onclick = () => setScreen(!cs.screenOn);
+          bar.append(sc);
+        } else if (u.permissions.share_screen && !canShareScreen) {
+          bar.append(el('span', 'cb-note', '画面共有はパソコンから使えます'));
+        }
+      }
+      if (isTeacher || u.role === 'owner') {
+        const end = el('button', 'cb-btn danger', '授業を終わる');
+        end.onclick = endClass;
+        bar.append(end);
+      }
+    }
+
+    setInterval(() => { sync(); }, 4000); // 切れたときの再接続と、経過時間の表示更新
+
+    return {
+      sync, render, leave,
+      isSpeaking: (userId) => cs.speaking.has('u-' + userId),
+      isTeachingHere: () => { const st = getState(); const c = st.me && st.me.room && st.classes[st.me.room]; return !!(c && c.teacherId === st.me.id); },
+    };
+  }
+
+  window.ClassCall = { create };
+})();
