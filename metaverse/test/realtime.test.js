@@ -109,7 +109,7 @@ test('45人の生徒と先生3人が同時に接続し、3教室に15人ずつ�
   assert.equal(counts.class2.students, 15);
   assert.equal(counts.class3.students, 15);
   // ほかの人の位置が届いている
-  const seen = students[45].c.events.filter(e => e.ev === 'user-moved').length;
+  const seen = students[45].c.events.filter(e => e.ev === 'moves').reduce((n, e) => n + e.data.length, 0);
   assert.ok(seen > 100, `位置の同期イベントを受信 (${seen})`);
 });
 

@@ -101,4 +101,13 @@ function audit(actorId, action, target, detail, ip) {
     .run(now(), actorId ?? null, action, target ?? null, detail ? JSON.stringify(detail) : null, ip ?? null);
 }
 
-module.exports = { db, now, transaction, audit, DB_PATH };
+// 操作ログ（IPアドレスを含む）は一定期間で自動削除する（個人情報を必要以上に持たないため）
+const AUDIT_RETENTION_DAYS = Number(process.env.AUDIT_RETENTION_DAYS || 180);
+function pruneAuditLogs() {
+  const cutoff = new Date(Date.now() - AUDIT_RETENTION_DAYS * 86400e3).toISOString();
+  return db.prepare('DELETE FROM audit_logs WHERE at < ?').run(cutoff).changes;
+}
+pruneAuditLogs();
+setInterval(pruneAuditLogs, 24 * 3600e3).unref();
+
+module.exports = { db, now, transaction, audit, pruneAuditLogs, DB_PATH, AUDIT_RETENTION_DAYS };

@@ -125,3 +125,21 @@ body:not(.is-student) .student-only, body:not(.is-staff) .staff-only { display: 
 .pc-local { position: absolute; right: 8px; bottom: 8px; width: 34%; max-width: 220px; border-radius: 12px; border: 3px solid #fff; background: #000; }
 .pc-status, .pc-controls { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .pc-controls .cb-btn { min-height: 52px; font-size: 16px; }
+
+/* 第5段階：スマホ表示の調整 */
+.place { white-space: nowrap; }
+.me-btn { min-height: 44px; }
+.stage-note { cursor: pointer; }
+@media (max-width: 380px) {
+  .me-btn .badge { display: none; }
+  .place { padding: 8px 10px; font-size: 15px; }
+  .place-cap { font-size: 11px; }
+}
+@media (max-height: 430px) and (orientation: landscape) {
+  .stage-note { display: none; }
+  .class-bar { top: calc(env(safe-area-inset-top) + 62px); }
+  .joystick { width: 104px; height: 104px; bottom: calc(env(safe-area-inset-bottom) + 14px); }
+  .knob { width: 46px; height: 46px; margin: -23px 0 0 -23px; }
+  .big-btn { min-height: 56px; }
+  .screen-view { top: calc(env(safe-area-inset-top) + 62px); width: min(420px, 55vw); }
+}

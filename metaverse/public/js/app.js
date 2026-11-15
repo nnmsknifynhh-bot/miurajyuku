@@ -72,7 +72,14 @@
     socket.on('rooms', (c) => { state.counts = c; updatePlace(true); renderPanel(); });
     socket.on('user-joined', (u) => { state.others.set(u.id, { ...u, rx: u.x, ry: u.y }); renderPanel(); });
     socket.on('user-left', ({ id }) => { state.others.delete(id); renderPanel(); hideUserPop(); });
-    socket.on('user-moved', (d) => { const u = state.others.get(d.id); if (u) Object.assign(u, d); });
+    // 位置の更新（0.1秒ごとにまとめて届く）: [id, x, y, 向き, 歩いているか]
+    const DIRS = { u: 'up', d: 'down', l: 'left', r: 'right' };
+    socket.on('moves', (list) => {
+      for (const [id, x, y, dir, moving] of list) {
+        const u = state.others.get(id);
+        if (u) { u.x = x; u.y = y; u.dir = DIRS[dir] || u.dir; u.moving = !!moving; }
+      }
+    });
     socket.on('user-updated', (d) => {
       const u = d.id === state.me.id ? state.me : state.others.get(d.id);
       if (!u) return;
@@ -111,9 +118,9 @@
     if (!state.ready) return;
     const me = state.me, t = performance.now();
     const key = Math.round(me.x) + ',' + Math.round(me.y) + ',' + me.dir + ',' + me.moving;
-    if (key === state.lastSentKey || (!force && t - state.lastSent < 66)) return;
+    if (key === state.lastSentKey || (!force && t - state.lastSent < 80)) return;
     state.lastSent = t; state.lastSentKey = key;
-    state.socket.emit('move', { x: me.x, y: me.y, dir: me.dir, moving: me.moving });
+    state.socket.emit('move', { x: Math.round(me.x * 10) / 10, y: Math.round(me.y * 10) / 10, dir: me.dir, moving: me.moving });
   }
 
   // ───────── 入室判定（画面側。最終判定はサーバー） ─────────
@@ -571,9 +578,31 @@
     } catch (err) { $('#pw-error').textContent = err.message; }
   });
 
+  // 音のテスト（スピーカー・イヤホンから音が出るか、生徒が自分で確認できる）
+  $('#menu-sound').onclick = () => {
+    $('#me-menu').hidden = true;
+    chime(0.35);
+    toast('「ピンポン」と聞こえたらOK。聞こえないときは、音量とマナーモード（iPhone の横のスイッチ）を確認してね', 6000);
+  };
+
+  // 画面が自動で消えないようにする（授業・個別通話の間だけ。消えると音が止まる端末があるため）
+  let wakeLock = null;
+  async function updateWakeLock() {
+    const need = document.visibilityState === 'visible' && ((state.call && state.call.connected()) || (state.pc && state.pc.active()));
+    try {
+      if (need && !wakeLock && navigator.wakeLock) {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+      } else if (!need && wakeLock) { await wakeLock.release(); wakeLock = null; }
+    } catch (e) { wakeLock = null; /* 未対応の端末 */ }
+  }
+  setInterval(updateWakeLock, 3000);
+  document.addEventListener('visibilitychange', updateWakeLock);
+  $('#stage-note').onclick = () => { $('#stage-note').hidden = true; };
+
   // 先生への通知音（短いチャイム）
   let audioCtx = null;
-  function chime() {
+  function chime(vol = 0.15) {
     try {
       audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
       const t0 = audioCtx.currentTime;
@@ -581,7 +610,7 @@
         const o = audioCtx.createOscillator(), g = audioCtx.createGain();
         o.frequency.value = f; o.connect(g); g.connect(audioCtx.destination);
         g.gain.setValueAtTime(0.0001, t0 + i * 0.15);
-        g.gain.exponentialRampToValueAtTime(0.15, t0 + i * 0.15 + 0.02);
+        g.gain.exponentialRampToValueAtTime(vol, t0 + i * 0.15 + 0.02);
         g.gain.exponentialRampToValueAtTime(0.0001, t0 + i * 0.15 + 0.35);
         o.start(t0 + i * 0.15); o.stop(t0 + i * 0.15 + 0.4);
       });

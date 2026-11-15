@@ -81,7 +81,15 @@
       if (!res || !res.ok) { await new Promise(r => setTimeout(r, 1600)); res = await ask('pc-token', { callId: pc.call && pc.call.id }); }
       if (!pc.call) return;
       if (!res || !res.ok) { pc.connecting = false; pc.error = (res && res.error) || '通話の準備に失敗しました'; render(); return; }
-      const room = new LK.Room({ adaptiveStream: true, dynacast: true });
+      // 声向けの音質・音切れ対策（授業と同じ設定）
+      const room = new LK.Room({
+        adaptiveStream: true, dynacast: true,
+        publishDefaults: {
+          audioPreset: LK.AudioPresets.speech, dtx: true, red: true,
+          screenShareEncoding: { maxBitrate: 1_200_000, maxFramerate: 8 },
+          screenShareSimulcastLayers: [LK.ScreenSharePresets.h720fps5],
+        },
+      });
       bind(room);
       try { await room.connect(res.url, res.token, { autoSubscribe: true }); }
       catch (e) { pc.connecting = false; pc.error = '通話サーバーにつながりません'; render(); return; }
@@ -113,6 +121,11 @@
           if (track.kind === 'video') { pc.remoteVideo = null; $('#pc-video').srcObject = null; render(); }
         })
         .on(LK.RoomEvent.AudioPlaybackStatusChanged, () => { pc.audioBlocked = !room.canPlaybackAudio; render(); })
+        .on(LK.RoomEvent.ConnectionQualityChanged, (q, participant) => {
+          if (participant !== room.localParticipant) return;
+          pc.poor = q === LK.ConnectionQuality.Poor || q === LK.ConnectionQuality.Lost;
+          render();
+        })
         .on(LK.RoomEvent.ActiveSpeakersChanged, (sp) => {
           pc.peerSpeaking = sp.some(s => s.identity !== room.localParticipant.identity);
           $('#pc-overlay').classList.toggle('peer-speaking', pc.peerSpeaking);
@@ -193,6 +206,7 @@
         st.append(b);
       }
 
+      if (pc.room && pc.poor) st.append(el('span', 'cb-note warn', '⚠️ 通信が不安定です。Wi-Fi の近くへ移動してみてね'));
       const ctl = $('#pc-controls'); ctl.textContent = '';
       if (pc.room) {
         const mic = el('button', 'cb-btn' + (pc.micOn ? ' on' : ' off'), pc.micOn ? '🎤 マイクON' : '🔇 マイクOFF');
@@ -215,6 +229,7 @@
     return {
       invite, render,
       busy: () => !!pc.call,
+      active: () => !!(pc.call && pc.call.status === 'active'),
       leave: () => { closeIncoming(); leave(); pc.call = null; render(); },
     };
   }

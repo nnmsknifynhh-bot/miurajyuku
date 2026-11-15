@@ -127,8 +127,14 @@ app.get('/api/me', auth.requireAuth, (req, res) => {
 });
 
 app.post('/api/me/password', auth.requireAuth, (req, res) => {
+  const key = 'pw:' + req.user.id;
+  if (auth.isLocked(key)) return bad(res, `失敗が続いたため、${auth.LOCK_MINUTES}分ほど待ってからもう一度ためしてください`, 429);
   const row = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
-  if (!auth.verifyPassword(String(req.body.currentPassword || ''), row.password_hash)) return bad(res, '今のパスワードがちがいます', 401);
+  if (!auth.verifyPassword(String(req.body.currentPassword || ''), row.password_hash)) {
+    auth.recordFailure(key, 5);
+    return bad(res, '今のパスワードがちがいます', 401);
+  }
+  auth.clearFailures(key);
   const e = validatePassword(req.body.newPassword);
   if (e) return bad(res, e);
   db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?').run(auth.hashPassword(req.body.newPassword), now(), req.user.id);
@@ -324,7 +330,7 @@ app.get(['/vendor/livekit-client.umd.js', '/vendor/livekit-client.umd.js.map'], 
 app.use(express.static(path.join(__dirname, '..', 'public'), { extensions: ['html'], index: 'index.html' }));
 
 app.use((err, req, res, _next) => {
-  console.error(err);
+  if (!err.status || err.status >= 500) console.error(err); // 利用者側の誤り（4xx）は記録しない
   if (req.path.startsWith('/api')) return bad(res, err.type === 'entity.parse.failed' ? '不正なリクエストです' : 'サーバーでエラーが起きました', err.status || 500);
   res.status(500).send('Server error');
 });

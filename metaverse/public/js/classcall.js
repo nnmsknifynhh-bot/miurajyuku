@@ -46,7 +46,16 @@
         if (res && !res.ok) { cs.error = res.error; cs.retryAt = Date.now() + 3000; }
         render(); return;
       }
-      const room = new LK.Room({ adaptiveStream: true, dynacast: true });
+      // 声向けの音質（約24kbps）・音切れ対策（RED）・無音時は送らない（DTX）
+      // 画面共有は文字が読める解像度で、動きは少なめ（スマホの通信量を抑える）
+      const room = new LK.Room({
+        adaptiveStream: true, dynacast: true,
+        publishDefaults: {
+          audioPreset: LK.AudioPresets.speech, dtx: true, red: true,
+          screenShareEncoding: { maxBitrate: 1_200_000, maxFramerate: 8 },
+          screenShareSimulcastLayers: [LK.ScreenSharePresets.h720fps5],
+        },
+      });
       bindRoom(room);
       try {
         await room.connect(res.url, res.token, { autoSubscribe: true });
@@ -88,6 +97,11 @@
           if (track.source === LK.Track.Source.ScreenShare) hideScreen();
         })
         .on(LK.RoomEvent.AudioPlaybackStatusChanged, () => { cs.audioBlocked = !room.canPlaybackAudio; render(); })
+        .on(LK.RoomEvent.ConnectionQualityChanged, (q, participant) => {
+          if (participant !== room.localParticipant) return;
+          cs.poor = q === LK.ConnectionQuality.Poor || q === LK.ConnectionQuality.Lost;
+          render();
+        })
         .on(LK.RoomEvent.ActiveSpeakersChanged, (speakers) => {
           cs.speaking = new Set(speakers.map(s => s.identity));
         })
@@ -205,6 +219,7 @@
         }
       }
 
+      if (cs.room && cs.poor) bar.append(el('span', 'cb-note warn', '⚠️ 通信が不安定です。Wi-Fi の近くへ移動してみてね'));
       if (isTeacher && cs.room) {
         const mic = el('button', 'cb-btn' + (cs.micOn ? ' on' : ' off'), cs.micOn ? '🎤 マイクON' : '🔇 マイクOFF');
         mic.onclick = () => setMic(!cs.micOn);
@@ -229,6 +244,7 @@
     return {
       sync, render, leave,
       isSpeaking: (userId) => cs.speaking.has('u-' + userId),
+      connected: () => !!cs.room,
       isTeachingHere: () => { const st = getState(); const c = st.me && st.me.room && st.classes[st.me.room]; return !!(c && c.teacherId === st.me.id); },
     };
   }

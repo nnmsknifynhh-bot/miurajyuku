@@ -53,6 +53,17 @@ function roomCounts() {
   }
   return c;
 }
+// 位置の更新はまとめて 0.1 秒ごとに1回送る（スマホの通信量を減らすため）
+const pendingMoves = new Map(); // userId -> [id, x, y, dir, moving]
+const DIR_CODE = { up: 'u', down: 'd', left: 'l', right: 'r' };
+const r1 = (v) => Math.round(v * 10) / 10;
+function queueMove(p) { pendingMoves.set(p.id, [p.id, r1(p.x), r1(p.y), DIR_CODE[p.dir] || 'd', p.moving ? 1 : 0]); }
+function flushMoves() {
+  if (!pendingMoves.size || !io) return;
+  io.volatile.emit('moves', [...pendingMoves.values()]);
+  pendingMoves.clear();
+}
+
 let roomsTimer = null;
 function broadcastRooms() {
   if (roomsTimer || !io) return;
@@ -216,6 +227,18 @@ function attach(httpServer) {
   io.on('connection', (socket) => {
     const user = socket.data.user;
 
+    // 送りすぎ対策：移動以外のイベントは1人あたり平均10回/秒（瞬間的には20回）まで。超えた分は無視する
+    const bucket = { tokens: 20, at: Date.now() };
+    socket.use(([ev], next) => {
+      if (ev === 'move') return next();
+      const t = Date.now();
+      bucket.tokens = Math.min(20, bucket.tokens + (t - bucket.at) / 100);
+      bucket.at = t;
+      if (bucket.tokens < 1) return; // 破棄（ack も返さない）
+      bucket.tokens -= 1;
+      next();
+    });
+
     // 同じユーザーの古い接続は切る（1人1接続）
     const old = online.get(user.id);
     if (old) kickPresence(old, '別の端末（またはタブ）で入室したため、こちらは切断しました');
@@ -265,7 +288,7 @@ function attach(httpServer) {
         const c = SM.tileCenter(sx, sy);
         if (Math.hypot(c.x - x, c.y - y) > 8) { p.seat = null; io.emit('user-updated', { id: p.id, seat: null }); }
       }
-      socket.broadcast.volatile.emit('user-moved', { id: p.id, x, y, dir: p.dir, moving: p.moving });
+      queueMove(p);
       if (newRoom !== p.room) setRoom(p, newRoom);
     });
 
@@ -301,6 +324,9 @@ function attach(httpServer) {
       const room = p.room && getRoom(p.room);
       if (!room || room.type !== 'classroom') return ack({ ok: false, error: '授業の教室に入ってから手をあげてね' });
       if (p.hand) return ack({ ok: true });
+      // 手のあげさげを連打して先生に通知が大量に届かないように
+      if (Date.now() - (p.lastHandAt || 0) < 3000) return ack({ ok: false, error: 'すこし待ってから、もう一度手をあげてね' });
+      p.lastHandAt = Date.now();
       p.hand = true; p.handAt = Date.now();
       io.emit('user-updated', { id: p.id, hand: true, handAt: p.handAt });
       for (const s of online.values()) {
@@ -379,7 +405,10 @@ function attach(httpServer) {
     });
 
     // 先生のマイク・画面共有の状態（表示用。送信できるかどうかはトークンで決まる）
+    let lastMediaAt = 0;
     socket.on('class-media', (d) => {
+      if (Date.now() - lastMediaAt < 300) return;
+      lastMediaAt = Date.now();
       const c = p.room && classes.get(p.room);
       if (!c || c.teacherId !== p.id || !d || typeof d !== 'object') return;
       c.mic = !!d.mic;
@@ -468,10 +497,13 @@ function attach(httpServer) {
       if (p.room) leaveClassRoom(p, p.room, 'disconnected');
       lastPos.set(p.id, { x: p.x, y: p.y });
       online.delete(p.id);
+      pendingMoves.delete(p.id);
       io.emit('user-left', { id: p.id });
       broadcastRooms();
     });
   });
+
+  setInterval(flushMoves, 100).unref();
 
   // ログインが無効になった接続を定期的に切る（強制ログアウト・期限切れの取りこぼし防止）
   setInterval(() => {
