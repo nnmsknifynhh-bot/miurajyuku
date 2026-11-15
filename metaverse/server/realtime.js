@@ -1,7 +1,9 @@
 // リアルタイム機能（Socket.IO）
 // 第2段階：位置・入室・着席・挙手（すべてサーバーが判定。画面側の判定は表示用）
 // 第3段階：授業（先生の全体通話・画面共有）の開始・終了と、LiveKit 参加トークンの発行
+// 第4段階：個別通話（先生→生徒の呼び出し・参加確認・別の通話部屋・授業音声との切り替え）
 // - 接続はログイン中の Cookie で認証
+const crypto = require('crypto');
 const { Server } = require('socket.io');
 const SM = require('../public/shared/map.js');
 const auth = require('./auth');
@@ -31,8 +33,15 @@ function pub(p) {
   return {
     id: p.id, name: p.user.display_name, role: p.user.role, color: p.user.avatar_color,
     x: p.x, y: p.y, dir: p.dir, moving: p.moving, room: p.room, seat: p.seat, hand: p.hand, handAt: p.handAt,
+    inPrivate: inActiveCall(p),
   };
 }
+
+// ═════════ 第4段階：個別通話 ═════════
+const calls = new Map(); // callId -> { id, teacherId, studentId, teacherName, studentName, status, createdAt, acceptedAt, lkRoom, ringTimer }
+const RING_MS = Number(process.env.PRIVATE_RING_MS || 30_000);
+const callOf = (p) => (p && p.callId ? calls.get(p.callId) || null : null);
+function inActiveCall(p) { const c = callOf(p); return !!(c && c.status === 'active'); }
 
 // 部屋ごとの人数（定員の対象は生徒のみ。先生・オーナーは数えない）
 function roomCounts() {
@@ -98,7 +107,10 @@ const GRACE_MS = Number(process.env.CLASS_GRACE_MS || 60_000);
 
 function classState() {
   const s = {};
-  for (const [id, c] of classes) s[id] = { teacherId: c.teacherId, teacherName: c.teacherName, startedAt: c.startedAt, mic: c.mic, screen: c.screen };
+  for (const [id, c] of classes) {
+    // away: 先生が個別指導中（授業の部屋には声が届かない）
+    s[id] = { teacherId: c.teacherId, teacherName: c.teacherName, startedAt: c.startedAt, mic: c.mic, screen: c.screen, away: inActiveCall(online.get(c.teacherId)) };
+  }
   return s;
 }
 function broadcastClasses() { if (io) io.emit('class-state', classState()); }
@@ -127,6 +139,27 @@ function leaveClassRoom(p, roomId, mode) {
   } else {
     endClass(roomId, mode === 'kicked' ? '授業を終了しました' : `${c.teacherName}先生が教室を出たため、授業を終了しました`);
   }
+}
+
+function endCall(call, reason, actorId) {
+  if (!call || !calls.has(call.id)) return false;
+  clearTimeout(call.ringTimer);
+  calls.delete(call.id);
+  const wasActive = call.status === 'active';
+  for (const uid of [call.teacherId, call.studentId]) {
+    const p = online.get(uid);
+    if (!p || p.callId !== call.id) continue;
+    p.callId = null;
+    p.socket.emit('pc-ended', { callId: call.id, reason: reason || '個別通話を終了しました' });
+    if (wasActive && io) io.emit('user-updated', { id: uid, inPrivate: false });
+  }
+  if (wasActive) {
+    livekit.closeRoom(call.lkRoom);
+    const minutes = Math.round((Date.now() - call.acceptedAt) / 6000) / 10;
+    audit(actorId ?? call.teacherId, 'private.ended', call.studentName, { minutes });
+    broadcastClasses();
+  }
+  return true;
 }
 
 function setRoom(p, roomId) {
@@ -330,6 +363,7 @@ function attach(httpServer) {
       if (typeof ack !== 'function') return;
       const c = p.room && classes.get(p.room);
       if (!livekit.enabled || !c) return ack({ ok: false, error: 'いまは授業中ではありません' });
+      if (inActiveCall(p)) return ack({ ok: false, error: '個別通話中は授業の音声は止まっています' });
       if (Date.now() - lastTokenAt < 1500) return ack({ ok: false, error: 'しばらく待ってからもう一度ためしてください' });
       lastTokenAt = Date.now();
       const isTeacher = c.teacherId === p.id;
@@ -353,8 +387,84 @@ function attach(httpServer) {
       broadcastClasses();
     });
 
+    // ── 個別通話（第4段階） ──
+    // 先生だけが呼び出せる。生徒から生徒・先生へ呼び出す手段は用意しない
+    socket.on('pc-invite', (d, ack) => {
+      if (typeof ack !== 'function') return;
+      if (!livekit.enabled) return ack({ ok: false, error: '通話サーバー（LiveKit）が設定されていません' });
+      if (!isStaff(p) || !can(p.user, 'start_private_call')) return ack({ ok: false, error: '個別通話を始める権限がありません' });
+      const target = online.get(Number(d && d.studentId));
+      if (!target || target.user.role !== 'student') return ack({ ok: false, error: '生徒が見つかりません（退室した可能性があります）' });
+      const room = target.room && getRoom(target.room);
+      if (!room || !canEnterRoom(p.user, room)) return ack({ ok: false, error: '担当の教室か自習室にいる生徒だけ呼び出せます' });
+      if (p.callId) return ack({ ok: false, error: 'すでに個別通話中（または呼び出し中）です' });
+      if (target.callId) return ack({ ok: false, error: `${target.user.display_name}さんはほかの先生と通話中です` });
+      const call = {
+        id: crypto.randomUUID(), teacherId: p.id, studentId: target.id,
+        teacherName: p.user.display_name, studentName: target.user.display_name,
+        status: 'ringing', createdAt: Date.now(), acceptedAt: 0, ringTimer: null,
+      };
+      call.lkRoom = livekit.lkRoomName(call.id, 'private');
+      call.ringTimer = setTimeout(() => endCall(call, `${call.studentName}さんが応答しませんでした`), RING_MS);
+      calls.set(call.id, call);
+      p.callId = call.id; target.callId = call.id;
+      target.socket.emit('pc-incoming', { callId: call.id, teacherName: call.teacherName, timeoutMs: RING_MS });
+      audit(p.id, 'private.invited', target.user.login_id, null, p.ip);
+      ack({ ok: true, callId: call.id, studentName: call.studentName });
+    });
+
+    socket.on('pc-respond', (d, ack) => {
+      if (typeof ack !== 'function') ack = () => {};
+      const call = callOf(p);
+      if (!call || call.studentId !== p.id || call.status !== 'ringing' || !d || d.callId !== call.id) return ack({ ok: false, error: 'この呼び出しは終了しています' });
+      if (!d.accept) { endCall(call, `${call.studentName}さんは「あとで」を選びました`, p.id); return ack({ ok: true }); }
+      clearTimeout(call.ringTimer);
+      call.status = 'active'; call.acceptedAt = Date.now();
+      const teacher = online.get(call.teacherId);
+      lowerHand(p);
+      // 授業の部屋から2人を退出させる（個別通話の声が授業に混ざらない・授業の声も個別通話に混ざらない）
+      for (const u of [teacher, p]) {
+        if (!u) continue;
+        if (u.room && classes.has(u.room)) livekit.removeParticipant(livekit.lkRoomName(u.room), u.id);
+        io.emit('user-updated', { id: u.id, inPrivate: true });
+        u.socket.emit('pc-started', { callId: call.id, teacherName: call.teacherName, studentName: call.studentName, role: u === p ? 'student' : 'teacher' });
+      }
+      broadcastClasses();
+      audit(p.id, 'private.started', call.studentName, { teacher: call.teacherName });
+      ack({ ok: true });
+    });
+
+    let lastPcTokenAt = 0;
+    socket.on('pc-token', async (d, ack) => {
+      if (typeof ack !== 'function') return;
+      const call = callOf(p);
+      if (!call || call.status !== 'active' || !d || d.callId !== call.id) return ack({ ok: false, error: '個別通話は終了しています' });
+      if (Date.now() - lastPcTokenAt < 1500) return ack({ ok: false, error: 'しばらく待ってからもう一度ためしてください' });
+      lastPcTokenAt = Date.now();
+      const isTeacher = call.teacherId === p.id;
+      try {
+        const token = await livekit.makeToken({
+          userId: p.id, name: p.user.display_name, role: p.user.role, room: call.lkRoom,
+          mic: true, screen: isTeacher && can(p.user, 'share_screen'), camera: !isTeacher,
+        });
+        ack({ ok: true, url: livekit.url, token, canScreen: isTeacher && can(p.user, 'share_screen'), canCamera: !isTeacher });
+      } catch (e) {
+        ack({ ok: false, error: '通話の準備に失敗しました' });
+      }
+    });
+
+    socket.on('pc-end', (d, ack) => {
+      if (typeof ack !== 'function') ack = () => {};
+      const call = callOf(p);
+      if (!call || !d || d.callId !== call.id) return ack({ ok: false });
+      const who = p.id === call.teacherId ? `${call.teacherName}先生` : `${call.studentName}さん`;
+      endCall(call, call.status === 'ringing' && p.id === call.teacherId ? '先生が呼び出しを取り消しました' : `${who}が個別通話を終了しました`, p.id);
+      ack({ ok: true });
+    });
+
     socket.on('disconnect', () => {
       if (online.get(p.id) !== p) return;
+      if (p.callId) endCall(callOf(p), `${p.user.display_name}${isStaff(p) ? '先生' : 'さん'}の接続が切れたため、個別通話を終了しました`);
       if (p.room) leaveClassRoom(p, p.room, 'disconnected');
       lastPos.set(p.id, { x: p.x, y: p.y });
       online.delete(p.id);
@@ -378,6 +488,7 @@ function attach(httpServer) {
 function kickPresence(p, reason, mode = 'disconnected') {
   p.socket.emit('kicked', { reason });
   if (online.get(p.id) === p) {
+    if (p.callId) endCall(callOf(p), `${p.user.display_name}${isStaff(p) ? '先生' : 'さん'}の接続が切れたため、個別通話を終了しました`);
     if (p.room) leaveClassRoom(p, p.room, mode);
     lastPos.set(p.id, { x: p.x, y: p.y });
     online.delete(p.id);
@@ -407,6 +518,10 @@ function refreshUser(userId) {
     if (c.teacherId !== p.id) continue;
     if (!can(p.user, 'start_class_call') || (hadScreen && !can(p.user, 'share_screen'))) endClass(roomId, '先生の権限が変更されたため、授業を終了しました');
   }
+  const call = callOf(p);
+  if (call && call.teacherId === p.id && (!can(p.user, 'start_private_call') || (hadScreen && !can(p.user, 'share_screen')))) {
+    endCall(call, '先生の権限が変更されたため、個別通話を終了しました');
+  }
   io.emit('user-updated', { id: p.id, name: u.display_name, color: u.avatar_color });
   p.socket.emit('me-updated');
   if (p.room) {
@@ -417,13 +532,21 @@ function refreshUser(userId) {
 
 function refreshRooms() { broadcastRooms(); }
 
+// 管理者が個別通話を終了させる
+function endCallOf(userId, actorId) {
+  const p = online.get(Number(userId));
+  const call = callOf(p);
+  return call ? endCall(call, '管理者が個別通話を終了しました', actorId) : false;
+}
+
 function presence() {
   return [...online.values()].map(p => ({
+    privateWith: (() => { const c = callOf(p); if (!c || c.status !== 'active') return null; return p.id === c.teacherId ? c.studentName : c.teacherName; })(),
     ...pub(p), loginId: p.user.login_id, zone: (SM.zoneAtPx(p.x, p.y) || {}).id || null,
     connectedAt: new Date(p.connectedAt).toISOString(), ip: p.ip, device: p.device,
   }));
 }
 
-function _reset() { online.clear(); lastPos.clear(); }
+function _reset() { online.clear(); lastPos.clear(); calls.clear(); }
 
-module.exports = { attach, kick, refreshUser, refreshRooms, presence, roomCounts, classState, endClass, REACTIONS, _reset, _online: online };
+module.exports = { attach, kick, refreshUser, refreshRooms, presence, roomCounts, classState, endClass, endCallOf, REACTIONS, _reset, _online: online };

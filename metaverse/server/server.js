@@ -280,6 +280,13 @@ admin.get('/presence', requireRoomManager, (req, res) => {
   res.json({ rooms: realtime.roomCounts(), classes: realtime.classState(), users });
 });
 
+// 個別通話を管理者が終了させる（オーナーのみ）。:userId は通話中の先生か生徒
+admin.post('/calls/:userId/end', requireOwner, (req, res) => {
+  const ok = realtime.endCallOf(req.params.userId, req.user.id);
+  if (!ok) return bad(res, 'その人は個別通話中ではありません', 404);
+  res.json({ ok: true });
+});
+
 // 授業（全体通話）を管理者が終了させる（オーナーのみ）
 admin.post('/classes/:roomId/end', requireOwner, (req, res) => {
   const ok = realtime.endClass(req.params.roomId, '管理者が授業を終了しました', req.user.id);

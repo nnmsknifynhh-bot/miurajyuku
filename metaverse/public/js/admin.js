@@ -258,9 +258,16 @@
     for (const u of data.users.sort((a, b) => (a.room || 'z').localeCompare(b.room || 'z') || a.name.localeCompare(b.name, 'ja'))) {
       const tr = el('tr');
       const t = new Date(u.connectedAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
-      [u.name, ROLE_LABEL[u.role], ROOM_LABEL[u.room || u.zone] || '出入口', (u.seat ? '着席' : '') + (u.hand ? ' ✋挙手' : ''), u.device, t].forEach(v => tr.append(el('td', null, v)));
+      [u.name, ROLE_LABEL[u.role], ROOM_LABEL[u.room || u.zone] || '出入口', (u.seat ? '着席' : '') + (u.hand ? ' ✋挙手' : '') + (u.privateWith ? ` 🎧${u.privateWith}と個別通話中` : ''), u.device, t].forEach(v => tr.append(el('td', null, v)));
       if (isOwner) tr.append(el('td', null, u.ip || ''));
       const td = el('td');
+      if (isOwner && u.privateWith) {
+        const b0 = el('button', 'btn small secondary', '個別通話を終了'); b0.onclick = async () => {
+          if (!confirm(`${u.name} さんの個別通話を終了させますか？`)) return;
+          try { await api('POST', `/api/admin/calls/${u.id}/end`); toast('個別通話を終了しました'); loadStatus(); } catch (e) { toast(e.message); }
+        };
+        td.append(b0, document.createTextNode(' '));
+      }
       if (isOwner && u.id !== me.id) {
         const b1 = el('button', 'btn small secondary', '切断'); b1.onclick = () => disconnect(u, false);
         const b2 = el('button', 'btn small danger', '切断してログアウト'); b2.onclick = () => disconnect(u, true);
@@ -284,7 +291,7 @@
     'login.success': 'ログイン', 'login.failed': 'ログイン失敗', 'setup.owner_created': '初期セットアップ',
     'user.created': 'ユーザー作成', 'user.updated': 'ユーザー編集', 'user.sessions_revoked': '強制ログアウト',
     'user.password_changed_self': 'パスワード変更（本人）', 'room.capacity_changed': '定員の変更',
-    'presence.disconnected': '接続の切断', 'class.started': '授業（通話）を開始', 'class.ended': '授業（通話）を終了', 'presence.disconnected_and_revoked': '切断＋ログアウト',
+    'presence.disconnected': '接続の切断', 'private.invited': '個別通話の呼び出し', 'private.started': '個別通話を開始', 'private.ended': '個別通話を終了', 'class.started': '授業（通話）を開始', 'class.ended': '授業（通話）を終了', 'presence.disconnected_and_revoked': '切断＋ログアウト',
   };
   async function loadLogs() {
     let logs;

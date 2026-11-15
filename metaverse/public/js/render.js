@@ -234,6 +234,13 @@
       const ay = by - 50 + Math.sin(t * 4) * 2;
       ctx.beginPath(); ctx.moveTo(x - 6, ay - 6); ctx.lineTo(x + 6, ay - 6); ctx.lineTo(x, ay); ctx.fill();
     }
+    // 個別通話中
+    if (u.inPrivate) {
+      ctx.font = '16px sans-serif';
+      ctx.fillStyle = 'rgba(139,92,246,.95)';
+      ctx.beginPath(); ctx.roundRect(x + tw / 2 - 2, by - 43, 24, 19, 9); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.fillText('🎧', x + tw / 2 + 10, by - 33);
+    }
     // 挙手
     if (u.hand) {
       const hy = by - 60 + Math.sin(t * 6) * 3;

@@ -17,12 +17,18 @@
     function desiredRoom() {
       const st = getState();
       if (!st.classCall || !st.me || !st.me.room) return null;
+      if (st.me.inPrivate) return null; // 個別通話中は授業の音声から外れる
       return st.classes[st.me.room] ? st.me.room : null;
     }
 
     async function sync() {
       const want = desiredRoom();
-      if (!want) { if (cs.room || cs.connecting) leave(); render(); return; }
+      if (!want) {
+        if (cs.room || cs.connecting) leave();
+        const st = getState();
+        if (!(st.me && st.me.inPrivate)) cs.restoreMic = undefined; // 授業が終わったらマイク状態の記憶も消す
+        render(); return;
+      }
       if (cs.room && cs.joinedRoom === want) { render(); return; }
       if (cs.connecting || Date.now() < cs.retryAt) { render(); return; }
       if (cs.room) leave();
@@ -52,12 +58,13 @@
       if (desiredRoom() !== roomId) { room.disconnect(); cs.connecting = false; render(); return; }
       Object.assign(cs, { room, joinedRoom: roomId, connecting: false, publisher: res.publisher, canScreen: res.canScreen && canShareScreen });
       cs.audioBlocked = !room.canPlaybackAudio;
-      if (cs.publisher) await setMic(true);
+      if (cs.publisher) await setMic(cs.restoreMic !== false);
       render();
     }
 
     function leave() {
       const room = cs.room;
+      if (cs.publisher && room) cs.restoreMic = cs.micOn; // 個別通話から戻ったときにマイクの状態を戻す
       Object.assign(cs, { room: null, joinedRoom: null, connecting: false, publisher: false, micOn: false, screenOn: false, audioBlocked: false });
       cs.speaking.clear();
       if (room) room.disconnect();
@@ -157,7 +164,7 @@
       const bar = $('#class-bar');
       const st = getState();
       bar.textContent = '';
-      if (!st.me || !st.me.room) { bar.hidden = true; return; }
+      if (!st.me || !st.me.room || st.me.inPrivate) { bar.hidden = true; return; }
       const roomInfo = st.rooms.find(r => r.id === st.me.room);
       const cls = st.classes[st.me.room];
       const u = st.user;
@@ -183,6 +190,7 @@
       head.append(el('small', null, ` ${mins}分`));
       bar.append(head);
 
+      if (cls.away && !isTeacher) bar.append(el('span', 'cb-note', '🎧 先生はいま個別指導中です。少し待っていてね'));
       if (cs.connecting) { bar.append(el('span', 'cb-note', 'つないでいます…')); }
       else if (cs.error && !cs.room) {
         bar.append(el('span', 'cb-note warn', cs.error));
@@ -192,7 +200,7 @@
           const b = el('button', 'cb-btn primary pulse', '🔊 タップして音声をきく');
           b.onclick = async () => { try { await cs.room.startAudio(); } catch (e) {} cs.audioBlocked = !cs.room.canPlaybackAudio; render(); };
           bar.append(b);
-        } else if (!isTeacher) {
+        } else if (!isTeacher && !cls.away) {
           bar.append(el('span', 'cb-note ok', cls.mic ? '🔊 先生の声がきこえます' : '🔇 先生のマイクはOFFです'));
         }
       }

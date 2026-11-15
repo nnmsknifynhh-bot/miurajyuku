@@ -19,7 +19,7 @@
     <div class="place" id="place"><span class="place-icon">📍</span><span id="place-name">ロビー</span><span id="place-cap" class="place-cap"></span></div>
     <button class="me-btn" id="me-btn" aria-haspopup="menu"><span class="dot" id="me-dot"></span><span id="me-name"></span><span class="badge" id="me-role"></span></button>
   </header>
-  <div class="stage-note" id="stage-note">テスト版（第3段階）：個別通話はまだ使えません</div>
+  <div class="stage-note" id="stage-note">テスト版（第4段階まで）</div>
   <div class="class-bar" id="class-bar" hidden></div>
 
   <section class="screen-view" id="screen-view" hidden>
@@ -27,6 +27,32 @@
     <video id="screen-video" autoplay playsinline muted></video>
   </section>
   <div id="lk-audio" hidden></div>
+
+  <!-- 第4段階：個別通話 -->
+  <div class="pc-ring" id="pc-ring" hidden></div>
+  <dialog id="pc-incoming" class="pc-incoming">
+    <div class="dialog-body">
+      <div class="pc-bell">📞</div>
+      <h2 id="pc-in-title">先生から、個別通話のおさそいです</h2>
+      <p>参加すると、先生とふたりだけで話せます。ほかの人には聞こえません。<br>（そのあいだ、授業の音声は止まります）</p>
+      <p class="muted" id="pc-in-count"></p>
+      <div class="dialog-actions">
+        <button class="btn secondary" id="pc-decline">あとで</button>
+        <button class="btn" id="pc-accept">参加する</button>
+      </div>
+    </div>
+  </dialog>
+  <section class="pc-overlay" id="pc-overlay" hidden>
+    <header class="pc-head"><div><b id="pc-title"></b><small id="pc-sub"></small></div></header>
+    <div class="pc-stage">
+      <div class="pc-peer-wrap" id="pc-peer-wrap"><div class="pc-peer" id="pc-peer"></div></div>
+      <div class="pc-video-wrap" id="pc-video-wrap" hidden><video id="pc-video" autoplay playsinline muted></video><span id="pc-video-label"></span></div>
+      <video id="pc-local" class="pc-local" autoplay playsinline muted hidden></video>
+    </div>
+    <div class="pc-status" id="pc-status"></div>
+    <div class="pc-controls" id="pc-controls"></div>
+    <div id="pc-audio" hidden></div>
+  </section>
   <div class="conn" id="conn" hidden>サーバーにつないでいます…</div>
 
   <nav class="me-menu" id="me-menu" hidden>
@@ -93,6 +119,7 @@
   <script src="/js/api.js"></script>
   <script src="/js/render.js"></script>
   <script src="/js/classcall.js"></script>
+  <script src="/js/privatecall.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>

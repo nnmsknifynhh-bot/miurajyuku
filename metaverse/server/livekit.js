@@ -1,4 +1,4 @@
-// 第3段階：LiveKit（音声・画面共有のサーバー）との連携
+// 第3・4段階：LiveKit（音声・画面共有のサーバー）との連携
 // - 参加用トークンはこのサーバーだけが発行する。トークンに「話してよいか・画面共有してよいか」を書き込むので、
 //   画面を改造しても許可されていない送信はできない。
 // - 部屋から出た人・切断された人は、サーバーから LiveKit の部屋を強制退出させる。
@@ -25,13 +25,15 @@ const identityOf = (userId) => `u-${userId}`;
  * @param {string} o.room   LiveKit の部屋名
  * @param {boolean} o.mic   マイクを送ってよいか
  * @param {boolean} o.screen 画面共有を送ってよいか
+ * @param {boolean} o.camera カメラを送ってよいか（個別通話で生徒がノートを見せる）
  */
-async function makeToken({ userId, name, role, room, mic = false, screen = false }) {
+async function makeToken({ userId, name, role, room, mic = false, screen = false, camera = false }) {
   const at = new AccessToken(KEY, SECRET, {
     identity: identityOf(userId), name, ttl: '10m', metadata: JSON.stringify({ role }),
   });
   const sources = [];
   if (mic) sources.push(TrackSource.MICROPHONE);
+  if (camera) sources.push(TrackSource.CAMERA);
   if (screen) sources.push(TrackSource.SCREEN_SHARE, TrackSource.SCREEN_SHARE_AUDIO);
   at.addGrant({
     roomJoin: true, room, canSubscribe: true, canPublishData: false,

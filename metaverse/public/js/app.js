@@ -43,6 +43,7 @@
     const socket = io({ transports: ['websocket', 'polling'] });
     state.socket = socket;
     state.call = window.ClassCall.create({ socket, getState: () => state, toast });
+    state.pc = window.PrivateCall.create({ socket, getState: () => state, toast });
     $('#conn').hidden = false;
 
     socket.on('connect', () => { $('#conn').hidden = true; });
@@ -100,7 +101,7 @@
     socket.on('me-updated', async () => { try { await loadMe(); updateAll(); } catch (e) {} });
     socket.on('kicked', ({ reason }) => {
       state.ready = false;
-      state.call.leave();
+      state.call.leave(); state.pc.leave();
       alert(reason || '接続が切断されました');
       location.replace('/');
     });
@@ -329,12 +330,13 @@
       info.append(el('small', null, `${(roomInfo(u.room) || {}).name || ''}・${mins ? mins + '分前' : 'いま'}`));
       const acts = el('div', 'acts');
       const go = el('button', 'btn small secondary', '近くへ'); go.onclick = () => walkNear(u);
-      const done = el('button', 'btn small', '対応済み'); done.onclick = () => lowerHand(u);
+      const done = el('button', 'btn small secondary', '対応済み'); done.onclick = () => lowerHand(u);
       acts.append(go, done);
+      if (canPrivate()) { const call = el('button', 'btn small', '🎧 個別通話'); call.onclick = () => state.pc.invite(u); acts.append(call); }
       item.append(info, acts);
       hb.append(item);
     }
-    hb.append(el('p', 'panel-note', '生徒との個別通話は第4段階で追加します（現在は未実装）'));
+    hb.append(el('p', 'panel-note', canPrivate() ? '「個別通話」を押すと、生徒に参加確認が届きます。生徒が参加すると、ふたりだけで話せます（授業の音声は自動で止まり、終わると戻ります）。' : '個別通話の権限がないため、個別通話は使えません'));
 
     const pb = $('#panel-people'); pb.textContent = '';
     const everyone = [state.me, ...state.others.values()];
@@ -353,7 +355,10 @@
         const li = el('li');
         const dot = el('span', 'dot'); dot.style.background = u.color;
         li.append(dot, el('span', null, (u.role !== 'student' ? ROLE_LABEL[u.role] + ' ' : '') + u.name + (u === state.me ? '（自分）' : '')));
-        li.append(el('span', 'tag', (u.hand ? '✋ ' : '') + (u.seat ? '着席' : '')));
+        li.append(el('span', 'tag', (u.inPrivate ? '🎧 ' : '') + (u.hand ? '✋ ' : '') + (u.seat ? '着席' : '')));
+        if (u !== state.me && u.role === 'student' && canPrivate() && handleableRoom(u.room) && !u.inPrivate) {
+          const b = el('button', 'btn small', '🎧'); b.title = '個別通話'; b.onclick = () => state.pc.invite(u); li.append(b);
+        }
         ul.append(li);
       }
       if (members.length) box.append(ul);
@@ -361,6 +366,10 @@
     }
   }
   setInterval(() => { if (!$('#panel').hidden) renderPanel(); }, 15000);
+
+  // 個別通話を始められるか（サーバーでも同じ判定をしている）
+  const canPrivate = () => !!(state.user && state.user.role !== 'student' && state.user.permissions.start_private_call && state.classCall);
+  const handleableRoom = (roomId) => { const r = roomId && roomInfo(roomId); return !!(r && r.canEnter); };
 
   function lowerHand(u) {
     state.socket.emit('lower-hand', u.id, (res) => {
@@ -388,8 +397,14 @@
     if (u.role !== 'student') title.append(el('span', 'badge ' + u.role, ROLE_LABEL[u.role]));
     pop.append(title);
     const room = u.room && roomInfo(u.room);
-    pop.append(el('div', 'sub', (room ? room.name : 'ろうか・ロビー') + (u.seat ? '・着席中' : '') + (u.hand ? '・✋挙手中' : '')));
+    pop.append(el('div', 'sub', (room ? room.name : 'ろうか・ロビー') + (u.seat ? '・着席中' : '') + (u.hand ? '・✋挙手中' : '') + (u.inPrivate ? '・🎧個別通話中' : '')));
     if (isStaff()) {
+      if (u.role === 'student' && canPrivate() && !u.inPrivate) {
+        const c = el('button', 'btn small', '🎧 個別通話をする');
+        if (handleableRoom(u.room)) c.onclick = () => { hideUserPop(); state.pc.invite(u); };
+        else { c.disabled = true; c.textContent = '🎧 担当の教室・自習室の生徒のみ'; }
+        pop.append(c);
+      }
       const go = el('button', 'btn small secondary', '近くへ行く'); go.onclick = () => walkNear(u); pop.append(go);
       if (u.hand && handleable(u.room)) { const b = el('button', 'btn small', '挙手に対応済みにする'); b.onclick = () => lowerHand(u); pop.append(b); }
     }
