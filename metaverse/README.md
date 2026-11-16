@@ -1,6 +1,6 @@
 # 三浦塾 2Dメタバース オンライン教室
 
-> **はじめての方へ**：公開してスマホで試すまでの手順は [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)（はじめかた）にまとめています。
+> **はじめての方へ**：**無料で**公開してスマホで試すまでの手順は [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)（はじめかた）にまとめています。
 
 小中学生がスマートフォンから参加できる、見下ろし型2Dの塾空間です。
 技術構成・費用・スマホの制約・画面とDBの設計・実装計画は [docs/DESIGN.md](docs/DESIGN.md) にまとめています。
@@ -98,6 +98,7 @@ npm start
 | `SESSION_DAYS` | ログインの有効日数（既定 7） |
 | `LIVEKIT_URL` / `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | LiveKit Cloud の接続情報（上記） |
 | `CLASS_GRACE_MS` | 先生の通信が切れてから授業を自動終了するまでの時間（既定 60000 ミリ秒） |
+| `DATABASE_URL` | データの保存先（Neon などの PostgreSQL）。設定すると、データを数秒ごとに自動保存し、起動時に読み戻します。無料のサーバー（再起動でファイルが消える）でもデータが消えません。つながらないときはデータの上書きを防ぐため起動を止めます |
 | `AUDIT_RETENTION_DAYS` | 操作ログ（IPアドレスを含む）の保存日数。過ぎたものは自動削除（既定 180） |
 
 `.env` ファイルがあれば `npm start` で自動的に読み込みます。
@@ -194,6 +195,8 @@ metaverse/
     server.js        API（ログイン・管理・入室状況）、セキュリティヘッダー
     realtime.js      リアルタイム同期（Socket.IO）：入室チェック・座席・挙手・切断・授業の開始／終了
     livekit.js       LiveKit：参加トークンの発行、退出させる処理
+    start.js         起動用（DATABASE_URL があればデータを読み戻してから起動）
+    pgsnapshot.js    データの自動保存・復元（PostgreSQL へ）
     auth.js          パスワード・セッション・ログイン試行制限
     permissions.js   権限の定義と判定（入室可否もここで判定）
     db.js            テーブル定義（SQLite）
@@ -214,6 +217,7 @@ metaverse/
   test/privatecall.test.js 個別通話のテスト
   .env.example           LiveKit などの設定のひな形
   test/security.test.js  セキュリティ点検テスト
+  test/snapshot.test.js  データの自動保存・復元テスト
   tools/loadtest.js      負荷テスト（45人の授業を再現）
   tools/mobilecheck.js   スマホ画面の点検（7機種）
   docs/PHASE5_REPORT.md  第5段階の結果と本番前チェックリスト

@@ -5,7 +5,7 @@
   "description": "三浦塾 2Dメタバース オンライン教室",
   "main": "server/server.js",
   "scripts": {
-    "start": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning server/server.js",
+    "start": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning server/start.js",
     "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js"
   },
   "engines": {
@@ -15,9 +15,11 @@
     "express": "^4.22.3",
     "livekit-client": "^2.24.1",
     "livekit-server-sdk": "^2.19.3",
+    "pg": "^8.23.1",
     "socket.io": "^4.8.4"
   },
   "devDependencies": {
+    "pg-mem": "^3.0.14",
     "socket.io-client": "^4.8.4"
   }
 }

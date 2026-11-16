@@ -1,19 +1,18 @@
-# Render（https://render.com）で「三浦塾オンライン教室」を公開するための設定
+# Render（https://render.com）で「三浦塾オンライン教室」を公開するための設定（無料プラン）
 # Render の画面で「New → Blueprint」を選び、このリポジトリを選ぶと、この内容で自動的に準備されます。
+#
+# 無料プランは再起動のたびにファイルが消えるため、データ（アカウント・設定など）は
+# DATABASE_URL の PostgreSQL（Neon の無料プランなど）に自動で保存・復元します。
 services:
   - type: web
     name: miurajuku-online
     runtime: node
     rootDir: metaverse
-    plan: starter            # 月 7 ドル。無料プランはデータ保存用ディスクが使えないため不可
+    plan: free
     region: singapore        # 日本に近い地域
     buildCommand: npm ci --omit=dev
     startCommand: npm start
     healthCheckPath: /api/setup-status
-    disk:
-      name: data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - key: NODE_VERSION
         value: "22"
@@ -21,10 +20,10 @@ services:
         value: production
       - key: TRUST_PROXY
         value: "1"
-      - key: DB_PATH
-        value: /var/data/app.db
-      # 以下の3つは、作成時に画面で入力します（LiveKit Cloud の値）
-      - key: LIVEKIT_URL
+      # 以下は、作成時に画面で入力します
+      - key: DATABASE_URL          # Neon の接続文字列（postgresql://〜）
+        sync: false
+      - key: LIVEKIT_URL           # LiveKit Cloud の URL（wss://〜）
         sync: false
       - key: LIVEKIT_API_KEY
         sync: false

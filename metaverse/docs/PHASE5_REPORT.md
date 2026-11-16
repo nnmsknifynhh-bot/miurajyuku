@@ -157,6 +157,9 @@ LiveKit の送信設定を、授業向けに調整しました（授業・個別
 
 ## 7. 公開（本番運用）の手順の目安
 
+> **更新（2026-11-16）**：無料で運用する方法を追加しました。手順は [GETTING_STARTED.md](GETTING_STARTED.md) を参照してください（Render 無料プラン＋Neon 無料プラン＋LiveKit 無料枠）。データは Neon に自動保存されるため、無料プランの再起動でも消えません。以下は有料プラン（ディスク付き）で運用する場合の参考です。
+
+
 1. **Render などの Node.js が動くサービス**にデプロイします（Netlify は不可）。
    - 起動コマンド：`npm start`
    - 環境変数：`NODE_ENV=production`、`TRUST_PROXY=1`、`LIVEKIT_URL`、`LIVEKIT_API_KEY`、`LIVEKIT_API_SECRET`
