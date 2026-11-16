@@ -741,6 +741,7 @@
     const st = $('#nt-status');
     const sub = await currentSub().catch(() => null);
     $('#nt-sub').hidden = !!sub; $('#nt-unsub').hidden = !sub; $('#nt-test').hidden = !sub;
+    $('#nt-local').hidden = !(pushSupported() && Notification.permission === 'granted');
     if (!pushSupported()) {
       st.textContent = isIOS && !isStandalone()
         ? 'iPhone・iPad では、Safari の共有ボタン →「ホーム画面に追加」をして、ホーム画面のアイコンから開くと使えます。'
@@ -783,11 +784,26 @@
     } catch (e) { toast(e.message); }
     renderNotify();
   };
+  // 原因を見分けるための表示
+  const showResult = (text) => { const r = $('#nt-result'); r.textContent = text; r.hidden = false; };
   $('#nt-test').onclick = async () => {
     try {
       const r = await api('POST', '/api/notify/test');
-      toast(r.sent ? 'テスト通知を送りました。数秒で届きます' : '送れませんでした。もう一度「この端末で受け取る」を押してください', 5000);
-    } catch (e) { toast(e.message); }
+      const lines = [`送信できた端末：${r.sent}台 ／ 登録している端末：${r.devices}台`];
+      for (const e of r.errors || []) lines.push(`送信エラー（${e.service}）：${e.status || ''} ${e.message || ''}`);
+      if (r.sent) lines.push('数秒たっても届かないときは「この端末に直接表示（確認用）」を押してください。');
+      else lines.push('送信できませんでした。「この端末では受け取らない」→「この端末で受け取る」で登録し直してください。');
+      showResult(lines.join('\n'));
+      renderNotify();
+    } catch (e) { showResult('エラー：' + e.message); }
+  };
+  // サーバーを通さず、この端末で通知を出す（端末の設定の確認）
+  $('#nt-local').onclick = async () => {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      await reg.showNotification('🔔 表示テスト', { body: 'これが見えれば、この端末の通知設定はOKです', tag: 'local-test', icon: '/icons/icon-192.png' });
+      showResult('この端末で通知を出しました。\n・見えた → 端末はOK。送信の途中に原因があります（上の「テスト通知を送る」の結果を教えてください）\n・見えない → 端末やブラウザの通知設定、集中モード（応答不可）を確認してください');
+    } catch (e) { showResult('この端末では通知を出せませんでした：' + e.message); }
   };
 
   // 音のテスト（スピーカー・イヤホンから音が出るか、生徒が自分で確認できる）

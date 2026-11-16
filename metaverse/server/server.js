@@ -157,8 +157,8 @@ app.post('/api/notify/unsubscribe', auth.requireAuth, requireStaff, (req, res) =
 });
 // テスト通知（この端末に届くか確かめる）
 app.post('/api/notify/test', auth.requireAuth, requireStaff, async (req, res) => {
-  const sent = await notify.pushTo(req.user.id, { title: '🔔 テスト通知', body: '通知はこのように届きます（三浦塾 オンライン教室）', tag: 'test', url: '/app' });
-  res.json({ sent });
+  const r = await notify.pushTo(req.user.id, { title: '🔔 テスト通知', body: '通知はこのように届きます（三浦塾 オンライン教室）', tag: 'test', url: '/app' });
+  res.json({ sent: r.sent, errors: r.errors, devices: notify.deviceCount(req.user.id) });
 });
 
 // ═════════ 自習室の見守り写真 ═════════

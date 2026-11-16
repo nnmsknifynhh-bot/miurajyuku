@@ -185,3 +185,4 @@ body:not(.is-student) .student-only, body:not(.is-staff) .staff-only { display: 
 .nt-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .me-menu .staff-only { display: block; }
 body:not(.is-staff) .me-menu .staff-only { display: none; }
+.nt-result { margin: 0; padding: 8px 10px; border-radius: 10px; background: #f6f3ee; font-size: 13px; white-space: pre-line; }

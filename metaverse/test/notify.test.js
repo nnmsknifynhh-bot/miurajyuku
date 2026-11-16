@@ -114,6 +114,8 @@ test('テスト通知が送れる。端末側で無効になった登録（410�
   pushes.length = 0;
   assert.equal((await http('POST', '/api/notify/test', {}, owner)).data.sent, 1);
   failNext = 410;
-  assert.equal((await http('POST', '/api/notify/test', {}, owner)).data.sent, 0);
+  const r = await http('POST', '/api/notify/test', {}, owner);
+  assert.equal(r.data.sent, 0);
+  assert.equal(r.data.errors[0].status, 410, 'エラーの内容が画面に返る');
   assert.equal((await http('GET', '/api/notify', null, owner)).data.devices, 0);
 });

@@ -69,17 +69,20 @@ async function pushTo(userId, payload) {
   keys();
   const subs = db.prepare('SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?').all(userId);
   let sent = 0;
+  const errors = [];
   for (const s of subs) {
+    const service = (() => { try { return new URL(s.endpoint).host; } catch { return '?'; } })();
     try {
       await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, JSON.stringify(payload), { TTL: 600, urgency: 'high' });
       sent++;
     } catch (e) {
       // 端末側で通知が無効になった（404/410）ものは削除
       if (e && (e.statusCode === 404 || e.statusCode === 410)) db.prepare('DELETE FROM push_subscriptions WHERE id = ?').run(s.id);
-      else console.error('プッシュ通知の送信に失敗:', e && (e.statusCode || e.message));
+      else console.error('プッシュ通知の送信に失敗:', service, e && (e.statusCode || e.message), e && e.body);
+      errors.push({ service, status: (e && e.statusCode) || null, message: String((e && (e.body || e.message)) || '').slice(0, 120) });
     }
   }
-  return sent;
+  return { sent, errors };
 }
 
 /**
@@ -98,12 +101,12 @@ async function studentArrived(student, online) {
       p.socket.emit('student-arrived', { id: student.id, name: student.name, time });
       result.inApp++;
     } else {
-      result.push += await pushTo(id, {
+      result.push += (await pushTo(id, {
         title: `🔔 ${student.name}さんが入室しました`,
         body: `${time}　三浦塾 オンライン教室`,
         tag: 'arrival-' + student.id,
         url: '/app',
-      });
+      })).sent;
     }
   }
   return result;
