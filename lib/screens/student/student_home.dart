@@ -10,6 +10,7 @@ import '../../widgets/common_widgets.dart';
 import 'progress_tab.dart';
 import 'grades_tab.dart';
 import 'message_tab.dart';
+import 'homework_tab.dart';
 import '../auth/login_screen.dart';
 
 class StudentHome extends StatefulWidget {
@@ -21,6 +22,7 @@ class StudentHome extends StatefulWidget {
 
 class _StudentHomeState extends State<StudentHome> {
   int _currentIndex = 0;
+  int _homeworkBadge = 0;
 
   void _showChangePasswordDialog(BuildContext context) {
     final newPwCtrl = TextEditingController();
@@ -180,11 +182,14 @@ class _StudentHomeState extends State<StudentHome> {
       ),
       body: IndexedStack(
         index: _currentIndex,
-        children: const [
-          _StudentMainScreen(),
-          GradesTab(),
-          ProgressTab(),
-          MessageTab(),
+        children: [
+          const _StudentMainScreen(),
+          HomeworkTab(onUnreadChanged: (n) {
+            if (mounted && n != _homeworkBadge) setState(() => _homeworkBadge = n);
+          }),
+          const GradesTab(),
+          const ProgressTab(),
+          const MessageTab(),
         ],
       ),
       bottomNavigationBar: _buildBottomNav(totalBadge),
@@ -205,9 +210,10 @@ class _StudentHomeState extends State<StudentHome> {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _navItemWithBadge(0, Icons.home_rounded, 'ホーム', homeBadge),
-              _navItem(1, Icons.bar_chart_rounded, '成績'),
-              _navItem(2, Icons.checklist_rounded, '進捗'),
-              _navItem(3, Icons.send_rounded, '連絡'),
+              _navItemWithBadge(1, Icons.camera_alt_rounded, '宿題', _homeworkBadge),
+              _navItem(2, Icons.bar_chart_rounded, '成績'),
+              _navItem(3, Icons.checklist_rounded, '進捗'),
+              _navItem(4, Icons.send_rounded, '連絡'),
             ],
           ),
         ),
@@ -221,7 +227,7 @@ class _StudentHomeState extends State<StudentHome> {
       onTap: () => setState(() => _currentIndex = index),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: selected ? AppColors.yellow.withValues(alpha: 0.12) : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
@@ -248,7 +254,7 @@ class _StudentHomeState extends State<StudentHome> {
       onTap: () => setState(() => _currentIndex = index),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: selected ? AppColors.yellow.withValues(alpha: 0.12) : Colors.transparent,
           borderRadius: BorderRadius.circular(12),

@@ -1,6 +1,6 @@
 // ============================================================
 // 管理者ホーム画面 — 三浦塾 学習管理システム
-// タブ: ダッシュボード(カレンダートップ) / 連絡 / 進捗管理 / 設定
+// タブ: ダッシュボード(カレンダートップ) / 採点 / 連絡 / 進捗管理 / お知らせ / 設定
 // ============================================================
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -15,6 +15,7 @@ import '../../providers/app_provider.dart';
 import '../../models/app_models.dart';
 import '../../widgets/common_widgets.dart';
 import '../auth/login_screen.dart';
+import 'grading_tab.dart';
 
 class AdminHome extends StatefulWidget {
   const AdminHome({super.key});
@@ -24,6 +25,7 @@ class AdminHome extends StatefulWidget {
 
 class _AdminHomeState extends State<AdminHome> {
   int _currentIndex = 0;
+  int _gradingPending = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -70,12 +72,15 @@ class _AdminHomeState extends State<AdminHome> {
         ],
       ),
       body: SafeArea(
-        child: IndexedStack(index: _currentIndex, children: const [
-          _AdminDashboardTab(),
-          _AdminContactTab(),
-          _AdminProgressTab(),
-          _AdminAnnouncementTab(),
-          _AdminSettingsTab(),
+        child: IndexedStack(index: _currentIndex, children: [
+          const _AdminDashboardTab(),
+          GradingTab(onPendingChanged: (n) {
+            if (mounted && n != _gradingPending) setState(() => _gradingPending = n);
+          }),
+          const _AdminContactTab(),
+          const _AdminProgressTab(),
+          const _AdminAnnouncementTab(),
+          const _AdminSettingsTab(),
         ]),
       ),
       bottomNavigationBar: _buildNav(totalUnread, unreadMsg, unreadAbs),
@@ -92,11 +97,12 @@ class _AdminHomeState extends State<AdminHome> {
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 4),
           child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-            _navItem(0, Icons.dashboard_rounded, 'ダッシュボード', 0),
-            _navItem(1, Icons.mail_rounded, '連絡', unreadMsg + unreadAbs),
-            _navItem(2, Icons.checklist_rounded, '進捗管理', 0),
-            _navItem(3, Icons.campaign_rounded, 'お知らせ', 0),
-            _navItem(4, Icons.settings_rounded, '設定', 0),
+            _navItem(0, Icons.dashboard_rounded, 'ホーム', 0),
+            _navItem(1, Icons.fact_check_rounded, '採点', _gradingPending),
+            _navItem(2, Icons.mail_rounded, '連絡', unreadMsg + unreadAbs),
+            _navItem(3, Icons.checklist_rounded, '進捗管理', 0),
+            _navItem(4, Icons.campaign_rounded, 'お知らせ', 0),
+            _navItem(5, Icons.settings_rounded, '設定', 0),
           ]),
         ),
       ),
@@ -109,7 +115,7 @@ class _AdminHomeState extends State<AdminHome> {
       onTap: () => setState(() => _currentIndex = index),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         decoration: BoxDecoration(
           color: selected ? AppColors.yellow.withValues(alpha: 0.12) : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
