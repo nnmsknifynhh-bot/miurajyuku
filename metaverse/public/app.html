@@ -28,6 +28,21 @@
   </section>
   <div id="lk-audio" hidden></div>
 
+  <!-- 自習室：勉強内容の吹き出し -->
+  <dialog id="topic-dialog">
+    <form class="dialog-body" id="topic-form">
+      <h2>✏️ なにを勉強する？</h2>
+      <div class="topic-chips" id="topic-chips"></div>
+      <label class="field">内容（24文字まで）<input id="topic-input" maxlength="24" placeholder="例：数学　連立方程式" autocomplete="off"></label>
+      <p class="muted">アバターの上に吹き出しで表示されます（自習室にいるみんなに見えます）。</p>
+      <div class="dialog-actions">
+        <button type="button" class="btn secondary" id="topic-clear">吹き出しを消す</button>
+        <button type="button" class="btn secondary" id="topic-cancel">やめる</button>
+        <button type="submit" class="btn">表示する</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- 自習室の見守り写真（生徒） -->
   <div class="sc-card" id="sc-card" hidden>
     <b>📷 自習の見守り</b>
@@ -93,6 +108,7 @@
     <button class="big-btn" id="btn-rooms"><span>🏫</span><b>へや</b></button>
     <button class="big-btn" id="btn-sit"><span>🪑</span><b id="sit-label">すわる</b></button>
     <button class="big-btn student-only" id="btn-hand"><span>✋</span><b id="hand-label">手をあげる</b></button>
+    <button class="big-btn student-only" id="btn-topic" hidden><span>✏️</span><b>勉強内容</b></button>
     <button class="big-btn student-only" id="btn-react"><span>😊</span><b>リアクション</b></button>
     <button class="big-btn staff-only" id="btn-hands"><span>🙋</span><b>挙手</b><i class="count" id="hands-count" hidden>0</i></button>
     <button class="big-btn staff-only" id="btn-people"><span>👥</span><b>入室者</b></button>

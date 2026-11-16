@@ -47,6 +47,7 @@
     state.pc = window.PrivateCall.create({ socket, getState: () => state, toast });
     state.sc = window.StudyCam.create({ socket, getState: () => state, toast });
     socket.on('features', (f) => { state.studyPhotos = !!f.studyPhotos; updateAll(); });
+    socket.on('topic-cleared', ({ by }) => { state.me.topic = null; updateButtons(); toast(`${by}先生が吹き出しを消しました`); });
     socket.on('study-photo', ({ id, at }) => { refreshPhotoMeta(); void id; void at; });
     socket.on('study-photo-result', ({ id, name, ok, reason }) => {
       clearTimeout(photoWait[id]);
@@ -260,6 +261,39 @@
   // ───────── 表示の更新 ─────────
   function updateAll() { updatePlace(true); updateButtons(); renderPanel(); if (state.call) state.call.sync(); if (state.sc) state.sc.sync(); }
 
+  // ── 自習室：勉強内容の吹き出し ──
+  const SUBJECTS = ['国語', '数学', '算数', '英語', '理科', '社会', '宿題', 'テスト勉強'];
+  function openTopic() {
+    const chips = $('#topic-chips'); chips.textContent = '';
+    let saved = '';
+    try { saved = localStorage.getItem('juku-topic-' + state.user.id) || ''; } catch (e) {}
+    $('#topic-input').value = state.me.topic || saved;
+    for (const s of SUBJECTS) {
+      const b = el('button', null, s); b.type = 'button';
+      b.onclick = () => {
+        const cur = $('#topic-input').value.replace(new RegExp('^(' + SUBJECTS.join('|') + ')[：:　 ]*'), '');
+        $('#topic-input').value = (s + '　' + cur).slice(0, 24).trimEnd() + (cur ? '' : '　');
+        $('#topic-input').focus();
+        chips.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+      };
+      chips.append(b);
+    }
+    $('#topic-clear').hidden = !state.me.topic;
+    $('#topic-dialog').showModal();
+  }
+  function sendTopic(text) {
+    state.socket.emit('study-topic', { text }, (r) => {
+      if (!r || !r.ok) return toast((r && r.error) || 'できませんでした');
+      state.me.topic = r.topic; updateButtons();
+      try { if (r.topic) localStorage.setItem('juku-topic-' + state.user.id, r.topic); } catch (e) {}
+      $('#topic-dialog').close();
+    });
+  }
+  $('#btn-topic').onclick = openTopic;
+  $('#topic-cancel').onclick = () => $('#topic-dialog').close();
+  $('#topic-clear').onclick = () => sendTopic('');
+  $('#topic-form').addEventListener('submit', (e) => { e.preventDefault(); sendTopic($('#topic-input').value.trim()); });
+
   // 離席の検知：アプリを閉じた・別のアプリに切り替えた（hidden）、別の画面を操作中（blur）
   function reportAway() {
     if (!state.socket) return;
@@ -298,6 +332,16 @@
     $('#sit-label').textContent = me && me.seat ? 'たつ' : 'すわる';
     $('#btn-sit').classList.toggle('on', !!(me && me.seat));
     $('#hand-label').textContent = me && me.hand ? '手をおろす' : '手をあげる';
+    // 自習室では「手をあげる」の代わりに「勉強内容」ボタン
+    const inStudy = !!(me && me.room === 'study');
+    $('#btn-hand').hidden = inStudy;
+    $('#btn-topic').hidden = !inStudy;
+    $('#btn-topic').classList.toggle('on', !!(me && me.topic));
+    if (inStudy && !me.topic && !state.topicHinted && state.user && state.user.role === 'student') {
+      state.topicHinted = true;
+      setTimeout(() => toast('「✏️ 勉強内容」で、なにを勉強するか吹き出しに書けます', 5000), 1500);
+    }
+    if (!inStudy) state.topicHinted = false;
     $('#btn-hand').classList.toggle('hand-on', !!(me && me.hand));
   }
 
@@ -368,6 +412,7 @@
       } else thumb = el('div', 'noimg', u.studyCam ? '撮影待ち' : '写真なし');
       const info = el('div');
       info.append(el('b', null, u.name));
+      if (u.topic) info.append(el('div', 'topic', '📝 ' + u.topic));
       const st = el('div', 'st');
       const warn = [];
       if (u.away === 'hidden') warn.push('💤 アプリを閉じています');
@@ -484,6 +529,12 @@
     pop.append(title);
     const room = u.room && roomInfo(u.room);
     pop.append(el('div', 'sub', (room ? room.name : 'ろうか・ロビー') + (u.seat ? '・着席中' : '') + (u.hand ? '・✋挙手中' : '') + (u.inPrivate ? '・🎧個別通話中' : '')));
+    if (u.topic) pop.append(el('div', 'sub', '📝 ' + u.topic));
+    if (u.topic && isStaff() && state.user.permissions.handle_students) {
+      const c = el('button', 'btn small secondary', '吹き出しを消す');
+      c.onclick = () => state.socket.emit('study-topic-clear', u.id, (r) => { hideUserPop(); if (!r || !r.ok) toast((r && r.error) || 'できませんでした'); });
+      pop.append(c);
+    }
     if (isStaff()) {
       if (u.role === 'student' && canPrivate() && !u.inPrivate) {
         const c = el('button', 'btn small', '🎧 個別通話をする');

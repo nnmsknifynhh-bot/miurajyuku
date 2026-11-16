@@ -33,7 +33,7 @@ function pub(p) {
   return {
     id: p.id, name: p.user.display_name, role: p.user.role, color: p.user.avatar_color,
     x: p.x, y: p.y, dir: p.dir, moving: p.moving, room: p.room, seat: p.seat, hand: p.hand, handAt: p.handAt,
-    inPrivate: inActiveCall(p), away: p.away || null, studyCam: !!p.studyCam,
+    inPrivate: inActiveCall(p), away: p.away || null, studyCam: !!p.studyCam, topic: p.topic || null,
   };
 }
 
@@ -191,7 +191,10 @@ function endCall(call, reason, actorId) {
 function setRoom(p, roomId) {
   if (p.room === roomId) return;
   if (p.hand) lowerHand(p);
-  if (p.room === 'study') clearStudyPhoto(p);
+  if (p.room === 'study') {
+    clearStudyPhoto(p);
+    if (p.topic) { p.topic = null; io.emit('user-updated', { id: p.id, topic: null }); } // 自習室を出たら吹き出しも消す
+  }
   if (p.room) leaveClassRoom(p, p.room, 'moved');
   p.room = roomId;
   io.emit('user-updated', { id: p.id, room: roomId });
@@ -504,6 +507,28 @@ function attach(httpServer) {
       if (!call || !d || d.callId !== call.id) return ack({ ok: false });
       const who = p.id === call.teacherId ? `${call.teacherName}先生` : `${call.studentName}さん`;
       endCall(call, call.status === 'ringing' && p.id === call.teacherId ? '先生が呼び出しを取り消しました' : `${who}が個別通話を終了しました`, p.id);
+      ack({ ok: true });
+    });
+
+    // ── 自習室：何を勉強しているかの吹き出し ──
+    socket.on('study-topic', (d, ack) => {
+      if (typeof ack !== 'function') ack = () => {};
+      if (p.user.role !== 'student') return ack({ ok: false, error: '生徒の機能です' });
+      if (p.room !== 'study') return ack({ ok: false, error: '自習室に入ってから書いてね' });
+      const text = String((d && d.text) || '').replace(/[\u0000-\u001f\u007f<>]/g, '').trim().slice(0, 24);
+      p.topic = text || null;
+      io.emit('user-updated', { id: p.id, topic: p.topic });
+      ack({ ok: true, topic: p.topic });
+    });
+    // 先生が吹き出しを消す（ふさわしくない内容など）
+    socket.on('study-topic-clear', (targetId, ack) => {
+      if (typeof ack !== 'function') ack = () => {};
+      if (!isStaff(p) || !can(p.user, 'handle_students')) return ack({ ok: false, error: 'この操作は許可されていません' });
+      const t = online.get(Number(targetId));
+      if (!t || !t.topic) return ack({ ok: false, error: '吹き出しはありません' });
+      t.topic = null;
+      io.emit('user-updated', { id: t.id, topic: null });
+      t.socket.emit('topic-cleared', { by: p.user.display_name });
       ack({ ok: true });
     });
 

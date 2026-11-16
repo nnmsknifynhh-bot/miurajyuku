@@ -253,12 +253,26 @@
       ctx.beginPath(); ctx.arc(x, hy, 14, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       ctx.font = '18px sans-serif'; ctx.fillText('✋', x, hy + 1);
     }
+    // 勉強内容の吹き出し（自習室）
+    let topicH = 0;
+    if (u.topic) {
+      const text = '📝 ' + u.topic;
+      ctx.font = 'bold 12px sans-serif';
+      const bw = Math.min(200, ctx.measureText(text).width + 16), bh = 22, top = by - 70;
+      ctx.fillStyle = '#fffbea'; ctx.strokeStyle = '#e8c766'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.roundRect(x - bw / 2, top, bw, bh, 9); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x - 6, top + bh - 0.5); ctx.lineTo(x + 6, top + bh - 0.5); ctx.lineTo(x, top + bh + 6); ctx.closePath();
+      ctx.fillStyle = '#fffbea'; ctx.fill();
+      ctx.strokeStyle = '#e8c766'; ctx.beginPath(); ctx.moveTo(x - 6, top + bh); ctx.lineTo(x, top + bh + 6); ctx.lineTo(x + 6, top + bh); ctx.stroke();
+      ctx.fillStyle = '#4a3b00'; ctx.fillText(text, x, top + bh / 2 + 1, 190);
+      topicH = 30;
+    }
     // リアクション（ふわっと上がって消える）
     if (u.reaction && opts.now < u.reaction.until) {
       const k = 1 - (u.reaction.until - opts.now) / 2500;
       ctx.globalAlpha = Math.min(1, (1 - k) * 2.5);
       ctx.font = '26px sans-serif';
-      ctx.fillText(u.reaction.kind, x + (u.hand ? 24 : 0), by - 62 - k * 30);
+      ctx.fillText(u.reaction.kind, x + (u.hand ? 24 : 0), by - 62 - topicH - k * 30);
       ctx.globalAlpha = 1;
     }
     ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
