@@ -693,7 +693,10 @@
   $('#btn-sit').onclick = toggleSit;
   $('#zoom-in').onclick = () => { state.zoom = clampZoom(state.zoom * 1.2); };
   $('#zoom-out').onclick = () => { state.zoom = clampZoom(state.zoom / 1.2); };
-  $('#me-btn').onclick = () => { $('#me-menu').hidden = !$('#me-menu').hidden; };
+  $('#me-btn').onclick = () => {
+    $('#me-menu').hidden = !$('#me-menu').hidden;
+    if (!$('#me-menu').hidden) api('GET', '/api/version').then(v => { $('#menu-ver').textContent = `アプリの版：${v.version}`; }).catch(() => {});
+  };
   $('#menu-logout').onclick = async () => {
     try { await api('POST', '/api/logout'); } catch (e) {}
     location.replace('/');

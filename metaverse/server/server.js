@@ -72,6 +72,12 @@ function listRooms(user) {
 // ═════════ 初期セットアップ（ユーザーが1人もいないときだけ） ═════════
 const userCount = () => db.prepare('SELECT COUNT(*) AS n FROM users').get().n;
 
+// いま動いている版（Render は RENDER_GIT_COMMIT に GitHub のコミット番号を入れてくれる）
+const STARTED_AT = new Date().toISOString();
+app.get('/api/version', (req, res) => {
+  res.json({ version: (process.env.RENDER_GIT_COMMIT || 'local').slice(0, 7), startedAt: STARTED_AT });
+});
+
 app.get('/api/setup-status', (req, res) => res.json({ needsSetup: userCount() === 0 }));
 
 app.post('/api/setup', (req, res) => {
