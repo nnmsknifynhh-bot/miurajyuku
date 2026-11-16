@@ -1,0 +1,32 @@
+# Render（https://render.com）で「三浦塾オンライン教室」を公開するための設定
+# Render の画面で「New → Blueprint」を選び、このリポジトリを選ぶと、この内容で自動的に準備されます。
+services:
+  - type: web
+    name: miurajuku-online
+    runtime: node
+    rootDir: metaverse
+    plan: starter            # 月 7 ドル。無料プランはデータ保存用ディスクが使えないため不可
+    region: singapore        # 日本に近い地域
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /api/setup-status
+    disk:
+      name: data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: "1"
+      - key: DB_PATH
+        value: /var/data/app.db
+      # 以下の3つは、作成時に画面で入力します（LiveKit Cloud の値）
+      - key: LIVEKIT_URL
+        sync: false
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false
