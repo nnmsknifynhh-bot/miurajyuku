@@ -9,7 +9,7 @@
     user: null, rooms: [], counts: {}, reactions: [], me: null, others: new Map(),
     zoom: 1, cam: { x: 0, y: 0 }, keys: new Set(), path: [], pathSeat: null, joy: { x: 0, y: 0 },
     lastBlockToast: 0, lastSent: 0, lastSentKey: '', socket: null, ready: false, panelTab: 'hands',
-    classes: {}, classCall: false, call: null,
+    classes: {}, classCall: false, call: null, studyPhotos: false, sc: null, photoMeta: {},
   };
   const canvas = $('#world'), ctx = canvas.getContext('2d');
   let mapCanvas = null;
@@ -35,6 +35,7 @@
   async function loadMe() {
     const data = await api('GET', '/api/me');
     state.user = data.user; state.rooms = data.rooms;
+    state.studyPhotos = !!(data.features && data.features.studyPhotos);
     $('#menu-admin').hidden = !(data.user.role === 'owner' || data.user.permissions.manage_classroom);
   }
 
@@ -44,6 +45,10 @@
     state.socket = socket;
     state.call = window.ClassCall.create({ socket, getState: () => state, toast });
     state.pc = window.PrivateCall.create({ socket, getState: () => state, toast });
+    state.sc = window.StudyCam.create({ socket, getState: () => state, toast });
+    socket.on('features', (f) => { state.studyPhotos = !!f.studyPhotos; updateAll(); });
+    socket.on('study-photo', ({ id, at }) => { refreshPhotoMeta(); void id; void at; });
+    socket.on('connect', () => reportAway());
     $('#conn').hidden = false;
 
     socket.on('connect', () => { $('#conn').hidden = true; });
@@ -108,7 +113,7 @@
     socket.on('me-updated', async () => { try { await loadMe(); updateAll(); } catch (e) {} });
     socket.on('kicked', ({ reason }) => {
       state.ready = false;
-      state.call.leave(); state.pc.leave();
+      state.call.leave(); state.pc.leave(); state.sc.stop();
       alert(reason || '接続が切断されました');
       location.replace('/');
     });
@@ -248,7 +253,19 @@
   }
 
   // ───────── 表示の更新 ─────────
-  function updateAll() { updatePlace(true); updateButtons(); renderPanel(); if (state.call) state.call.sync(); }
+  function updateAll() { updatePlace(true); updateButtons(); renderPanel(); if (state.call) state.call.sync(); if (state.sc) state.sc.sync(); }
+
+  // 離席の検知：アプリを閉じた・別のアプリに切り替えた（hidden）、別の画面を操作中（blur）
+  function reportAway() {
+    if (!state.socket) return;
+    const away = document.visibilityState === 'hidden' ? 'hidden' : (document.hasFocus() ? null : 'blur');
+    state.socket.emit('away', { away });
+    if (!away && state.sc) state.sc.sync();
+  }
+  document.addEventListener('visibilitychange', reportAway);
+  window.addEventListener('blur', () => setTimeout(reportAway, 300));
+  window.addEventListener('focus', reportAway);
+  window.addEventListener('pagehide', reportAway);
 
   // 授業中の先生は教室から出られない（出ると授業が終わってしまうため）
   function leavingWhileTeaching(x, y) {
@@ -304,7 +321,8 @@
     state.panelTab = tab;
     $('#panel').hidden = false;
     document.querySelectorAll('.panel-tabs [data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-    $('#panel-hands').hidden = tab !== 'hands'; $('#panel-people').hidden = tab !== 'people';
+    $('#panel-hands').hidden = tab !== 'hands'; $('#panel-people').hidden = tab !== 'people'; $('#panel-study').hidden = tab !== 'study';
+    if (tab === 'study') refreshPhotoMeta();
     renderPanel();
   }
   $('#btn-hands').onclick = () => ($('#panel').hidden || state.panelTab !== 'hands') ? openPanel('hands') : ($('#panel').hidden = true);
@@ -321,8 +339,57 @@
   };
   const handList = () => [...state.others.values()].filter(u => u.hand && handleable(u.room)).sort((a, b) => a.handAt - b.handAt);
 
+  // ── 自習室の見守り写真（先生・オーナー） ──
+  const canViewStudy = () => !!(state.user && (state.user.role === 'owner' || (state.user.role === 'teacher' && state.user.permissions.handle_students)));
+  async function refreshPhotoMeta() {
+    if (!canViewStudy() || !state.studyPhotos) return;
+    try { state.photoMeta = (await api('GET', '/api/study/photos')).times || {}; } catch (e) { /* 次の機会に */ }
+    renderPanel();
+  }
+  setInterval(() => { if (!$('#panel').hidden && state.panelTab === 'study') refreshPhotoMeta(); }, 30000);
+  const ago = (t) => { const m = Math.floor((Date.now() - t) / 60000); return m < 1 ? 'いま' : `${m}分前`; };
+  function renderStudyPanel() {
+    const box = $('#panel-study'); box.textContent = '';
+    if (!state.studyPhotos) { box.append(el('p', 'panel-empty', '見守り写真はオフです（オーナーが管理画面の「教室の設定」でオンにできます）')); return; }
+    const students = [...state.others.values()].filter(u => u.room === 'study' && u.role === 'student').sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+    if (!students.length) { box.append(el('p', 'panel-empty', 'いま自習室にいる生徒はいません')); return; }
+    for (const u of students) {
+      const meta = state.photoMeta[u.id];
+      const card = el('div', 'study-card');
+      let thumb;
+      if (meta) {
+        thumb = el('img'); thumb.src = `/api/study/photo/${u.id}?t=${meta.at}`; thumb.alt = u.name + 'さんの写真';
+        thumb.onclick = () => { $('#sc-photo-title').textContent = `${u.name}さん（${ago(meta.at)}）`; $('#sc-photo-big').src = thumb.src; $('#sc-photo-dialog').showModal(); };
+      } else thumb = el('div', 'noimg', u.studyCam ? '撮影待ち' : '写真なし');
+      const info = el('div');
+      info.append(el('b', null, u.name));
+      const st = el('div', 'st');
+      const warn = [];
+      if (u.away === 'hidden') warn.push('💤 アプリを閉じています');
+      else if (u.away === 'blur') warn.push('💤 別の画面を操作中');
+      if (!u.studyCam) warn.push('📷 カメラオフ');
+      if (meta && meta.dark) warn.push('⚫ 真っ暗（カメラが隠れている？）');
+      if (meta && meta.still >= 3) warn.push('🗿 30分以上ほとんど動きなし');
+      if (meta && u.studyCam && Date.now() - meta.at > 16 * 60e3) warn.push('⏱ 写真が届いていません');
+      if (warn.length) { warn.forEach(w => st.append(el('span', 'bad', w + '　'))); card.classList.add('warn'); }
+      st.append(document.createTextNode(meta ? `📷 ${ago(meta.at)}${meta.reason === 'request' ? '（今すぐ撮影）' : ''}` : ''));
+      info.append(st);
+      if (u.studyCam) {
+        const b = el('button', 'btn small secondary', '📸 今すぐ撮る');
+        b.onclick = () => state.socket.emit('study-photo-request', { studentId: u.id }, (r) => toast(r && r.ok ? `${u.name}さんの写真を撮っています…` : ((r && r.error) || 'できませんでした')));
+        info.append(b);
+      }
+      card.append(thumb, info);
+      box.append(card);
+    }
+    box.append(el('p', 'panel-note', '写真は7〜13分おきのランダムな時間に届きます（生徒には撮影の時間は分かりません）。写真は最新の1枚だけで、生徒が自習室を出ると消えます。'));
+  }
+  $('#sc-photo-close').onclick = () => $('#sc-photo-dialog').close();
+
   function renderPanel() {
     if (!isStaff() || !state.me) return;
+    $('#tab-study-btn').hidden = !canViewStudy();
+    if (state.panelTab === 'study' && !$('#panel').hidden) renderStudyPanel();
     const hands = handList();
     $('#hands-count').hidden = hands.length === 0;
     $('#hands-count').textContent = hands.length;
@@ -362,7 +429,7 @@
         const li = el('li');
         const dot = el('span', 'dot'); dot.style.background = u.color;
         li.append(dot, el('span', null, (u.role !== 'student' ? ROLE_LABEL[u.role] + ' ' : '') + u.name + (u === state.me ? '（自分）' : '')));
-        li.append(el('span', 'tag', (u.inPrivate ? '🎧 ' : '') + (u.hand ? '✋ ' : '') + (u.seat ? '着席' : '')));
+        li.append(el('span', 'tag', (u.away ? '💤 ' : '') + (u.inPrivate ? '🎧 ' : '') + (u.hand ? '✋ ' : '') + (u.seat ? '着席' : '')));
         if (u !== state.me && u.role === 'student' && canPrivate() && handleableRoom(u.room) && !u.inPrivate) {
           const b = el('button', 'btn small', '🎧'); b.title = '個別通話'; b.onclick = () => state.pc.invite(u); li.append(b);
         }

@@ -7,7 +7,7 @@ const crypto = require('crypto');
 const { Server } = require('socket.io');
 const SM = require('../public/shared/map.js');
 const auth = require('./auth');
-const { db, now, audit } = require('./db');
+const { db, now, audit, getSetting } = require('./db');
 const livekit = require('./livekit');
 const { can, canEnterRoom } = require('./permissions');
 
@@ -33,8 +33,23 @@ function pub(p) {
   return {
     id: p.id, name: p.user.display_name, role: p.user.role, color: p.user.avatar_color,
     x: p.x, y: p.y, dir: p.dir, moving: p.moving, room: p.room, seat: p.seat, hand: p.hand, handAt: p.handAt,
-    inPrivate: inActiveCall(p),
+    inPrivate: inActiveCall(p), away: p.away || null, studyCam: !!p.studyCam,
   };
+}
+
+// ═════════ 自習室の見守り写真 ═════════
+// 写真は最新の1枚だけをメモリに置く（データベースには保存しない）。自習室を出る・切断すると消える。
+const studyPhotos = new Map(); // userId -> { buf, at, hash, fp, dark, still, reason }
+const PHOTO_MIN_INTERVAL_MS = Number(process.env.STUDY_PHOTO_MIN_INTERVAL_MS || 60_000);
+const studyPhotosEnabled = () => getSetting('study_photos', '0') === '1';
+const canViewStudyPhotos = (u) => !!u && u.is_active && (u.role === 'owner' || (u.role === 'teacher' && can(u, 'handle_students')));
+function notifyStudyViewers(payload) {
+  for (const s of online.values()) if (canViewStudyPhotos(s.user)) s.socket.emit('study-photo', payload);
+}
+function clearStudyPhoto(p) {
+  const had = studyPhotos.delete(p.id);
+  if (p.studyCam) { p.studyCam = false; if (io) io.emit('user-updated', { id: p.id, studyCam: false }); }
+  if (had) notifyStudyViewers({ id: p.id, at: null });
 }
 
 // ═════════ 第4段階：個別通話 ═════════
@@ -176,6 +191,7 @@ function endCall(call, reason, actorId) {
 function setRoom(p, roomId) {
   if (p.room === roomId) return;
   if (p.hand) lowerHand(p);
+  if (p.room === 'study') clearStudyPhoto(p);
   if (p.room) leaveClassRoom(p, p.room, 'moved');
   p.room = roomId;
   io.emit('user-updated', { id: p.id, room: roomId });
@@ -491,8 +507,40 @@ function attach(httpServer) {
       ack({ ok: true });
     });
 
+    // ── 離席（アプリを閉じた・別のアプリに切り替えた） ──
+    // away: 'hidden'（アプリを閉じた・別アプリ）| 'blur'（別の画面を操作中）| null（アプリを見ている）
+    socket.on('away', (d) => {
+      const kind = d && (d.away === 'hidden' || d.away === 'blur') ? d.away : null;
+      if (kind === (p.away || null)) return;
+      p.away = kind;
+      io.emit('user-updated', { id: p.id, away: kind });
+    });
+
+    // 先生が「今すぐ撮る」：生徒が準備できないタイミングで写真を撮る（ずる防止）
+    socket.on('study-photo-request', (d, ack) => {
+      if (typeof ack !== 'function') ack = () => {};
+      if (!canViewStudyPhotos(p.user)) return ack({ ok: false, error: '権限がありません' });
+      const t = online.get(Number(d && d.studentId));
+      if (!t || t.room !== 'study' || !t.studyCam) return ack({ ok: false, error: 'カメラがオンの自習中の生徒だけ撮影できます' });
+      if (Date.now() - (t.lastPhotoRequestAt || 0) < 30_000) return ack({ ok: false, error: '30秒ほど待ってからもう一度押してください' });
+      t.lastPhotoRequestAt = Date.now(); // 連打防止（30秒に1回）
+      t.photoRequestedAt = Date.now();   // 未使用の撮影リクエスト（1回使うと消える）
+      t.socket.emit('take-photo');
+      ack({ ok: true });
+    });
+
+    // ── 自習室の見守りカメラのオン/オフ（表示用。写真そのものは HTTP で送る） ──
+    socket.on('study-camera', (d) => {
+      const on = !!(d && d.on) && p.user.role === 'student' && p.room === 'study' && studyPhotosEnabled();
+      if (on === !!p.studyCam) return;
+      p.studyCam = on;
+      io.emit('user-updated', { id: p.id, studyCam: on });
+      if (!on) { if (studyPhotos.delete(p.id)) notifyStudyViewers({ id: p.id, at: null }); }
+    });
+
     socket.on('disconnect', () => {
       if (online.get(p.id) !== p) return;
+      clearStudyPhoto(p);
       if (p.callId) endCall(callOf(p), `${p.user.display_name}${isStaff(p) ? '先生' : 'さん'}の接続が切れたため、個別通話を終了しました`);
       if (p.room) leaveClassRoom(p, p.room, 'disconnected');
       lastPos.set(p.id, { x: p.x, y: p.y });
@@ -520,6 +568,7 @@ function attach(httpServer) {
 function kickPresence(p, reason, mode = 'disconnected') {
   p.socket.emit('kicked', { reason });
   if (online.get(p.id) === p) {
+    clearStudyPhoto(p);
     if (p.callId) endCall(callOf(p), `${p.user.display_name}${isStaff(p) ? '先生' : 'さん'}の接続が切れたため、個別通話を終了しました`);
     if (p.room) leaveClassRoom(p, p.room, mode);
     lastPos.set(p.id, { x: p.x, y: p.y });
@@ -564,6 +613,55 @@ function refreshUser(userId) {
 
 function refreshRooms() { broadcastRooms(); }
 
+// 見守り写真を受け取る（生徒・自習室にいる・機能がオンのときだけ）。エラーならメッセージを返す
+// meta: { brightness: 0〜255, fp: 64ビットの「写真の特徴」(16進), reason: 'auto'|'request' }
+function storeStudyPhoto(userId, buf, meta = {}) {
+  if (!studyPhotosEnabled()) return '見守り写真はオフになっています';
+  const p = online.get(Number(userId));
+  if (!p || p.user.role !== 'student') return '送信できません';
+  if (p.room !== 'study') return '自習室に入ってから送信してください';
+  if (!Buffer.isBuffer(buf) || buf.length < 100 || buf[0] !== 0xff || buf[1] !== 0xd8) return '写真の形式が正しくありません';
+  const prev = studyPhotos.get(p.id);
+  const requested = p.photoRequestedAt && Date.now() - p.photoRequestedAt < 60_000;
+  const minGap = requested ? 1_000 : PHOTO_MIN_INTERVAL_MS; // 「今すぐ撮る」は1回だけ・30秒に1回までなので短くてよい
+  if (prev && Date.now() - prev.at < minGap) return '送信の間隔が短すぎます';
+  // 前と「まったく同じファイル」は、カメラで撮った写真ではない（保存しておいた写真の使い回し）
+  const hash = crypto.createHash('sha256').update(buf).digest('hex');
+  if (prev && prev.hash === hash) return '同じ写真は送信できません';
+  const fp = /^[0-9a-f]{16}$/.test(meta.fp || '') ? meta.fp : null;
+  const brightness = Number.isFinite(Number(meta.brightness)) ? Number(meta.brightness) : null;
+  // 前の写真とほとんど同じなら「動きなし」を数える（3回続くと約30分動きなし）
+  let still = 0;
+  if (fp && prev && prev.fp) {
+    let diff = 0;
+    const a = BigInt('0x' + fp) ^ BigInt('0x' + prev.fp);
+    for (let x = a; x; x >>= 1n) diff += Number(x & 1n);
+    still = diff <= 3 ? (prev.still || 0) + 1 : 0;
+  }
+  const at = Date.now();
+  const reason = requested && meta.reason === 'request' ? 'request' : 'auto';
+  if (reason === 'request') p.photoRequestedAt = 0;
+  studyPhotos.set(p.id, { buf, at, hash, fp, still, reason, dark: brightness !== null && brightness < 25 });
+  if (!p.studyCam) { p.studyCam = true; io.emit('user-updated', { id: p.id, studyCam: true }); }
+  notifyStudyViewers({ id: p.id, at });
+  return null;
+}
+function getStudyPhoto(userId) { return studyPhotos.get(Number(userId)) || null; }
+function studyPhotoTimes() {
+  const o = {};
+  for (const [id, v] of studyPhotos) o[id] = { at: v.at, dark: v.dark, still: v.still, reason: v.reason };
+  return o;
+}
+
+// 見守り写真の設定を変えたとき
+function setStudyPhotosFeature(on) {
+  if (!on) {
+    for (const p of online.values()) clearStudyPhoto(p);
+    studyPhotos.clear();
+  }
+  if (io) io.emit('features', { studyPhotos: !!on });
+}
+
 // 管理者が個別通話を終了させる
 function endCallOf(userId, actorId) {
   const p = online.get(Number(userId));
@@ -579,6 +677,8 @@ function presence() {
   }));
 }
 
-function _reset() { online.clear(); lastPos.clear(); calls.clear(); }
+function _reset() { online.clear(); lastPos.clear(); calls.clear(); studyPhotos.clear(); }
 
-module.exports = { attach, kick, refreshUser, refreshRooms, presence, roomCounts, classState, endClass, endCallOf, REACTIONS, _reset, _online: online };
+module.exports = {
+  storeStudyPhoto, getStudyPhoto, studyPhotoTimes, canViewStudyPhotos, setStudyPhotosFeature, studyPhotosEnabled,
+  attach, kick, refreshUser, refreshRooms, presence, roomCounts, classState, endClass, endCallOf, REACTIONS, _reset, _online: online };

@@ -28,6 +28,26 @@
   </section>
   <div id="lk-audio" hidden></div>
 
+  <!-- 自習室の見守り写真（生徒） -->
+  <div class="sc-card" id="sc-card" hidden>
+    <b>📷 自習の見守り</b>
+    <p>自習室では、ときどきカメラの写真が<b>先生にだけ</b>届きます。写真は自習室を出ると消えます。<br>スマホを、自分とノートが写る場所に置いてね。</p>
+    <div class="sc-actions"><button class="btn secondary small" id="sc-later">あとで</button><button class="btn small" id="sc-start">カメラをオンにする</button></div>
+  </div>
+  <div class="sc-badge" id="sc-badge" hidden>
+    <video id="sc-preview" autoplay playsinline muted></video>
+    <div><b id="sc-status"></b><small id="sc-sub"></small></div>
+    <button id="sc-flip" title="カメラを切りかえ">🔄</button>
+    <button id="sc-toggle"></button>
+  </div>
+  <dialog id="sc-photo-dialog">
+    <div class="dialog-body">
+      <h2 id="sc-photo-title"></h2>
+      <img id="sc-photo-big" alt="">
+      <div class="dialog-actions"><button class="btn secondary" id="sc-photo-close">とじる</button></div>
+    </div>
+  </dialog>
+
   <!-- 第4段階：個別通話 -->
   <div class="pc-ring" id="pc-ring" hidden></div>
   <dialog id="pc-incoming" class="pc-incoming">
@@ -85,10 +105,12 @@
     <div class="panel-tabs">
       <button data-tab="hands" class="active">🙋 挙手</button>
       <button data-tab="people">👥 入室者</button>
+      <button data-tab="study" id="tab-study-btn" hidden>📷 自習室</button>
       <button id="panel-close" aria-label="とじる">✕</button>
     </div>
     <div class="panel-body" id="panel-hands"></div>
     <div class="panel-body" id="panel-people" hidden></div>
+    <div class="panel-body" id="panel-study" hidden></div>
   </aside>
 
   <div class="user-pop" id="user-pop" hidden></div>
@@ -121,6 +143,7 @@
   <script src="/js/render.js"></script>
   <script src="/js/classcall.js"></script>
   <script src="/js/privatecall.js"></script>
+  <script src="/js/studycam.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>

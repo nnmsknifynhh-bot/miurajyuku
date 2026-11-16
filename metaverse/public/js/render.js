@@ -234,6 +234,11 @@
       const ay = by - 50 + Math.sin(t * 4) * 2;
       ctx.beginPath(); ctx.moveTo(x - 6, ay - 6); ctx.lineTo(x + 6, ay - 6); ctx.lineTo(x, ay); ctx.fill();
     }
+    // 離席中（アプリを閉じている・別の画面を操作中）
+    if (u.away) {
+      ctx.font = '18px sans-serif';
+      ctx.fillText('💤', x - tw / 2 - 12, by - 33);
+    }
     // 個別通話中
     if (u.inPrivate) {
       ctx.font = '16px sans-serif';

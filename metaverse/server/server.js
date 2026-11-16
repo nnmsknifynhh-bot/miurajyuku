@@ -2,7 +2,7 @@
 const path = require('path');
 const http = require('http');
 const express = require('express');
-const { db, now, transaction, audit } = require('./db');
+const { db, now, transaction, audit, setSetting } = require('./db');
 const auth = require('./auth');
 const { PERMISSIONS, KEYS, STUDENT_FORBIDDEN, defaultPermissions, can, canEnterRoom } = require('./permissions');
 const realtime = require('./realtime');
@@ -37,7 +37,8 @@ app.use('/api', (req, res, next) => {
     let sameOrigin = true;
     if (origin) { try { sameOrigin = new URL(origin).host === req.headers.host; } catch { sameOrigin = false; } }
     if (!sameOrigin) return res.status(403).json({ error: '不正なリクエストです' });
-    if (!req.is('application/json')) return res.status(415).json({ error: '不正なリクエストです' });
+    const isPhoto = req.path === '/study/photo' && req.is('image/jpeg');
+    if (!req.is('application/json') && !isPhoto) return res.status(415).json({ error: '不正なリクエストです' });
   }
   next();
 });
@@ -123,7 +124,33 @@ app.post('/api/logout', (req, res) => {
 });
 
 app.get('/api/me', auth.requireAuth, (req, res) => {
-  res.json({ user: publicUser(req.user), rooms: listRooms(req.user), features: { classCall: livekit.enabled } });
+  res.json({
+    user: publicUser(req.user), rooms: listRooms(req.user),
+    features: { classCall: livekit.enabled, studyPhotos: realtime.studyPhotosEnabled() },
+  });
+});
+
+// ═════════ 自習室の見守り写真 ═════════
+// 生徒の端末から10分に1回届く写真（JPEG）。最新の1枚だけをメモリに置き、データベースには保存しない
+app.post('/api/study/photo', express.raw({ type: 'image/jpeg', limit: '300kb' }), auth.requireAuth, (req, res) => {
+  const err = realtime.storeStudyPhoto(req.user.id, req.body, {
+    brightness: req.get('X-Photo-Brightness'), fp: req.get('X-Photo-Fp'), reason: req.get('X-Photo-Reason'),
+  });
+  if (err) return bad(res, err, 400);
+  res.json({ ok: true });
+});
+// 見られるのはオーナーと「生徒への個別対応」の権限がある先生だけ
+app.get('/api/study/photo/:id', auth.requireAuth, (req, res) => {
+  if (!realtime.canViewStudyPhotos(req.user)) return bad(res, 'この写真を見る権限がありません', 403);
+  const ph = realtime.getStudyPhoto(req.params.id);
+  if (!ph) return bad(res, '写真はありません', 404);
+  res.setHeader('Content-Type', 'image/jpeg');
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(ph.buf);
+});
+app.get('/api/study/photos', auth.requireAuth, (req, res) => {
+  if (!realtime.canViewStudyPhotos(req.user)) return bad(res, 'この写真を見る権限がありません', 403);
+  res.json({ times: realtime.studyPhotoTimes() });
 });
 
 app.post('/api/me/password', auth.requireAuth, (req, res) => {
@@ -310,6 +337,19 @@ admin.post('/presence/:id/disconnect', requireOwner, (req, res) => {
   const was = realtime.kick(target.id, revoke ? '管理者によってログアウトされました' : '管理者によって接続が切断されました');
   audit(req.user.id, revoke ? 'presence.disconnected_and_revoked' : 'presence.disconnected', target.login_id, null, req.ip);
   res.json({ disconnected: was });
+});
+
+// 塾全体の設定（オーナーのみ）
+admin.get('/settings', requireOwner, (req, res) => {
+  res.json({ studyPhotos: realtime.studyPhotosEnabled() });
+});
+admin.patch('/settings', requireOwner, (req, res) => {
+  if (typeof req.body.studyPhotos === 'boolean') {
+    setSetting('study_photos', req.body.studyPhotos ? '1' : '0');
+    realtime.setStudyPhotosFeature(req.body.studyPhotos);
+    audit(req.user.id, 'settings.study_photos', req.body.studyPhotos ? 'on' : 'off', null, req.ip);
+  }
+  res.json({ studyPhotos: realtime.studyPhotosEnabled() });
 });
 
 admin.get('/logs', requireOwner, (req, res) => {

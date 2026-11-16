@@ -202,6 +202,23 @@
     let rooms;
     try { rooms = (await api('GET', '/api/admin/rooms')).rooms; } catch (e) { return toast(e.message); }
     const box = $('#room-list'); box.textContent = '';
+    if (me.role === 'owner') {
+      let cur = false;
+      try { cur = (await api('GET', '/api/admin/settings')).studyPhotos; } catch (e) {}
+      const card = el('div', 'room-box');
+      card.append(el('h3', null, '📷 自習室の見守り写真'));
+      card.append(el('div', 'muted', '自習室にいる生徒のカメラから、7〜13分おきに写真が届きます（先生とオーナーだけが見られます）。写真は最新の1枚だけで、データベースには保存せず、自習室を出ると消えます。オンにする前に、保護者と生徒の同意を取ってください。'));
+      const row = el('div', 'cap-row');
+      const b = el('button', 'btn small' + (cur ? ' danger' : ''), cur ? 'オフにする' : 'オンにする');
+      row.append(el('b', null, cur ? '現在：オン' : '現在：オフ'), b);
+      b.onclick = async () => {
+        if (!cur && !confirm('見守り写真をオンにしますか？\n保護者と生徒の同意を取っていることを確認してください。')) return;
+        try { await api('PATCH', '/api/admin/settings', { studyPhotos: !cur }); toast(!cur ? '見守り写真をオンにしました' : '見守り写真をオフにしました'); loadRooms(); }
+        catch (e) { toast(e.message); }
+      };
+      card.append(row);
+      box.append(card);
+    }
     for (const r of rooms) {
       const card = el('div', 'room-box');
       card.append(el('h3', null, (r.type === 'study' ? '📚 ' : '🏫 ') + r.name));
@@ -291,7 +308,7 @@
     'login.success': 'ログイン', 'login.failed': 'ログイン失敗', 'setup.owner_created': '初期セットアップ',
     'user.created': 'ユーザー作成', 'user.updated': 'ユーザー編集', 'user.sessions_revoked': '強制ログアウト',
     'user.password_changed_self': 'パスワード変更（本人）', 'room.capacity_changed': '定員の変更',
-    'presence.disconnected': '接続の切断', 'private.invited': '個別通話の呼び出し', 'private.started': '個別通話を開始', 'private.ended': '個別通話を終了', 'class.started': '授業（通話）を開始', 'class.ended': '授業（通話）を終了', 'presence.disconnected_and_revoked': '切断＋ログアウト',
+    'presence.disconnected': '接続の切断', 'settings.study_photos': '見守り写真の設定', 'private.invited': '個別通話の呼び出し', 'private.started': '個別通話を開始', 'private.ended': '個別通話を終了', 'class.started': '授業（通話）を開始', 'class.ended': '授業（通話）を終了', 'presence.disconnected_and_revoked': '切断＋ログアウト',
   };
   async function loadLogs() {
     let logs;

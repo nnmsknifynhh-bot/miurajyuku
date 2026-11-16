@@ -62,6 +62,12 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 
+-- 塾全体の設定（例：自習室の見守り写真のオン/オフ）
+CREATE TABLE IF NOT EXISTS settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
 -- 操作ログ（ログイン・管理操作）
 CREATE TABLE IF NOT EXISTS audit_logs (
   id        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -110,4 +116,12 @@ function pruneAuditLogs() {
 pruneAuditLogs();
 setInterval(pruneAuditLogs, 24 * 3600e3).unref();
 
-module.exports = { db, now, transaction, audit, pruneAuditLogs, DB_PATH, AUDIT_RETENTION_DAYS };
+function getSetting(key, def = null) {
+  const r = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
+  return r ? r.value : def;
+}
+function setSetting(key, value) {
+  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, String(value));
+}
+
+module.exports = { db, now, transaction, audit, pruneAuditLogs, getSetting, setSetting, DB_PATH, AUDIT_RETENTION_DAYS };
