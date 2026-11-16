@@ -168,3 +168,11 @@ body:not(.is-student) .student-only, body:not(.is-staff) .staff-only { display: 
 .muted { color: var(--muted); font-size: 13px; margin: 0; }
 .study-card .topic { font-size: 13px; font-weight: 700; color: #6b4e00; background: #fff6d6; border-radius: 8px; padding: 2px 8px; display: inline-block; margin: 2px 0; }
 .menu-ver { display: block; padding: 6px 14px 4px; color: var(--muted); font-size: 12px; }
+
+/* 小さい画面：下のボタンが5個並んでも文字がはみ出さないように */
+@media (max-width: 400px) {
+  .hud-bottom { gap: 5px; padding: 0 6px; }
+  .big-btn { padding: 4px 2px; }
+  .big-btn span { font-size: 23px; }
+  .big-btn b { font-size: 11px; letter-spacing: -0.03em; }
+}

@@ -256,7 +256,7 @@
     // 勉強内容の吹き出し（自習室）
     let topicH = 0;
     if (u.topic) {
-      const text = '📝 ' + u.topic;
+      const text = (u.role === 'student' ? '📝 ' : '💬 ') + u.topic;
       ctx.font = 'bold 12px sans-serif';
       const bw = Math.min(200, ctx.measureText(text).width + 16), bh = 22, top = by - 70;
       ctx.fillStyle = '#fffbea'; ctx.strokeStyle = '#e8c766'; ctx.lineWidth = 1.5;

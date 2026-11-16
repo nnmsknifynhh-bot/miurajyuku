@@ -62,6 +62,12 @@ const DEVICES = ['iPhone SE', 'iPhone 13', 'iPhone 15 Pro Max', 'Pixel 7', 'Gala
         const ox = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left), oy = Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top);
         if (ox > 2 && oy > 2) out.push(`${na} と ${nb} が重なっている`);
       }
+      // ボタンの文字がはみ出していないか
+      for (const b of document.querySelectorAll('.hud-bottom .big-btn b')) {
+        if (!vis(b.parentElement)) continue;
+        const rb = b.getBoundingClientRect(), rp = b.parentElement.getBoundingClientRect();
+        if (rb.left < rp.left - 1 || rb.right > rp.right + 1) out.push(`ボタンの文字がはみ出し: ${b.textContent}`);
+      }
       for (const e of document.querySelectorAll('.hud-bottom .big-btn, #class-bar button, .zoom button, .me-btn')) {
         if (!vis(e)) continue;
         const r = e.getBoundingClientRect();

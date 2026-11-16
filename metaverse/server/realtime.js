@@ -191,10 +191,7 @@ function endCall(call, reason, actorId) {
 function setRoom(p, roomId) {
   if (p.room === roomId) return;
   if (p.hand) lowerHand(p);
-  if (p.room === 'study') {
-    clearStudyPhoto(p);
-    if (p.topic) { p.topic = null; io.emit('user-updated', { id: p.id, topic: null }); } // 自習室を出たら吹き出しも消す
-  }
+  if (p.room === 'study') clearStudyPhoto(p);
   if (p.room) leaveClassRoom(p, p.room, 'moved');
   p.room = roomId;
   io.emit('user-updated', { id: p.id, room: roomId });
@@ -510,17 +507,15 @@ function attach(httpServer) {
       ack({ ok: true });
     });
 
-    // ── 自習室：何を勉強しているかの吹き出し ──
+    // ── 吹き出し（全員・どの部屋でも。自分で消すか、切断するまで表示） ──
     socket.on('study-topic', (d, ack) => {
       if (typeof ack !== 'function') ack = () => {};
-      if (p.user.role !== 'student') return ack({ ok: false, error: '生徒の機能です' });
-      if (p.room !== 'study') return ack({ ok: false, error: '自習室に入ってから書いてね' });
       const text = String((d && d.text) || '').replace(/[\u0000-\u001f\u007f<>]/g, '').trim().slice(0, 24);
       p.topic = text || null;
       io.emit('user-updated', { id: p.id, topic: p.topic });
       ack({ ok: true, topic: p.topic });
     });
-    // 先生が吹き出しを消す（ふさわしくない内容など）
+    // 先生がほかの人の吹き出しを消す（ふさわしくない内容など）
     socket.on('study-topic-clear', (targetId, ack) => {
       if (typeof ack !== 'function') ack = () => {};
       if (!isStaff(p) || !can(p.user, 'handle_students')) return ack({ ok: false, error: 'この操作は許可されていません' });

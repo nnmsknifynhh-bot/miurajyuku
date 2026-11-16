@@ -262,17 +262,26 @@
   function updateAll() { updatePlace(true); updateButtons(); renderPanel(); if (state.call) state.call.sync(); if (state.sc) state.sc.sync(); }
 
   // ── 自習室：勉強内容の吹き出し ──
+  // 生徒：教科を選んで続けて書く／先生・オーナー：よく使う文をそのまま使う
   const SUBJECTS = ['国語', '数学', '算数', '英語', '理科', '社会', '宿題', 'テスト勉強'];
+  const STAFF_PRESETS = ['質問受付中', '授業準備中', '面談中', '休憩中', 'すぐ戻ります'];
   function openTopic() {
     const chips = $('#topic-chips'); chips.textContent = '';
+    const student = state.user.role === 'student';
+    $('#topic-title').textContent = student && state.me.room === 'study' ? '✏️ なにを勉強する？' : '💬 吹き出しに書く';
     let saved = '';
     try { saved = localStorage.getItem('juku-topic-' + state.user.id) || ''; } catch (e) {}
     $('#topic-input').value = state.me.topic || saved;
-    for (const s of SUBJECTS) {
+    $('#topic-input').placeholder = student ? '例：数学　連立方程式' : '例：質問受付中です';
+    for (const s of (student ? SUBJECTS : STAFF_PRESETS)) {
       const b = el('button', null, s); b.type = 'button';
       b.onclick = () => {
-        const cur = $('#topic-input').value.replace(new RegExp('^(' + SUBJECTS.join('|') + ')[：:　 ]*'), '');
-        $('#topic-input').value = (s + '　' + cur).slice(0, 24).trimEnd() + (cur ? '' : '　');
+        if (student) {
+          const cur = $('#topic-input').value.replace(new RegExp('^(' + SUBJECTS.join('|') + ')[：:　 ]*'), '');
+          $('#topic-input').value = (s + '　' + cur).slice(0, 24).trimEnd() + (cur ? '' : '　');
+        } else {
+          $('#topic-input').value = s;
+        }
         $('#topic-input').focus();
         chips.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
       };
@@ -333,13 +342,13 @@
     $('#btn-sit').classList.toggle('on', !!(me && me.seat));
     $('#hand-label').textContent = me && me.hand ? '手をおろす' : '手をあげる';
     // 自習室では「手をあげる」の代わりに「勉強内容」ボタン
+    // 自習室では挙手を使わないので「手をあげる」を隠す（吹き出しボタンはどこでも表示）
     const inStudy = !!(me && me.room === 'study');
     $('#btn-hand').hidden = inStudy;
-    $('#btn-topic').hidden = !inStudy;
     $('#btn-topic').classList.toggle('on', !!(me && me.topic));
     if (inStudy && !me.topic && !state.topicHinted && state.user && state.user.role === 'student') {
       state.topicHinted = true;
-      setTimeout(() => toast('「✏️ 勉強内容」で、なにを勉強するか吹き出しに書けます', 5000), 1500);
+      setTimeout(() => toast('「💬 吹き出し」で、なにを勉強するか書けます', 5000), 1500);
     }
     if (!inStudy) state.topicHinted = false;
     $('#btn-hand').classList.toggle('hand-on', !!(me && me.hand));
