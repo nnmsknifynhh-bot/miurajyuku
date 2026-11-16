@@ -525,6 +525,7 @@ function attach(httpServer) {
       if (Date.now() - (t.lastPhotoRequestAt || 0) < 30_000) return ack({ ok: false, error: '30秒ほど待ってからもう一度押してください' });
       t.lastPhotoRequestAt = Date.now(); // 連打防止（30秒に1回）
       t.photoRequestedAt = Date.now();   // 未使用の撮影リクエスト（1回使うと消える）
+      t.photoRequestedBy = p.id;         // 結果（届いた／届かなかった）を知らせる相手
       t.socket.emit('take-photo');
       ack({ ok: true });
     });
@@ -536,6 +537,14 @@ function attach(httpServer) {
       p.studyCam = on;
       io.emit('user-updated', { id: p.id, studyCam: on });
       if (!on) { if (studyPhotos.delete(p.id)) notifyStudyViewers({ id: p.id, at: null }); }
+    });
+
+    // 生徒の端末で「今すぐ撮る」に失敗したとき、頼んだ先生に知らせる
+    socket.on('study-photo-failed', (d) => {
+      const by = p.photoRequestedBy && online.get(p.photoRequestedBy);
+      if (!by || !p.photoRequestedAt) return;
+      p.photoRequestedAt = 0;
+      by.socket.emit('study-photo-result', { id: p.id, name: p.user.display_name, ok: false, reason: String((d && d.reason) || '').slice(0, 60) });
     });
 
     socket.on('disconnect', () => {
@@ -640,7 +649,11 @@ function storeStudyPhoto(userId, buf, meta = {}) {
   }
   const at = Date.now();
   const reason = requested && meta.reason === 'request' ? 'request' : 'auto';
-  if (reason === 'request') p.photoRequestedAt = 0;
+  if (reason === 'request') {
+    p.photoRequestedAt = 0;
+    const by = p.photoRequestedBy && online.get(p.photoRequestedBy);
+    if (by) by.socket.emit('study-photo-result', { id: p.id, name: p.user.display_name, ok: true });
+  }
   studyPhotos.set(p.id, { buf, at, hash, fp, still, reason, dark: brightness !== null && brightness < 25 });
   if (!p.studyCam) { p.studyCam = true; io.emit('user-updated', { id: p.id, studyCam: true }); }
   notifyStudyViewers({ id: p.id, at });

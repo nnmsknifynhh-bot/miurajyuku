@@ -65,7 +65,12 @@
     async function capture(reason) {
       if (!sc.stream) return;
       const v = $('#sc-preview');
-      if (!v.videoWidth) return;
+      // 映像が一時停止していたら（スマホで画面を切り替えたあとなど）再生し直してから撮る
+      if (v.paused || !v.videoWidth) {
+        try { await v.play(); } catch (e) {}
+        await new Promise(r => setTimeout(r, 800));
+      }
+      if (!v.videoWidth) { socket.emit('study-photo-failed', { reason: 'カメラの映像が止まっています' }); return; }
       const w = 480, h = Math.round(v.videoHeight / v.videoWidth * w);
       const c = document.createElement('canvas'); c.width = w; c.height = h;
       const g = c.getContext('2d');
@@ -89,10 +94,20 @@
           headers: { 'Content-Type': 'image/jpeg', 'X-Photo-Brightness': String(Math.round(avg)), 'X-Photo-Fp': fp, 'X-Photo-Reason': reason },
         });
         if (res.ok) { sc.lastAt = Date.now(); render(); }
-      } catch (e) { /* 通信できないときは次の機会に */ }
+        else if (reason === 'request') {
+          const d = await res.json().catch(() => ({}));
+          socket.emit('study-photo-failed', { reason: d.error || '送信できませんでした' });
+        }
+      } catch (e) { if (reason === 'request') socket.emit('study-photo-failed', { reason: '通信できませんでした' }); }
     }
 
     socket.on('take-photo', () => { capture('request'); });
+    // 通信が切れて再接続したとき、カメラがオンであることをサーバーに伝え直す
+    socket.on('connect', () => { if (sc.stream) socket.emit('study-camera', { on: true }); });
+    // 画面に戻ってきたとき、映像が止まっていたら再生し直す
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && sc.stream) { const v = $('#sc-preview'); v.play().catch(() => {}); }
+    });
 
     function render() {
       const card = $('#sc-card'), badge = $('#sc-badge');

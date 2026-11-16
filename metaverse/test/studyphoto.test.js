@@ -126,6 +126,25 @@ test('ずる対策：先生の「今すぐ撮る」は生徒の端末に届く�
   assert.equal((await ask(U.tch1.c, 'study-photo-request', { studentId: U.stu1.id })).ok, false, '30秒に1回まで');
 });
 
+test('「今すぐ撮る」の結果（届いた／撮れなかった）が先生に知らされる', async () => {
+  await sleep(31000 - 0); // 30秒の連打制限が明けるのを待つ
+  assert.equal((await ask(U.tch1.c, 'study-photo-request', { studentId: U.stu1.id })).ok, true);
+  await sleep(1100);
+  assert.equal((await up(U.stu1.cookie, jpeg(), { reason: 'request' })).status, 200);
+  await sleep(80);
+  const okEv = [...U.tch1.c.events].reverse().find(e => e.ev === 'study-photo-result');
+  assert.equal(okEv.d.ok, true);
+});
+
+test('生徒の通信が切れて再接続しても、カメラがオンなら「今すぐ撮る」が使える', async () => {
+  U.stu1.c.s.disconnect();
+  await sleep(150);
+  U.stu1.c = await connect(U.stu1.cookie);         // 自習室に戻る（元の場所）
+  U.stu1.c.s.emit('study-camera', { on: true });    // 画面側が再接続時に送り直す
+  await sleep(100);
+  assert.ok(U.tch1.c.events.some(e => e.ev === 'user-updated' && e.d.id === U.stu1.id && e.d.studyCam === true));
+});
+
 test('離席（アプリを閉じた・別の画面）は先生にも伝わる', async () => {
   U.stu1.c.s.emit('away', { away: 'hidden' }); await sleep(80);
   assert.ok(U.tch1.c.events.some(e => e.ev === 'user-updated' && e.d.id === U.stu1.id && e.d.away === 'hidden'));

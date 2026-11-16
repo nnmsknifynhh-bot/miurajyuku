@@ -48,6 +48,11 @@
     state.sc = window.StudyCam.create({ socket, getState: () => state, toast });
     socket.on('features', (f) => { state.studyPhotos = !!f.studyPhotos; updateAll(); });
     socket.on('study-photo', ({ id, at }) => { refreshPhotoMeta(); void id; void at; });
+    socket.on('study-photo-result', ({ id, name, ok, reason }) => {
+      clearTimeout(photoWait[id]);
+      toast(ok ? `📸 ${name}さんの写真が届きました` : `${name}さんの写真を撮れませんでした（${reason || '理由不明'}）`, 5000);
+      refreshPhotoMeta();
+    });
     socket.on('connect', () => reportAway());
     $('#conn').hidden = false;
 
@@ -376,7 +381,13 @@
       info.append(st);
       if (u.studyCam) {
         const b = el('button', 'btn small secondary', '📸 今すぐ撮る');
-        b.onclick = () => state.socket.emit('study-photo-request', { studentId: u.id }, (r) => toast(r && r.ok ? `${u.name}さんの写真を撮っています…` : ((r && r.error) || 'できませんでした')));
+        b.onclick = () => state.socket.emit('study-photo-request', { studentId: u.id }, (r) => {
+          if (!r || !r.ok) return toast((r && r.error) || 'できませんでした');
+          toast(`${u.name}さんの写真を撮っています…`);
+          // 20秒たっても届かなければ知らせる
+          clearTimeout(photoWait[u.id]);
+          photoWait[u.id] = setTimeout(() => toast(`${u.name}さんの写真が届きませんでした。生徒のアプリが閉じているか、スマホの画面が消えている可能性があります`, 6000), 20000);
+        });
         info.append(b);
       }
       card.append(thumb, info);
@@ -385,6 +396,7 @@
     box.append(el('p', 'panel-note', '写真は7〜13分おきのランダムな時間に届きます（生徒には撮影の時間は分かりません）。写真は最新の1枚だけで、生徒が自習室を出ると消えます。'));
   }
   $('#sc-photo-close').onclick = () => $('#sc-photo-dialog').close();
+  const photoWait = {};
 
   function renderPanel() {
     if (!isStaff() || !state.me) return;
