@@ -1,5 +1,5 @@
 // オフライン時の表示用キャッシュ。API は常にネットワークから取得し、保存しない。
-const CACHE = 'juku-v9';
+const CACHE = 'juku-v10';
 const ASSETS = [
   '/', '/app', '/admin', '/css/common.css', '/css/login.css', '/css/app.css', '/css/admin.css',
   '/js/api.js', '/js/login.js', '/js/app.js', '/js/render.js', '/js/admin.js', '/js/classcall.js', '/js/privatecall.js', '/js/studycam.js', '/shared/map.js',
@@ -21,4 +21,22 @@ self.addEventListener('fetch', (e) => {
       return res;
     }).catch(() => caches.match(e.request))
   );
+});
+
+// ── プッシュ通知（アプリを閉じていても届く） ──
+self.addEventListener('push', (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (err) { d = { title: e.data && e.data.text() }; }
+  e.waitUntil(self.registration.showNotification(d.title || '三浦塾 オンライン教室', {
+    body: d.body || '', tag: d.tag || undefined, renotify: !!d.tag,
+    icon: '/icons/icon-192.png', badge: '/icons/icon-192.png', data: { url: d.url || '/app' },
+  }));
+});
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || '/app';
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+    for (const c of list) if (new URL(c.url).pathname === url && 'focus' in c) return c.focus();
+    return self.clients.openWindow(url);
+  }));
 });

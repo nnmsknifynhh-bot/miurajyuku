@@ -9,6 +9,7 @@ const SM = require('../public/shared/map.js');
 const auth = require('./auth');
 const { db, now, audit, getSetting } = require('./db');
 const livekit = require('./livekit');
+const notify = require('./notify');
 const { can, canEnterRoom } = require('./permissions');
 
 const T = SM.TILE;
@@ -18,6 +19,8 @@ const ROOM_TYPES = new Set(['classroom', 'study']);
 let io = null;
 const online = new Map();  // userId -> presence
 const lastPos = new Map(); // userId -> { x, y }（再接続時に元の場所へ）
+const lastOffline = new Map(); // userId -> 切断した時刻（すぐ入り直したときは入室の通知をしない）
+const REJOIN_QUIET_MS = Number(process.env.REJOIN_QUIET_MS || 10 * 60_000);
 
 const getRooms = () => db.prepare('SELECT id, name, type, capacity FROM rooms ORDER BY sort_order').all();
 const getRoom = (id) => db.prepare('SELECT id, name, type, capacity FROM rooms WHERE id = ?').get(id);
@@ -272,6 +275,13 @@ function attach(httpServer) {
     if (myClass && myClass.teacherId === p.id) { clearTimeout(myClass.graceTimer); myClass.graceTimer = null; }
     online.set(p.id, p);
     if (isStaff(p)) socket.join('staff');
+
+    // 生徒が「来た」ときだけ、オーナー・先生に通知（10分以内の入り直しは通知しない）
+    if (user.role === 'student') {
+      const off = lastOffline.get(p.id);
+      const quiet = old || (off && Date.now() - off < REJOIN_QUIET_MS);
+      if (!quiet) notify.studentArrived({ id: p.id, name: user.display_name }, online).catch(e => console.error('入室通知に失敗:', e.message));
+    }
 
     socket.emit('init', {
       me: pub(p), users: [...online.values()].filter(o => o !== p).map(pub), rooms: roomCounts(), reactions: REACTIONS,
@@ -573,6 +583,7 @@ function attach(httpServer) {
       if (p.callId) endCall(callOf(p), `${p.user.display_name}${isStaff(p) ? '先生' : 'さん'}の接続が切れたため、個別通話を終了しました`);
       if (p.room) leaveClassRoom(p, p.room, 'disconnected');
       lastPos.set(p.id, { x: p.x, y: p.y });
+      lastOffline.set(p.id, Date.now());
       online.delete(p.id);
       pendingMoves.delete(p.id);
       io.emit('user-left', { id: p.id });
@@ -601,6 +612,7 @@ function kickPresence(p, reason, mode = 'disconnected') {
     if (p.callId) endCall(callOf(p), `${p.user.display_name}${isStaff(p) ? '先生' : 'さん'}の接続が切れたため、個別通話を終了しました`);
     if (p.room) leaveClassRoom(p, p.room, mode);
     lastPos.set(p.id, { x: p.x, y: p.y });
+    lastOffline.set(p.id, Date.now());
     online.delete(p.id);
     if (io) { io.emit('user-left', { id: p.id }); broadcastRooms(); }
   }
@@ -710,7 +722,7 @@ function presence() {
   }));
 }
 
-function _reset() { online.clear(); lastPos.clear(); calls.clear(); studyPhotos.clear(); }
+function _reset() { online.clear(); lastPos.clear(); lastOffline.clear(); calls.clear(); studyPhotos.clear(); }
 
 module.exports = {
   storeStudyPhoto, getStudyPhoto, studyPhotoTimes, canViewStudyPhotos, setStudyPhotosFeature, studyPhotosEnabled,

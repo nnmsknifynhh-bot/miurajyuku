@@ -28,6 +28,25 @@
   </section>
   <div id="lk-audio" hidden></div>
 
+  <!-- 入室の通知の設定（先生・オーナー） -->
+  <dialog id="notify-dialog">
+    <div class="dialog-body">
+      <h2>🔔 入室の通知</h2>
+      <p class="muted">生徒がアプリに入ったときに知らせます（10分以内の入り直しは知らせません）。</p>
+      <label class="nt-row"><input type="checkbox" id="nt-on"> <span><b>入室の通知を受け取る</b><small>アプリを開いているときは、画面の表示とチャイムで知らせます</small></span></label>
+      <div class="nt-box">
+        <b>アプリを閉じていても通知を受け取る（この端末）</b>
+        <p class="muted" id="nt-status"></p>
+        <div class="nt-actions">
+          <button class="btn small" id="nt-sub">この端末で受け取る</button>
+          <button class="btn small secondary" id="nt-test" hidden>テスト通知を送る</button>
+          <button class="btn small secondary" id="nt-unsub" hidden>この端末では受け取らない</button>
+        </div>
+      </div>
+      <div class="dialog-actions"><button class="btn secondary" id="nt-close">とじる</button></div>
+    </div>
+  </dialog>
+
   <!-- 自習室：勉強内容の吹き出し -->
   <dialog id="topic-dialog">
     <form class="dialog-body" id="topic-form">
@@ -92,6 +111,7 @@
 
   <nav class="me-menu" id="me-menu" hidden>
     <a href="/admin" id="menu-admin" hidden>⚙️ 管理画面</a>
+    <button id="menu-notify" class="staff-only">🔔 入室の通知</button>
     <button id="menu-sound">🔈 音のテスト</button>
     <button id="menu-password">🔑 パスワードを変える</button>
     <button id="menu-logout">🚪 ログアウト</button>

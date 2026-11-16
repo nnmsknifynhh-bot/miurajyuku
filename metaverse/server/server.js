@@ -7,6 +7,7 @@ const auth = require('./auth');
 const { PERMISSIONS, KEYS, STUDENT_FORBIDDEN, defaultPermissions, can, canEnterRoom } = require('./permissions');
 const realtime = require('./realtime');
 const livekit = require('./livekit');
+const notify = require('./notify');
 
 const PORT = Number(process.env.PORT || 3000);
 const app = express();
@@ -134,6 +135,30 @@ app.get('/api/me', auth.requireAuth, (req, res) => {
     user: publicUser(req.user), rooms: listRooms(req.user),
     features: { classCall: livekit.enabled, studyPhotos: realtime.studyPhotosEnabled() },
   });
+});
+
+// ═════════ 入室の通知（オーナー・先生） ═════════
+const requireStaff = (req, res, next) => (notify.isStaffRole(req.user.role) ? next() : bad(res, 'この機能は先生とオーナー用です', 403));
+app.get('/api/notify', auth.requireAuth, requireStaff, (req, res) => {
+  res.json({ prefs: notify.getPrefs(req.user.id), publicKey: notify.publicKey(), devices: notify.deviceCount(req.user.id) });
+});
+app.patch('/api/notify', auth.requireAuth, requireStaff, (req, res) => {
+  res.json({ prefs: notify.setPrefs(req.user.id, { arrivals: !!req.body.arrivals }) });
+});
+app.post('/api/notify/subscribe', auth.requireAuth, requireStaff, (req, res) => {
+  const err = notify.subscribe(req.user.id, req.body.subscription, req.body.device);
+  if (err) return bad(res, err);
+  audit(req.user.id, 'notify.subscribed', req.user.login_id, { device: String(req.body.device || '').slice(0, 60) }, req.ip);
+  res.json({ ok: true, devices: notify.deviceCount(req.user.id) });
+});
+app.post('/api/notify/unsubscribe', auth.requireAuth, requireStaff, (req, res) => {
+  notify.unsubscribe(req.user.id, req.body.endpoint);
+  res.json({ ok: true, devices: notify.deviceCount(req.user.id) });
+});
+// テスト通知（この端末に届くか確かめる）
+app.post('/api/notify/test', auth.requireAuth, requireStaff, async (req, res) => {
+  const sent = await notify.pushTo(req.user.id, { title: '🔔 テスト通知', body: '通知はこのように届きます（三浦塾 オンライン教室）', tag: 'test', url: '/app' });
+  res.json({ sent });
 });
 
 // ═════════ 自習室の見守り写真 ═════════

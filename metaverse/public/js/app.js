@@ -47,6 +47,10 @@
     state.pc = window.PrivateCall.create({ socket, getState: () => state, toast });
     state.sc = window.StudyCam.create({ socket, getState: () => state, toast });
     socket.on('features', (f) => { state.studyPhotos = !!f.studyPhotos; updateAll(); });
+    socket.on('student-arrived', ({ name, time }) => {
+      toast(`🔔 ${name}さんが入室しました（${time}）`, 6000);
+      chime();
+    });
     socket.on('topic-cleared', ({ by }) => { state.me.topic = null; updateButtons(); toast(`${by}先生が吹き出しを消しました`); });
     socket.on('study-photo', ({ id, at }) => { refreshPhotoMeta(); void id; void at; });
     socket.on('study-photo-result', ({ id, name, ok, reason }) => {
@@ -719,6 +723,72 @@
       $('#pw-dialog').close(); toast('パスワードを変更しました');
     } catch (err) { $('#pw-error').textContent = err.message; }
   });
+
+  // ───────── 入室の通知の設定（先生・オーナー） ─────────
+  const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const b64ToBytes = (b64) => { const s = atob((b64 + '='.repeat((4 - b64.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(s, c => c.charCodeAt(0)); };
+  let notifyInfo = null;
+  async function currentSub() {
+    if (!pushSupported()) return null;
+    const reg = await navigator.serviceWorker.ready;
+    return reg.pushManager.getSubscription();
+  }
+  async function renderNotify() {
+    notifyInfo = await api('GET', '/api/notify');
+    $('#nt-on').checked = notifyInfo.prefs.arrivals;
+    const st = $('#nt-status');
+    const sub = await currentSub().catch(() => null);
+    $('#nt-sub').hidden = !!sub; $('#nt-unsub').hidden = !sub; $('#nt-test').hidden = !sub;
+    if (!pushSupported()) {
+      st.textContent = isIOS && !isStandalone()
+        ? 'iPhone・iPad では、Safari の共有ボタン →「ホーム画面に追加」をして、ホーム画面のアイコンから開くと使えます。'
+        : 'このブラウザはプッシュ通知に対応していません。';
+      $('#nt-sub').hidden = true;
+    } else if (Notification.permission === 'denied') {
+      st.textContent = '通知がブロックされています。ブラウザ（または端末）の設定で、このサイトの通知を「許可」にしてください。';
+      $('#nt-sub').hidden = true;
+    } else {
+      st.textContent = sub ? '✅ この端末で受け取ります。' : 'この端末ではまだ受け取りません。';
+    }
+    if (notifyInfo.devices) st.textContent += `（登録している端末：${notifyInfo.devices}台）`;
+  }
+  $('#menu-notify').onclick = async () => {
+    $('#me-menu').hidden = true;
+    try { await renderNotify(); $('#notify-dialog').showModal(); } catch (e) { toast(e.message); }
+  };
+  $('#nt-close').onclick = () => $('#notify-dialog').close();
+  $('#nt-on').onchange = async () => {
+    try { await api('PATCH', '/api/notify', { arrivals: $('#nt-on').checked }); toast($('#nt-on').checked ? '入室の通知をオンにしました' : '入室の通知をオフにしました'); }
+    catch (e) { toast(e.message); }
+  };
+  $('#nt-sub').onclick = async () => {
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') { toast('通知が許可されませんでした'); return renderNotify(); }
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(notifyInfo.publicKey) });
+      const device = (isIOS ? 'iPhone/iPad' : /Android/.test(navigator.userAgent) ? 'Android' : /Mac/.test(navigator.userAgent) ? 'Mac' : /Windows/.test(navigator.userAgent) ? 'Windows' : 'その他');
+      await api('POST', '/api/notify/subscribe', { subscription: sub.toJSON(), device });
+      toast('この端末で通知を受け取ります。「テスト通知を送る」で確かめられます');
+    } catch (e) { toast('通知を登録できませんでした：' + (e.message || '')); }
+    renderNotify();
+  };
+  $('#nt-unsub').onclick = async () => {
+    try {
+      const sub = await currentSub();
+      if (sub) { await api('POST', '/api/notify/unsubscribe', { endpoint: sub.endpoint }); await sub.unsubscribe(); }
+      toast('この端末では通知を受け取りません');
+    } catch (e) { toast(e.message); }
+    renderNotify();
+  };
+  $('#nt-test').onclick = async () => {
+    try {
+      const r = await api('POST', '/api/notify/test');
+      toast(r.sent ? 'テスト通知を送りました。数秒で届きます' : '送れませんでした。もう一度「この端末で受け取る」を押してください', 5000);
+    } catch (e) { toast(e.message); }
+  };
 
   // 音のテスト（スピーカー・イヤホンから音が出るか、生徒が自分で確認できる）
   $('#menu-sound').onclick = () => {
