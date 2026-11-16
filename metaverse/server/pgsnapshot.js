@@ -12,7 +12,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const DATABASE_URL = (process.env.DATABASE_URL || '').trim();
+// 貼り付けのときに入りがちな余分な文字（前後の空白・引用符・「DATABASE_URL=」）を取り除く
+const DATABASE_URL = (process.env.DATABASE_URL || '').trim().replace(/^DATABASE_URL\s*=\s*/i, '').replace(/^["']|["']$/g, '').trim();
 const enabled = !!DATABASE_URL;
 const SAVE_INTERVAL_MS = Number(process.env.SNAPSHOT_INTERVAL_MS || 3000);
 
