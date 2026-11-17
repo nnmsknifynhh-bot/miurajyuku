@@ -60,6 +60,12 @@ CREATE TABLE IF NOT EXISTS report_links (
 );
 `);
 if (!db.prepare('PRAGMA table_info(users)').all().some(c => c.name === 'grade')) db.exec('ALTER TABLE users ADD COLUMN grade TEXT');
+// 誕生日（月-日だけ。生まれた年は持たない）と、ほかの生徒にも見せるか
+if (!db.prepare('PRAGMA table_info(users)').all().some(c => c.name === 'birthday')) {
+  db.exec("ALTER TABLE users ADD COLUMN birthday TEXT");
+  db.exec("ALTER TABLE users ADD COLUMN birthday_public INTEGER NOT NULL DEFAULT 1");
+}
+db.exec(`CREATE TABLE IF NOT EXISTS birthday_cards (user_id INTEGER NOT NULL, year INTEGER NOT NULL, shown_at TEXT NOT NULL, PRIMARY KEY (user_id, year))`);
 // 着せかえの場所を増やした（洋服・手に持つもの・着ぐるみ）
 for (const col of ['clothes', 'hand', 'costume']) {
   if (!db.prepare('PRAGMA table_info(avatar_equip)').all().some(c => c.name === col)) db.exec(`ALTER TABLE avatar_equip ADD COLUMN ${col} TEXT`);
@@ -100,6 +106,7 @@ function defaults(today = jst()) {
     stages: [0, 5, 15, 30, 50, 80], // 木の段階（平均時間・時間単位）
     dressup: { mode: 'always', periods: [] }, // 着せかえ期間：always＝いつでも / periods＝決めた期間だけ
     events: Object.fromEntries(EVENTS.map(e => [e.id, true])), // 季節の飾り（オン/オフ）
+    birthdayMessage: 'いつもがんばっているね。すてきな1年になりますように！', // 誕生日カードのひとこと
   };
 }
 
@@ -224,6 +231,11 @@ function setConfig(patch, actorId) {
       out[k] = v;
     }
     c.streakByGrade = out;
+  }
+  if (p.birthdayMessage !== undefined) {
+    const m = String(p.birthdayMessage || '').replace(/[\u0000-\u0009\u000b-\u001f<>]/g, '').trim();
+    if (!m || m.length > 100) return '誕生日カードのひとことは1〜100文字にしてください';
+    c.birthdayMessage = m;
   }
   if (p.streakMin !== undefined) { if (!int(p.streakMin, 1, 600)) return '連続自習の最低時間は1〜600分にしてください'; c.streakMin = p.streakMin; }
   if (p.minutesPerPoint !== undefined) { if (!int(p.minutesPerPoint, 1, 120)) return 'ポイントの設定は1〜120分にしてください'; c.minutesPerPoint = p.minutesPerPoint; }
@@ -420,6 +432,8 @@ const SHOP = [
   { id: 'star', slot: 'head', emoji: '🌟', name: 'スターのかんむり', price: 400 },
   { id: 'rainbow', slot: 'head', emoji: '🌈', name: 'にじのわっか', price: 600 },
   { id: 'diamond', slot: 'head', emoji: '💎', name: 'ダイヤのかざり', price: 1000 },
+  // 誕生日のプレゼント（お店では買えない。誕生日に入室するともらえる）
+  { id: 'bday_cake', slot: 'head', emoji: '🎂', name: 'バースデーケーキの帽子', price: 0, special: 'birthday' },
   // 洋服（形と色で表示）
   { id: 'uniform', slot: 'clothes', style: 'uniform', emoji: '👔', name: '制服', price: 30 },
   { id: 'parka', slot: 'clothes', style: 'parka', emoji: '🧥', name: 'パーカー', price: 30 },
@@ -509,6 +523,7 @@ function buy(userId, itemId, date = new Date()) {
   if (!dressupOpen(date)) return '今は着せかえ期間ではありません';
   if (item.months && !item.months.includes(jst(date).month)) return 'このアイテムは今は買えません（期間限定）';
   if (owned(userId).includes(itemId)) return 'もう持っています';
+  if (item.special) return 'このアイテムはお店では買えません';
   const pt = points(userId, date);
   if (pt.balance < item.price) return `ポイントが足りません（あと${item.price - pt.balance}ポイント）`;
   db.prepare('INSERT INTO shop_owned (user_id, item, year_start, price, bought_at) VALUES (?, ?, ?, ?, ?)')
@@ -535,7 +550,8 @@ function equip(userId, slot, itemId, date = new Date()) {
 function shopFor(userId, date = new Date()) {
   const month = jst(date).month;
   const have = new Set(owned(userId));
-  return SHOP.map(i => ({ ...i, owned: have.has(i.id), available: !i.months || i.months.includes(month), limited: !!i.months }));
+  return SHOP.filter(i => !i.special || have.has(i.id)) // 特別なアイテムは、もらった人にだけ見える
+    .map(i => ({ ...i, owned: have.has(i.id), available: !i.months || i.months.includes(month), limited: !!i.months }));
 }
 
 // ───────── 目標の短冊 ─────────
@@ -592,8 +608,9 @@ function forest(date = new Date(), termOverride = null) {
     const stage = stageOf(avg, c);
     const goals = term ? db.prepare(`SELECT u.display_name AS name, g.text, g.achieved FROM goals g JOIN users u ON u.id = g.user_id
       WHERE g.term_key = ? AND g.status = 'approved' AND u.is_active = 1 AND u.grade IN (${t.grades.map(() => '?').join(',')}) ORDER BY g.id`).all(term.key, ...t.grades) : [];
+    const birthday = students.some(s => { const b = birthdayInfo(s.id, date); return b && b.public; });
     return {
-      index: i, name: t.name, grades: t.grades, students: students.length, avgMinutes: Math.round(avg),
+      index: i, name: t.name, grades: t.grades, students: students.length, avgMinutes: Math.round(avg), birthday,
       stage, stageName: STAGE_NAMES[stage], nextHours: c.stages[stage + 1] ?? null,
       goals: goals.map(g => ({ name: g.name, text: g.text, achieved: !!g.achieved })),
     };
@@ -670,7 +687,42 @@ function reportData(token) {
   };
 }
 
+// ───────── 誕生日 ─────────
+const RE_MD = /^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+// '04-05' のような月-日。正しくなければ null
+function normBirthday(v) {
+  if (v == null || v === '') return null;
+  const s = String(v);
+  if (!RE_MD.test(s)) return undefined;
+  const [m, d] = s.split('-').map(Number);
+  const days = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1];
+  return d <= days ? s : undefined;
+}
+// 今日がその生徒の誕生日か（2/29生まれは、うるう年でない年は2/28に祝う）。{ public } か null
+function birthdayInfo(userId, date = new Date()) {
+  const u = db.prepare("SELECT birthday, birthday_public FROM users WHERE id = ? AND role = 'student'").get(userId);
+  if (!u || !u.birthday) return null;
+  const t = jst(date), md = t.day.slice(5);
+  const leap = (t.year % 4 === 0 && t.year % 100 !== 0) || t.year % 400 === 0;
+  const today = md === u.birthday || (u.birthday === '02-29' && !leap && md === '02-28');
+  return today ? { public: !!u.birthday_public } : null;
+}
+// 誕生日の日に1回だけ：カードを見せる印をつけ、プレゼントのアイテムをわたす。はじめてなら { gift } を返す
+function celebrateBirthday(userId, date = new Date()) {
+  if (!birthdayInfo(userId, date)) return null;
+  const year = jst(date).year;
+  const r = db.prepare('INSERT OR IGNORE INTO birthday_cards (user_id, year, shown_at) VALUES (?, ?, ?)').run(userId, year, now());
+  if (!r.changes) return null;
+  let gift = false;
+  if (!owned(userId).includes('bday_cake')) {
+    db.prepare('INSERT INTO shop_owned (user_id, item, year_start, price, bought_at) VALUES (?, ?, ?, 0, ?)').run(userId, 'bday_cake', getConfig().yearStart, now());
+    gift = true;
+  }
+  return { gift, message: getConfig().birthdayMessage };
+}
+
 module.exports = {
+  normBirthday, birthdayInfo, celebrateBirthday,
   creditGap,
   streakMinFor,
   ruleFor, WEEKDAYS,

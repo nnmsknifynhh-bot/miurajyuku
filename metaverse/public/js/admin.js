@@ -60,7 +60,7 @@
       const name = el('div', 'name', u.displayName);
       name.append(el('span', 'badge ' + u.role, ROLE_LABEL[u.role]));
       if (!u.isActive) name.append(el('span', 'badge off', '無効'));
-      const sub = [`ID: ${u.loginId}`, ...(u.role === "student" ? [`学年: ${u.grade || "未設定"}`] : []), `ログイン中の端末: ${u.activeSessions}`];
+      const sub = [`ID: ${u.loginId}`, ...(u.role === "student" ? [`学年: ${u.grade || "未設定"}`] : []), ...(u.birthday ? [`🎂 ${Number(u.birthday.slice(0, 2))}月${Number(u.birthday.slice(3))}日${u.birthdayPublic ? '' : '（先生だけ）'}`] : []), `ログイン中の端末: ${u.activeSessions}`];
       if (u.role === 'teacher') sub.push('担当: ' + (u.rooms.length ? u.rooms.map(roomName).join('・') : 'なし'));
       info.append(name, el('div', 'sub', sub.join('　')));
       const actions = el('div', 'actions');
@@ -118,11 +118,20 @@
     const gsel = $('#f-grade'); gsel.textContent = '';
     for (const gname of ['', ...meta.grades, '卒業']) { const o = el('option', null, gname || '（未設定）'); o.value = gname; gsel.append(o); }
     gsel.value = u && u.grade ? u.grade : '';
+    // 誕生日（月・日）
+    const [bm, bd] = u && u.birthday ? u.birthday.split('-') : ['', ''];
+    const msel = $('#f-bmonth'), dsel = $('#f-bday'); msel.textContent = ''; dsel.textContent = '';
+    msel.append(Object.assign(el('option', null, '—'), { value: '' })); dsel.append(Object.assign(el('option', null, '—'), { value: '' }));
+    for (let m = 1; m <= 12; m++) { const o = el('option', null, String(m)); o.value = String(m).padStart(2, '0'); msel.append(o); }
+    for (let d = 1; d <= 31; d++) { const o = el('option', null, String(d)); o.value = String(d).padStart(2, '0'); dsel.append(o); }
+    msel.value = bm; dsel.value = bd;
+    $('#f-bpublic').checked = u ? u.birthdayPublic !== false : true;
     $('#user-dialog').showModal();
   }
 
   function renderPermFields(role, u) {
     $('#grade-field').hidden = role !== 'student';
+    $('#bday-field').hidden = role !== 'student';
     const isOwner = role === 'owner';
     $('#rooms-field').hidden = role !== 'teacher';
     const rbox = $('#f-rooms'); rbox.textContent = '';
@@ -160,7 +169,13 @@
     document.querySelectorAll('#f-perms input').forEach(cb => { permissions[cb.value] = cb.checked; });
     const rooms = [...document.querySelectorAll('#f-rooms input:checked')].map(cb => cb.value);
     const body = { displayName: $('#f-name').value, avatarColor: $('#f-color').value };
-    if (role === 'student') body.grade = $('#f-grade').value || null;
+    if (role === 'student') {
+      body.grade = $('#f-grade').value || null;
+      const m = $('#f-bmonth').value, d = $('#f-bday').value;
+      if (!!m !== !!d) { $('#user-error').textContent = '誕生日は月と日の両方を選んでください（登録しないときは両方「—」）'; return; }
+      body.birthday = m ? `${m}-${d}` : null;
+      body.birthdayPublic = $('#f-bpublic').checked;
+    }
     const pw = $('#f-pw').value;
     if (role !== 'owner') { body.permissions = permissions; if (role === 'teacher') body.rooms = rooms; }
     $('#user-save').disabled = true;

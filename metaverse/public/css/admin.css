@@ -116,3 +116,7 @@ tr.kq-auto td { background: #fff8e1; }
 .gb-wd > .gb-row:first-child { flex-wrap: wrap; gap: 6px 10px; }
 .gb-slots input[type=time], .gb-wd input[type=time] { width: 112px; min-width: 0; flex: 0 1 112px; }
 .gb-wd .gb-row .gb-check { min-width: 0; white-space: nowrap; }
+.bday-row { display: flex; align-items: center; gap: 6px; }
+.bday-row select { min-height: 44px; border: 2px solid var(--line); border-radius: 10px; font-size: 16px; padding: 0 8px; width: auto; }
+#bday-field .gb-check { font-weight: 400; color: var(--text); }
+#bday-field .gb-check input { width: 22px; height: 22px; }

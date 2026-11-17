@@ -98,12 +98,12 @@ async function studentArrived(student, online) {
     if (!getPrefs(id).arrivals) continue;
     const p = online.get(id);
     if (p) {
-      p.socket.emit('student-arrived', { id: student.id, name: student.name, time });
+      p.socket.emit('student-arrived', { id: student.id, name: student.name, time, birthday: !!student.birthday });
       result.inApp++;
     } else {
       result.push += (await pushTo(id, {
-        title: `🔔 ${student.name}さんが入室しました`,
-        body: `${time}　三浦塾 オンライン教室`,
+        title: student.birthday ? `🎂 ${student.name}さんが入室しました（今日は誕生日です）` : `🔔 ${student.name}さんが入室しました`,
+        body: student.birthday ? `${time}　声をかけてお祝いしてあげてください` : `${time}　三浦塾 オンライン教室`,
         tag: 'arrival-' + student.id,
         url: '/app',
       })).sent;

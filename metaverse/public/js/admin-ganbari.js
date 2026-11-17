@@ -223,6 +223,13 @@
     saveEv.onclick = () => save({ events: Object.fromEntries(evBoxes.map(b => [b.value, b.checked])) }, '季節の飾りを保存しました');
     evSec.append(evWrap, saveEv);
 
+    // ═════ 誕生日 ═════
+    const bdSec = section('🎂 誕生日のお祝い', '誕生日は「ユーザー」タブの生徒の編集で登録します（月・日だけ）。誕生日に入室すると、お祝いカードが出て「🎂 バースデーケーキの帽子」をプレゼントします。その日は名札が金色になり🎂がつき、学年の木にもケーキが飾られます（「先生だけ」にした生徒は、先生・オーナーにだけ🎂が見えます）。先生には入室のお知らせで「今日は誕生日です」と届きます。');
+    const bdMsg = el('textarea'); bdMsg.rows = 3; bdMsg.maxLength = 100; bdMsg.value = c.birthdayMessage || '';
+    const saveBd = el('button', 'btn', 'カードのひとことを保存する');
+    saveBd.onclick = () => save({ birthdayMessage: bdMsg.value }, '誕生日カードのひとことを保存しました');
+    bdSec.append(field('お祝いカードのひとこと（100文字まで）', bdMsg), saveBd);
+
     // ═════ 生徒の自習時間 ═════
     const stSec = section('👦 生徒の自習時間', '「修正」で、日ごとの自習時間を直せます（直した値が優先されます）。');
     const stBox = el('div', 'table-wrap'); stSec.append(stBox);

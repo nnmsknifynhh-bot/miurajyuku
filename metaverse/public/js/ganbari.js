@@ -36,6 +36,7 @@
         const card = el('div', 'shop-item' + (it.id === equippedId ? ' on' : ''));
         card.append(el('div', 'emoji', it.emoji), el('div', 'nm', it.name));
         if (it.limited) card.append(el('div', 'lim', '期間限定'));
+        if (it.special === 'birthday') card.append(el('div', 'lim', '🎁 誕生日プレゼント'));
         let b;
         if (it.owned) {
           b = el('button', 'btn small' + (it.id === equippedId ? ' secondary' : ''), it.id === equippedId ? 'はずす' : 'つける');

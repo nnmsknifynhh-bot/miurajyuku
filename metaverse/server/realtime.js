@@ -45,6 +45,7 @@ function pub(p) {
     id: p.id, name: p.user.display_name, role: p.user.role, color: p.user.avatar_color,
     x: p.x, y: p.y, dir: p.dir, moving: p.moving, room: p.room, seat: p.seat, hand: p.hand, handAt: p.handAt,
     inPrivate: inActiveCall(p), away: p.away || null, studyCam: !!p.studyCam, topic: p.topic || null, today: p.today10 ?? null,
+    bday: !!(p.bday && p.bday.public), // 誕生日（ほかの生徒にも見せる設定のときだけ。先生だけの設定は staff にだけ別に送る）
     equip: equipView(p.equip), streak: p.streak || 0,
   };
 }
@@ -292,6 +293,7 @@ function attach(httpServer) {
     p.equip = ganbari.getEquip(p.id);
     p.streak = user.role === 'student' ? ganbari.streak(p.id) : 0;
     p.today10 = user.role === 'student' ? Math.floor(ganbari.dayTotal(p.id, ganbari.jst().day) / 10) * 10 : null;
+    p.bday = user.role === 'student' ? ganbari.birthdayInfo(p.id) : null;
     p.room = roomIdAt(p.x, p.y);
     // 自習中に通信が切れていた生徒：すぐもどってきたら、元の席にすわらせ、切れていた間も数える
     let gapMinutes = 0;
@@ -316,15 +318,20 @@ function attach(httpServer) {
     if (user.role === 'student') {
       const off = lastOffline.get(p.id);
       const quiet = old || (off && Date.now() - off < REJOIN_QUIET_MS);
-      if (!quiet) notify.studentArrived({ id: p.id, name: user.display_name }, online).catch(e => console.error('入室通知に失敗:', e.message));
+      if (!quiet) notify.studentArrived({ id: p.id, name: user.display_name, birthday: !!p.bday }, online).catch(e => console.error('入室通知に失敗:', e.message));
     }
 
     socket.emit('init', {
-      me: pub(p), users: [...online.values()].filter(o => o !== p).map(pub), rooms: roomCounts(), reactions: REACTIONS,
+      me: { ...pub(p), bday: !!p.bday }, users: [...online.values()].filter(o => o !== p).map(pub), rooms: roomCounts(), reactions: REACTIONS,
       classes: classState(), classCall: livekit.enabled,
     });
     if (gap && p.room === 'study' && Date.now() - gap.at <= STUDY_GAP_MS) socket.emit('study-resumed', { minutes: gapMinutes, seat: p.seat });
     socket.broadcast.emit('user-joined', pub(p));
+    // 誕生日を「先生だけ」に見せる生徒：先生・オーナーにだけ🎂を知らせる
+    if (p.bday && !p.bday.public) socket.to('staff').emit('user-updated', { id: p.id, bday: true });
+    if (isStaff(p)) for (const o of online.values()) if (o !== p && o.bday && !o.bday.public) socket.emit('user-updated', { id: o.id, bday: true });
+    // 誕生日の日にはじめて入ったら、お祝いカード（とプレゼント）
+    if (p.bday) sendBirthdayCard(p);
     broadcastRooms();
 
     const reject = (reason) => socket.emit('move-rejected', { x: p.x, y: p.y, reason: reason || null });
@@ -681,7 +688,7 @@ function attach(httpServer) {
         if (s !== p.streak) { p.streak = s; io.emit('user-updated', { id, streak: s }); }
         p.socket.emit('study-minute');
       }
-      for (const p of online.values()) updateToday(p); // 日付が変わったときも 0 にもどる
+      for (const p of online.values()) { updateToday(p); refreshBirthday(p); } // 日付が変わったときも 0 にもどる
     } catch (e) { console.error('自習時間の記録に失敗:', e.message); }
   }, Number(process.env.STUDY_TICK_MS || 60_000)).unref();
 
@@ -727,6 +734,7 @@ function refreshUser(userId) {
   if (!u || !u.is_active) return kick(p.id, 'このアカウントは使えなくなりました');
   const hadScreen = can(p.user, 'share_screen');
   p.user = { ...u, sessionTokenHash: p.tokenHash };
+  refreshBirthday(p); // 誕生日の登録・見せ方が変わったとき
   // 授業中に通話・画面共有の権限が外されたら授業を終了する
   for (const [roomId, c] of classes) {
     if (c.teacherId !== p.id) continue;
@@ -746,6 +754,26 @@ function refreshUser(userId) {
 
 function refreshRooms() { broadcastRooms(); }
 
+// 誕生日カード：その日にはじめてのときだけ（ganbari 側で1日1回に限る）
+function sendBirthdayCard(p) {
+  try {
+    const r = ganbari.celebrateBirthday(p.id);
+    if (!r) return;
+    p.socket.emit('birthday', { name: p.user.display_name, message: r.message, gift: r.gift });
+    if (r.gift) { p.equip = ganbari.getEquip(p.id); }
+  } catch (e) { console.error('誕生日のお祝いに失敗:', e.message); }
+}
+// 日付が変わったときなどに、誕生日の🎂を付けたり外したりする
+function refreshBirthday(p) {
+  if (p.user.role !== 'student') return;
+  const b = ganbari.birthdayInfo(p.id);
+  const was = p.bday ? (p.bday.public ? 'public' : 'staff') : null, now = b ? (b.public ? 'public' : 'staff') : null;
+  if (was === now) return;
+  p.bday = b;
+  if (now === 'public' || was === 'public') io.emit('user-updated', { id: p.id, bday: now === 'public' });
+  if (now === 'staff' || was === 'staff') { io.to('staff').emit('user-updated', { id: p.id, bday: now !== null }); p.socket.emit('user-updated', { id: p.id, bday: now !== null }); }
+  if (b) sendBirthdayCard(p);
+}
 // 生徒が吹き出し・スタンプを使えるか。
 // 授業中の教室では、先生が「スタンプ・吹き出しOK」にしているときだけ（個別通話中は別）。それ以外は先生と話しているときだけ
 function studentChatAllowed(p) {
@@ -861,6 +889,6 @@ function presence() {
 function _reset() { online.clear(); lastPos.clear(); lastOffline.clear(); calls.clear(); studyPhotos.clear(); }
 
 module.exports = {
-  isQuickRejoin, refreshGanbari, refreshAllGanbari, _online: online,
+  isQuickRejoin, refreshGanbari, refreshBirthday, refreshAllGanbari, _online: online,
   storeStudyPhoto, getStudyPhoto, studyPhotoTimes, canViewStudyPhotos, setStudyPhotosFeature, studyPhotosEnabled,
   attach, kick, refreshUser, refreshRooms, presence, roomCounts, classState, endClass, endCallOf, REACTIONS, _reset };

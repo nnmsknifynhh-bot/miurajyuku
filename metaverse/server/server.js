@@ -67,6 +67,7 @@ function publicUser(u) {
   return {
     id: u.id, loginId: u.login_id, displayName: u.display_name, role: u.role, avatarColor: u.avatar_color,
     isActive: u.is_active, permissions: u.permissions, rooms: u.rooms, grade: u.grade || null,
+    birthday: u.birthday || null, birthdayPublic: u.birthday_public === undefined ? true : !!u.birthday_public,
   };
 }
 function listRooms(user) {
@@ -323,11 +324,14 @@ admin.post('/users', requireOwner, (req, res) => {
   if (db.prepare('SELECT 1 FROM users WHERE login_id = ?').get(loginId)) return bad(res, 'このログインIDはすでに使われています', 409);
   const color = RE_COLOR.test(b.avatarColor || '') ? b.avatarColor : '#64b5f6';
   const grade = role === 'student' && ganbari.GRADES.includes(b.grade) ? b.grade : null;
+  const birthday = role === 'student' ? ganbari.normBirthday(b.birthday) : null;
+  if (birthday === undefined) return bad(res, '誕生日が正しくありません');
   const id = transaction(() => {
     const r = db.prepare('INSERT INTO users (login_id, display_name, role, password_hash, avatar_color, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(loginId, displayName, role, auth.hashPassword(b.password), color, now(), now());
     const id = Number(r.lastInsertRowid);
     if (grade) db.prepare('UPDATE users SET grade = ? WHERE id = ?').run(grade, id);
+    if (role === 'student') db.prepare('UPDATE users SET birthday = ?, birthday_public = ? WHERE id = ?').run(birthday, b.birthdayPublic === false ? 0 : 1, id);
     applyPermissionsAndRooms(id, role, b.permissions, b.rooms);
     return id;
   });
@@ -354,6 +358,15 @@ admin.patch('/users/:id', requireOwner, (req, res) => {
       if (target.role !== 'student') return '学年は生徒だけに設定できます';
       if (b.grade !== null && b.grade !== '卒業' && !ganbari.GRADES.includes(b.grade)) return '学年が正しくありません';
       db.prepare('UPDATE users SET grade = ? WHERE id = ?').run(b.grade, id); changes.push('grade');
+    }
+    if (b.birthday !== undefined || b.birthdayPublic !== undefined) {
+      if (target.role !== 'student') return '誕生日は生徒だけに設定できます';
+      if (b.birthday !== undefined) {
+        const bd = ganbari.normBirthday(b.birthday);
+        if (bd === undefined) return '誕生日が正しくありません';
+        db.prepare('UPDATE users SET birthday = ? WHERE id = ?').run(bd, id); changes.push('birthday');
+      }
+      if (b.birthdayPublic !== undefined) { db.prepare('UPDATE users SET birthday_public = ? WHERE id = ?').run(b.birthdayPublic ? 1 : 0, id); changes.push('birthdayPublic'); }
     }
     if (b.avatarColor !== undefined) {
       if (!RE_COLOR.test(b.avatarColor)) return '色の指定が正しくありません';

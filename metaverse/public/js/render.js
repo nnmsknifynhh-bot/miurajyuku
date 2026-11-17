@@ -343,11 +343,17 @@
     const byTag = by - ((u.equip && u.equip.head && !(u.equip.costume)) || (u.equip && u.equip.costume) ? 12 : 0);
     // 名札（連続自習の日数🔥つき）
     const tag = ROLE_TAG[u.role];
-    const label = (tag ? tag + ' ' : '') + u.name + (u.streak >= 2 ? ` 🔥${u.streak}` : '');
+    const label = (u.bday ? '🎂 ' : '') + (tag ? tag + ' ' : '') + u.name + (u.streak >= 2 ? ` 🔥${u.streak}` : '');
     ctx.font = 'bold 12px sans-serif';
     const tw = Math.min(160, ctx.measureText(label).width + 12);
     ctx.fillStyle = opts.isMe ? 'rgba(47,125,225,.95)' : TAG_BG[u.role];
+    if (u.bday) { // 誕生日：金色の名札
+      const gr = ctx.createLinearGradient(x - tw / 2, 0, x + tw / 2, 0);
+      gr.addColorStop(0, '#d4a017'); gr.addColorStop(0.5, '#f5c542'); gr.addColorStop(1, '#d4a017');
+      ctx.fillStyle = gr;
+    }
     ctx.beginPath(); ctx.roundRect(x - tw / 2, byTag - 42, tw, 17, 8.5); ctx.fill();
+    if (u.bday) { ctx.strokeStyle = '#fff6d0'; ctx.lineWidth = 1.5; ctx.stroke(); }
     ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(label, x, byTag - 33, 150);
     if (opts.isMe && !u.hand) { // 自分の目印
@@ -482,6 +488,11 @@
         ctx.restore();
       }
     });
+    // 誕生日の生徒がいる学年の木：ケーキの飾り
+    if (tree && tree.birthday) {
+      ctx.font = '18px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('🎂', cx + 26, baseY - 4 + Math.sin(t * 2) * 1.2);
+    }
     // 名札
     if (tree && opts.label !== false) {
       const label = `${tree.name}・${tree.stageName}`;

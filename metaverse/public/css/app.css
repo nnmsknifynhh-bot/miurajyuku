@@ -234,3 +234,11 @@ body:not(.is-student) .me-menu .student-only { display: none; }
 .seat-grid button { width: 44px; height: 44px; border: 2px solid var(--line); border-radius: 10px; background: #fff; font-size: 22px; padding: 0; }
 .seat-grid button:disabled { background: #eee; opacity: .6; }
 .seat-grid button:not(:disabled):active { background: #eaf2fd; border-color: var(--primary); }
+.bday-card { background: linear-gradient(160deg, #fff7e0, #ffe3ec); }
+.bday-card .dialog-body { text-align: center; }
+.bday-cake { font-size: 64px; line-height: 1; }
+.bday-card h2 { font-size: 22px; color: #b5651d; }
+.bday-msg { font-size: 17px; font-weight: 700; margin: 0; white-space: pre-wrap; }
+.bday-gift { margin: 0; background: #fff; border: 2px dashed #f5a623; border-radius: 12px; padding: 10px; font-weight: 800; }
+.bday-from { margin: 0; color: var(--muted); font-weight: 700; }
+.bday-card .dialog-actions { justify-content: center; }

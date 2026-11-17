@@ -86,9 +86,19 @@
     let lastForest = 0;
     socket.on('study-minute', () => { if (Date.now() - lastForest > 120000) { lastForest = Date.now(); state.gb.refreshForest(); } });
     socket.on('features', (f) => { state.studyPhotos = !!f.studyPhotos; updateAll(); });
-    socket.on('student-arrived', ({ name, time }) => {
-      toast(`🔔 ${name}さんが入室しました（${time}）`, 6000);
+    socket.on('student-arrived', ({ name, time, birthday }) => {
+      toast(birthday ? `🎂 ${name}さんが入室しました（${time}）。今日は誕生日です。声をかけてあげてね` : `🔔 ${name}さんが入室しました（${time}）`, birthday ? 9000 : 6000);
       chime();
+    });
+    // 誕生日のお祝いカード（その日にはじめて入ったとき）
+    socket.on('birthday', ({ name, message, gift }) => {
+      $('#bday-title').textContent = `${name}さん、お誕生日おめでとう！`;
+      $('#bday-msg').textContent = message || '';
+      $('#bday-gift').hidden = !gift;
+      const d = $('#bday-dialog');
+      if (d.open) return;
+      const show = () => { if (document.querySelector('dialog[open]')) return setTimeout(show, 1500); d.showModal(); };
+      setTimeout(show, 800);
     });
     socket.on('topic-cleared', ({ by, reason }) => { state.me.topic = null; updateButtons(); toast(by ? `${by}が吹き出しを消しました` : reason === 'class' ? '先生がスタンプ・吹き出しを止めたので、吹き出しを消しました' : '先生がはなれたので、吹き出しを消しました'); });
     socket.on('study-photo', ({ id, at }) => { refreshPhotoMeta(); void id; void at; });
@@ -310,6 +320,7 @@
     }
     if (!$('#seat-dialog').open) $('#seat-dialog').showModal();
   }
+  $('#bday-close').onclick = () => { $('#bday-dialog').close(); if (state.gb && state.gb.refreshForest) state.gb.refreshForest(); };
   $('#seat-close').onclick = () => { $('#seat-dialog').close(); standingSince = Date.now(); };
   $('#seat-near').onclick = () => {
     $('#seat-dialog').close();
