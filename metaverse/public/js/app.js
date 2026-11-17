@@ -501,7 +501,10 @@
   // 離席の検知：アプリを閉じた・別のアプリに切り替えた（hidden）、別の画面を操作中（blur）
   function reportAway() {
     if (!state.socket) return;
-    const away = document.visibilityState === 'hidden' ? 'hidden' : (document.hasFocus() ? null : 'blur');
+    // スマホ・タブレットは、画面に見えていれば離席にしない（動画を小さく浮かせて見ている・画面を2つに分けているときなど）。
+    // パソコンは、ほかのウィンドウを操作しているときも離席にする
+    const touch = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    const away = document.visibilityState === 'hidden' ? 'hidden' : (touch || document.hasFocus() ? null : 'blur');
     state.socket.emit('away', { away });
     if (!away && state.sc) state.sc.sync();
   }
