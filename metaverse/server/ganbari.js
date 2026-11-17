@@ -125,7 +125,7 @@ function defaults(today = jst()) {
     events: Object.fromEntries(EVENTS.map(e => [e.id, true])), // 季節の飾り（オン/オフ）
     birthdayMessage: 'いつもがんばっているね。すてきな1年になりますように！', // 誕生日カードのひとこと
     // 季節のお楽しみ（オン/オフと条件）
-    fun: { santa: true, santaDays: 10, santaMinMinutes: 30, toshikoshi: true, asakatsu: true, asakatsuStart: '06:00', asakatsuEnd: '07:30', asakatsuMinutes: 30, asakatsuPoints: 3 },
+    fun: { santa: true, santaDays: 10, toshikoshi: true, asakatsu: true, asakatsuStart: '06:00', asakatsuEnd: '07:30', asakatsuMinutes: 30, asakatsuPoints: 3 },
   };
 }
 
@@ -281,7 +281,7 @@ function setConfig(patch, actorId) {
   if (p.fun !== undefined) {
     const f = p.fun || {}, out = { ...c.fun };
     for (const k of ['santa', 'toshikoshi', 'asakatsu']) if (f[k] !== undefined) out[k] = !!f[k];
-    const lim = { santaDays: [1, 30, 'がんばりサンタの日数は1〜30日'], santaMinMinutes: [1, 600, 'がんばりサンタの1日の時間は1〜600分'],
+    const lim = { santaDays: [1, 30, 'がんばりサンタの日数は1〜30日'],
       asakatsuMinutes: [1, 120, '朝活の時間は1〜120分'], asakatsuPoints: [0, 100, '朝活のポイントは0〜100'] };
     for (const [k, [mn, mx, msg]] of Object.entries(lim)) {
       if (f[k] === undefined) continue;

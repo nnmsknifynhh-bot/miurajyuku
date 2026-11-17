@@ -24,7 +24,7 @@ function bonus(userId, reason, points) {
 }
 
 // ───────── 🎅 がんばりサンタ ─────────
-// 11/1〜11/30 に「1日○分以上」自習した日が○日以上なら、12/1〜12/7 にプレゼント箱が開けられる
+// 11/1〜11/30 に「学年ごとの1日の最低時間（連続自習🔥と同じ）」以上自習した日が○日以上なら、12/1〜12/7 にプレゼント箱が開けられる
 function santaStatus(userId, date = new Date()) {
   const f = cfg(), t = G.jst(date);
   if (!f.santa) return null;
@@ -34,9 +34,10 @@ function santaStatus(userId, date = new Date()) {
   if (!inCount && !inGift) return null;
   const year = t.year;
   const rows = db.prepare('SELECT day, COALESCE(manual_min, auto_min) AS m FROM study_days WHERE user_id = ? AND day >= ? AND day <= ?').all(userId, `${year}-11-01`, `${year}-11-30`);
-  const days = rows.filter(r => r.m >= f.santaMinMinutes).length;
+  const min = G.streakMinFor(userId); // 中1 45分・中2 60分・中3 90分 など
+  const days = rows.filter(r => r.m >= min).length;
   const opened = db.prepare('SELECT item FROM santa_gifts WHERE user_id = ? AND year = ?').get(userId, year);
-  return { year, phase: inCount ? 'count' : 'gift', days, need: f.santaDays, minMinutes: f.santaMinMinutes, eligible: days >= f.santaDays, opened: opened ? opened.item : null };
+  return { year, phase: inCount ? 'count' : 'gift', days, need: f.santaDays, minMinutes: min, eligible: days >= f.santaDays, opened: opened ? opened.item : null };
 }
 function openSanta(userId, date = new Date()) {
   const st = santaStatus(userId, date);

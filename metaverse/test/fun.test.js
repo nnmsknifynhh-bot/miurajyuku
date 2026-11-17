@@ -26,11 +26,11 @@ test('準備', async () => {
   }
 });
 
-test('がんばりサンタ：11/1〜30に「30分以上」の日が10日以上で、12/1〜7に箱を開けられる（1回だけ）', () => {
-  for (let d = 1; d <= 10; d++) G.setManual(U.aaa.id, `${Y}-11-${String(d).padStart(2, '0')}`, 40, null);
-  for (let d = 1; d <= 10; d++) G.setManual(U.bbb.id, `${Y}-11-${String(d).padStart(2, '0')}`, d === 1 ? 20 : 40, null); // 1日は足りない
+test('がんばりサンタ：11/1〜30に学年の最低時間（中2は60分）以上の日が10日以上で、12/1〜7に箱を開けられる（1回だけ）', () => {
+  for (let d = 1; d <= 10; d++) G.setManual(U.aaa.id, `${Y}-11-${String(d).padStart(2, '0')}`, 60, null);
+  for (let d = 1; d <= 10; d++) G.setManual(U.bbb.id, `${Y}-11-${String(d).padStart(2, '0')}`, d === 1 ? 59 : 70, null); // 1日は足りない
   const c1 = F.santaStatus(U.aaa.id, at(`${Y}-11-20`));
-  assert.equal(c1.phase, 'count'); assert.equal(c1.days, 10); assert.equal(c1.eligible, true);
+  assert.equal(c1.phase, 'count'); assert.equal(c1.days, 10); assert.equal(c1.eligible, true); assert.equal(c1.minMinutes, 60);
   assert.equal(F.santaStatus(U.bbb.id, at(`${Y}-11-20`)).days, 9);
   assert.equal(F.santaStatus(U.aaa.id, at(`${Y}-10-31`)), null, '期間の外');
   assert.equal(F.santaStatus(U.aaa.id, at(`${Y}-12-08`)), null, '12/8からは開けられない');

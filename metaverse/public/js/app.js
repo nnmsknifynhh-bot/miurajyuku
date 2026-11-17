@@ -392,7 +392,7 @@
       const f = g.fun || {};
       state.fun = f;
       const chips = [];
-      if (f.santa && f.santa.phase === 'count') chips.push(f.santa.eligible ? `🎅 がんばりサンタ ✓ 12月1日をおたのしみに` : `🎅 がんばりサンタ ${f.santa.days}/${f.santa.need}日`);
+      if (f.santa && f.santa.phase === 'count') chips.push(f.santa.eligible ? `🎅 がんばりサンタ ✓ 12月1日をおたのしみに` : `🎅 がんばりサンタ ${f.santa.days}/${f.santa.need}日（1日${f.santa.minMinutes}分以上）`);
       const hm = new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Tokyo' });
       if (f.morning && hm >= f.morning.start && hm < f.morning.end) chips.push(f.morning.today >= f.morning.minutes ? `🌅 朝活 今日のスタンプ ✓（ぜんぶで${f.morning.stamps}こ）` : `🌅 朝活 ${f.morning.today}/${f.morning.minutes}分（スタンプ${f.morning.stamps}こ）`);
       $('#fun-chip').textContent = chips.join('\n'); $('#fun-chip').style.whiteSpace = 'pre-line'; $('#fun-chip').hidden = !chips.length;

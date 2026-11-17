@@ -250,16 +250,16 @@
     const f = c.fun || {};
     const funSec = section('🎉 季節のお楽しみ', 'がんばりサンタ・年越し自習・朝活チャレンジのオン/オフと条件です。');
     const fSanta = check('🎅 がんばりサンタ（11/1〜30 にがんばった生徒に、12/1〜7 にプレゼント箱）', f.santa !== false);
-    const fSantaDays = numInput(f.santaDays || 10, 1, 30), fSantaMin = numInput(f.santaMinMinutes || 30, 1, 600);
+    const fSantaDays = numInput(f.santaDays || 10, 1, 30);
     const fNy = check('🎆 年越し自習（1/1 0:00〜0:10 に自習室にいた生徒に記念バッジ）', f.toshikoshi !== false);
     const fAsa = check('🌅 朝活チャレンジ（朝の自習で早起きスタンプとポイント）', f.asakatsu !== false);
     const fAsaMin = numInput(f.asakatsuMinutes || 30, 1, 120), fAsaPt = numInput(f.asakatsuPoints ?? 3, 0, 100);
     const fAsaS = timeInput(f.asakatsuStart || '06:00'), fAsaE = timeInput(f.asakatsuEnd || '07:30');
     const fAsaRow = el('div', 'gb-row'); fAsaRow.append(fAsaS, el('span', null, '〜'), fAsaE);
-    const fg1 = el('div', 'gb-grid'); fg1.append(field('がんばりサンタ：自習した日の数', fSantaDays, '例：10日以上'), field('がんばりサンタ：1日に何分以上を「自習した日」にするか', fSantaMin, '例：30分'));
+    const fg1 = el('div', 'gb-grid'); fg1.append(field('がんばりサンタ：自習した日の数', fSantaDays, '「自習した日」は、学年ごとの連続自習🔥の最低時間（中1 45分・中2 60分・中3 90分など）以上の日です'));
     const fg2 = el('div', 'gb-grid'); fg2.append(field('朝活の時間帯', fAsaRow), field('朝活：スタンプがもらえる朝の自習時間（分）', fAsaMin, 'この時間帯に、自習時間として数えられた分'), field('朝活：スタンプ1こでもらえるポイント', fAsaPt));
     const saveFun = el('button', 'btn', 'お楽しみを保存する');
-    saveFun.onclick = () => save({ fun: { santa: fSanta[1].checked, santaDays: Number(fSantaDays.value), santaMinMinutes: Number(fSantaMin.value), toshikoshi: fNy[1].checked, asakatsu: fAsa[1].checked, asakatsuMinutes: Number(fAsaMin.value), asakatsuPoints: Number(fAsaPt.value), asakatsuStart: fAsaS.value, asakatsuEnd: fAsaE.value === '23:59' ? '23:59' : fAsaE.value } }, 'お楽しみを保存しました');
+    saveFun.onclick = () => save({ fun: { santa: fSanta[1].checked, santaDays: Number(fSantaDays.value), toshikoshi: fNy[1].checked, asakatsu: fAsa[1].checked, asakatsuMinutes: Number(fAsaMin.value), asakatsuPoints: Number(fAsaPt.value), asakatsuStart: fAsaS.value, asakatsuEnd: fAsaE.value === '23:59' ? '23:59' : fAsaE.value } }, 'お楽しみを保存しました');
     funSec.append(fSanta[0], fg1, fNy[0], fAsa[0], fg2, el('p', 'muted', '朝活は、「自習時間の数え方」で数える時間帯に朝活の時間帯が入っているときだけ数えます。'), saveFun);
 
     // ═════ 誕生日 ═════
