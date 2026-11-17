@@ -141,14 +141,14 @@
     termSec.append(tg, saveTerms);
     // 新年度
     const ny = el('div', 'gb-box warn');
-    ny.append(el('b', null, '🌸 新年度にする'), el('p', 'muted', 'ポイントと着せかえアイテムが全員0にもどります（自習時間の記録は残ります）。3学期の保護者レポートは、新年度にする前に作ってください。'));
+    ny.append(el('b', null, '🌸 新年度にする'), el('p', 'muted', '学期と年度が新しくなります。ポイントと着せかえアイテムはそのまま引きつぎます。学年の木は新しい年度の自習時間で育て直します。3学期の保護者レポートは、新年度にする前に作ってください。'));
     const y = Number(c.yearStart.slice(0, 4)) + 1;
     const n1 = dateInput(`${y}-04-01`), n2 = dateInput(`${y}-09-01`), n3 = dateInput(`${y + 1}-01-01`);
     const nyGrid = el('div', 'gb-grid'); nyGrid.append(field('新年度の1学期', n1), field('2学期', n2), field('3学期', n3));
     const promote = check('生徒全員の学年を1つ上げる（中3 → 高1、高3 → 卒業）', true);
     const nyBtn = el('button', 'btn danger', '新年度にする');
     nyBtn.onclick = async () => {
-      if (!confirm('新年度にしますか？\n全員のポイントと着せかえアイテムが0にもどります。この操作は元にもどせません。')) return;
+      if (!confirm('新年度にしますか？\nポイントと着せかえアイテムはそのまま引きつぎます。この操作は元にもどせません。')) return;
       try { await api('POST', '/api/admin/ganbari/new-year', { terms: [n1.value, n2.value, n3.value], promote: promote[1].checked }); toast('新年度にしました'); load(root, ctx); }
       catch (e) { toast(e.message); }
     };

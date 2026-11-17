@@ -6,7 +6,7 @@
 //   ・（設定・見守り写真がオンのとき）カメラがオン ・（設定）数える時間帯の中 ・（設定）1日の上限に達していない
 //   オーナーは、生徒ごと・日ごとに時間を修正できる（修正した値が優先される）
 // ■ 学年の木：今学期の「学年の生徒1人あたりの平均自習時間」で育つ（人数の差が出ないように平均）
-// ■ ポイント・着せかえ：今年度の自習時間で増える。新年度になると、ポイントと持っているアイテムは0に戻る
+// ■ ポイント・着せかえ：自習時間で増える。新年度になっても、ポイントと持っているアイテムは引きつぐ
 const crypto = require('crypto');
 const { db, now, getSetting, setSetting, audit } = require('./db');
 
@@ -93,6 +93,7 @@ function defaults(today = jst()) {
     streakMin: 90,         // 連続自習に数える1日の最低時間（分）
     minutesPerPoint: 10,   // 何分で1ポイント
     yearStart: `${y}-04-01`,
+    pointsFrom: `${y}-04-01`, // ポイントを数え始めた日（新年度になっても変えない＝ポイントは引きつぐ）
     terms: [`${y}-04-01`, `${y}-09-01`, `${y + 1}-01-01`],
     trees: [{ name: '中1の木', grades: ['中1'] }, { name: '中2の木', grades: ['中2'] }, { name: '中3の木', grades: ['中3'] }],
     stages: [0, 5, 15, 30, 50, 80], // 木の段階（平均時間・時間単位）
@@ -121,6 +122,11 @@ function getConfig() {
   let saved = {};
   try { saved = JSON.parse(getSetting('ganbari', '{}')); } catch (e) { saved = {}; }
   const d = defaults();
+  // ポイントを数え始めた日は、一度決めたら変えない（まだ保存していなければ今の年度の始まりで保存）
+  if (!saved.pointsFrom) {
+    saved.pointsFrom = saved.yearStart || d.yearStart;
+    setSetting('ganbari', JSON.stringify({ ...d, ...saved }));
+  }
   return {
     ...d, ...saved, window: { ...d.window, ...(saved.window || {}) },
     dressup: { ...d.dressup, ...(saved.dressup || {}) }, events: { ...d.events, ...(saved.events || {}) },
@@ -397,14 +403,14 @@ const itemById = (id) => SHOP.find(i => i.id === id);
 function points(userId, date = new Date()) {
   const c = getConfig();
   const today = jst(date).day;
-  const minutes = minutesBetween(userId, c.yearStart, today);
-  const earned = Math.floor(minutes / c.minutesPerPoint);
-  const spent = db.prepare('SELECT COALESCE(SUM(price), 0) AS s FROM shop_owned WHERE user_id = ? AND year_start = ?').get(userId, c.yearStart).s;
-  return { earned, spent, balance: earned - spent, yearMinutes: minutes };
+  // ポイントは年度をまたいで引きつぐ（数え始めた日からの合計）
+  const earned = Math.floor(minutesBetween(userId, c.pointsFrom, today) / c.minutesPerPoint);
+  const spent = db.prepare('SELECT COALESCE(SUM(price), 0) AS s FROM shop_owned WHERE user_id = ?').get(userId).s;
+  return { earned, spent, balance: earned - spent, yearMinutes: minutesBetween(userId, c.yearStart, today) };
 }
 function owned(userId) {
-  const c = getConfig();
-  return db.prepare('SELECT item FROM shop_owned WHERE user_id = ? AND year_start = ?').all(userId, c.yearStart).map(r => r.item);
+  // 買ったアイテムも年度をまたいで持ち続ける
+  return db.prepare('SELECT DISTINCT item FROM shop_owned WHERE user_id = ?').all(userId).map(r => r.item);
 }
 const EMPTY_EQUIP = () => Object.fromEntries(SLOTS.map(sl => [sl, null]));
 // 表示用：絵文字（帽子・眼鏡・手・ペット）と、形の名前（洋服・着ぐるみ）
@@ -412,7 +418,7 @@ const EMPTY_EQUIP = () => Object.fromEntries(SLOTS.map(sl => [sl, null]));
 function getEquip(userId, opts = {}) {
   const c = getConfig();
   const r = db.prepare('SELECT * FROM avatar_equip WHERE user_id = ?').get(userId);
-  const ids = r && r.year_start === c.yearStart ? Object.fromEntries(SLOTS.map(sl => [sl, r[sl] || null])) : EMPTY_EQUIP(); // 新年度になったら何もつけていない
+  const ids = r ? Object.fromEntries(SLOTS.map(sl => [sl, r[sl] || null])) : EMPTY_EQUIP(); // 新年度になっても、つけたまま
   const visible = opts.ignorePeriod || dressupOpen(opts.date, c);
   const out = EMPTY_EQUIP();
   if (visible) {
@@ -445,7 +451,7 @@ function equip(userId, slot, itemId, date = new Date()) {
   }
   const c = getConfig();
   const cur = db.prepare('SELECT * FROM avatar_equip WHERE user_id = ?').get(userId);
-  const base = cur && cur.year_start === c.yearStart ? cur : EMPTY_EQUIP();
+  const base = cur || EMPTY_EQUIP();
   const next = { ...EMPTY_EQUIP(), ...Object.fromEntries(SLOTS.map(sl => [sl, base[sl] || null])), [slot]: itemId };
   db.prepare(`INSERT INTO avatar_equip (user_id, year_start, ${SLOTS.join(', ')}) VALUES (?, ?, ${SLOTS.map(() => '?').join(', ')})
     ON CONFLICT(user_id) DO UPDATE SET year_start = excluded.year_start, ${SLOTS.map(sl => `${sl} = excluded.${sl}`).join(', ')}`)

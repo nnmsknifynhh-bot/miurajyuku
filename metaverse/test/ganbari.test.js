@@ -277,16 +277,20 @@ test('保護者レポート：オーナーがリンクを作り、リンクを�
   assert.equal(all.data.reports.length, 3, '全員分まとめて作れる');
 });
 
-test('新年度：ポイントと着せかえは0に戻り、学年を1つ上げられる', async () => {
+test('新年度：ポイントと着せかえは引きつぎ、学年を1つ上げられる', async () => {
   const c = C();
+  const before = { pt: G.points(U.a1.id).balance, owned: G.owned(U.a1.id), pet: G.getEquip(U.a1.id, { ignorePeriod: true }).ids.pet };
+  assert.ok(before.owned.length >= 1 && before.pet, '前の年度にアイテムを持っている');
   const y = Number(c.yearStart.slice(0, 4)) + 1;
   assert.equal((await http('POST', '/api/admin/ganbari/new-year', { terms: [`${y}-04-01`, `${y}-09-01`, `${y + 1}-01-01`], promote: true }, U.tch.cookie)).status, 403);
   const r = await http('POST', '/api/admin/ganbari/new-year', { terms: [`${y}-04-01`, `${y}-09-01`, `${y + 1}-01-01`], promote: true }, owner);
   assert.equal(r.status, 200);
   const later = at(`${y}-05-01`);
-  assert.equal(G.points(U.a1.id, later).balance, 0);
-  assert.deepEqual(G.owned(U.a1.id), []);
-  assert.equal(G.getEquip(U.a1.id).pet, null);
+  assert.ok(G.points(U.a1.id, later).balance >= before.pt, 'ポイントは0にもどらない');
+  assert.deepEqual(G.owned(U.a1.id), before.owned, 'アイテムも持ったまま');
+  assert.equal(G.getEquip(U.a1.id, { ignorePeriod: true }).ids.pet, before.pet, 'つけたまま');
+  assert.equal(G.buy(U.a1.id, before.owned[0], later), 'もう持っています', '同じアイテムは二度買えない');
+  assert.equal(G.points(U.a1.id, later).yearMinutes, 0, '今年度の自習時間は新しく数える');
   assert.equal(db.prepare('SELECT grade FROM users WHERE id = ?').get(U.a1.id).grade, '中2');
   assert.equal(db.prepare('SELECT grade FROM users WHERE id = ?').get(U.b1.id).grade, '中3');
   assert.match((await http('POST', '/api/admin/ganbari/new-year', { terms: [`${y}-04-01`, `${y}-09-01`, `${y + 1}-01-01`] }, owner)).data.error, /後にして/);
