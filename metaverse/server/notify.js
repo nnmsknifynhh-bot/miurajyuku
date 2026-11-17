@@ -112,7 +112,27 @@ async function studentArrived(student, online) {
   return result;
 }
 
+// 決めた曜日・時刻を過ぎても来ていない高校生を、先生・オーナーに知らせる
+async function studentLate(student, online) {
+  const staff = db.prepare("SELECT id FROM users WHERE role IN ('owner','teacher') AND is_active = 1").all();
+  const result = { inApp: 0, push: 0 };
+  for (const { id } of staff) {
+    if (!getPrefs(id).arrivals) continue;
+    const p = online.get(id);
+    if (p) { p.socket.emit('student-late', { id: student.id, name: student.name, weekday: student.weekday, time: student.time }); result.inApp++; }
+    else {
+      result.push += (await pushTo(id, {
+        title: `⏰ ${student.name}さんがまだ来ていません`,
+        body: `${student.weekday}曜 ${student.time} からの予定です　三浦塾 オンライン教室`,
+        tag: 'late-' + student.id, url: '/app',
+      })).sent;
+    }
+  }
+  return result;
+}
+
 module.exports = {
+  studentLate,
   isStaffRole, publicKey: () => keys().publicKey, getPrefs, setPrefs, subscribe, unsubscribe, deviceCount, studentArrived, pushTo,
   _setWebPush: (w) => { webpush = w; vapid = null; },
 };

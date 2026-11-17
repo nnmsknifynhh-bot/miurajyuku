@@ -40,7 +40,12 @@ function can(user, key) {
 // その部屋に入れるか（第2段階のリアルタイム入室でもこの関数で判定する）
 function canEnterRoom(user, room) {
   if (!user || !room) return false;
-  if (room.type === 'study') return true;
+  if (room.type === 'study') {
+    // 生徒：高校生は高校生自習室（class3）、それ以外の生徒は自習室（study）。先生・オーナーはどちらにも入れる
+    if (user.role !== 'student') return true;
+    const hs = /^高[123]$/.test(user.grade || '');
+    return room.id === 'class3' ? hs : !hs;
+  }
   if (user.role === 'owner') return true;
   if (!can(user, 'enter_classroom')) return false;
   if (user.role === 'teacher') return user.rooms.includes(room.id);

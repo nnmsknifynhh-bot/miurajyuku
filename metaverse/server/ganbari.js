@@ -9,6 +9,7 @@
 // ■ ポイント・着せかえ：自習時間で増える。新年度になっても、ポイントと持っているアイテムは引きつぐ
 const crypto = require('crypto');
 const { db, now, getSetting, setSetting, audit } = require('./db');
+const SM = require('../public/shared/map.js');
 
 const TZ = 'Asia/Tokyo';
 const GRADES = ['小1', '小2', '小3', '小4', '小5', '小6', '中1', '中2', '中3', '高1', '高2', '高3'];
@@ -65,6 +66,13 @@ if (!db.prepare('PRAGMA table_info(users)').all().some(c => c.name === 'birthday
   db.exec("ALTER TABLE users ADD COLUMN birthday TEXT");
   db.exec("ALTER TABLE users ADD COLUMN birthday_public INTEGER NOT NULL DEFAULT 1");
 }
+// 高校生：来る曜日（例 '2,5'＝火・金）と時刻、今日やること、来ていないお知らせの記録
+if (!db.prepare('PRAGMA table_info(users)').all().some(c => c.name === 'visit_days')) {
+  db.exec('ALTER TABLE users ADD COLUMN visit_days TEXT');
+  db.exec('ALTER TABLE users ADD COLUMN visit_time TEXT');
+}
+db.exec(`CREATE TABLE IF NOT EXISTS study_plans (user_id INTEGER NOT NULL, day TEXT NOT NULL, items TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (user_id, day))`);
+db.exec(`CREATE TABLE IF NOT EXISTS late_alerts (user_id INTEGER NOT NULL, day TEXT NOT NULL, sent_at TEXT NOT NULL, PRIMARY KEY (user_id, day))`);
 db.exec(`CREATE TABLE IF NOT EXISTS birthday_cards (user_id INTEGER NOT NULL, year INTEGER NOT NULL, shown_at TEXT NOT NULL, PRIMARY KEY (user_id, year))`);
 // 着せかえの場所を増やした（洋服・手に持つもの・着ぐるみ）
 for (const col of ['clothes', 'hand', 'costume']) {
@@ -87,6 +95,11 @@ const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
 const weekdayOf = (day) => new Date(day + 'T00:00:00Z').getUTCDay();
 
 // ───────── 設定 ─────────
+const HS_GRADES = ['高1', '高2', '高3'];
+const isHS = (grade) => HS_GRADES.includes(grade);
+const HS_TREE = { name: '高校生の木', grades: HS_GRADES };
+// 高校生の称号（自習時間の合計・時間）
+const TITLES = [[20, 'がんばり屋'], [50, '努力家'], [100, '鉄人'], [200, '勉強の達人'], [300, '受験の覇者'], [500, '伝説の受験生']];
 function defaults(today = jst()) {
   const y = today.month >= 4 ? today.year : today.year - 1;
   return {
@@ -102,7 +115,9 @@ function defaults(today = jst()) {
     yearStart: `${y}-04-01`,
     pointsFrom: `${y}-04-01`, // ポイントを数え始めた日（新年度になっても変えない＝ポイントは引きつぐ）
     terms: [`${y}-04-01`, `${y}-09-01`, `${y + 1}-01-01`],
-    trees: [{ name: '中1の木', grades: ['中1'] }, { name: '中2の木', grades: ['中2'] }, { name: '中3の木', grades: ['中3'] }],
+    trees: [{ name: '中1の木', grades: ['中1'] }, { name: '中2の木', grades: ['中2'] }, { name: '中3の木', grades: ['中3'] }, HS_TREE],
+    // 高校生（高校生自習室）の数え方。時間帯・上限・曜日は中学生とは別。週のノルマ：週○回・1回○分以上
+    hs: { window: { start: '00:00', end: '24:00' }, window2: null, dailyCap: 360, weekly: null, sessionsPerWeek: 2, sessionMinutes: 180, weekBonus: 30, lateMinutes: 15 },
     stages: [0, 5, 15, 30, 50, 80], // 木の段階（平均時間・時間単位）
     dressup: { mode: 'always', periods: [] }, // 着せかえ期間：always＝いつでも / periods＝決めた期間だけ
     events: Object.fromEntries(EVENTS.map(e => [e.id, true])), // 季節の飾り（オン/オフ）
@@ -150,13 +165,21 @@ function getConfig() {
     saved.pointsFrom = saved.yearStart || d.yearStart;
     setSetting('ganbari', JSON.stringify({ ...d, ...saved }));
   }
+  const shs = saved.hs || {};
+  const trees = Array.isArray(saved.trees) ? (saved.trees.length === 3 ? [...saved.trees, HS_TREE] : saved.trees) : d.trees; // 4本目（高校生の木）を足す
   return {
-    ...d, ...saved, window: { ...d.window, ...(saved.window || {}) },
+    ...d, ...saved, window: { ...d.window, ...(saved.window || {}) }, trees,
     dressup: { ...d.dressup, ...(saved.dressup || {}) }, events: { ...d.events, ...(saved.events || {}) },
+    hs: { ...d.hs, ...shs, window: { ...d.hs.window, ...(shs.window || {}) } },
   };
 }
 // その日の数え方（曜日ごとの設定があればそれ、なければ毎日同じ設定）
-function ruleFor(day, c = getConfig()) {
+// group：'hs'＝高校生（高校生自習室の数え方）、それ以外＝中学生など
+function ruleFor(day, c = getConfig(), group = null) {
+  const src = group === 'hs' ? c.hs : c;
+  return ruleOf(day, src);
+}
+function ruleOf(day, c) {
   if (Array.isArray(c.weekly) && c.weekly.length === 7) {
     const w = c.weekly[weekdayOf(day)];
     const windows = [{ start: w.start, end: w.end }];
@@ -185,9 +208,9 @@ function checkWindows(s1, e1, s2, e2, label) {
   setSetting('ganbari_streak90', '1');
 })();
 // 入力のチェックをしてから保存する。エラーならメッセージを返す
-function setConfig(patch, actorId) {
-  const c = getConfig();
-  const p = patch || {};
+// 数える時間帯・1日の上限・曜日ごとの設定を、t（中学生の設定か高校生の設定）に入れる。エラーならメッセージを返す
+function applyRules(c, p) {
+  const int = (v, min, max) => Number.isInteger(v) && v >= min && v <= max;
   if (p.window || p.window2 !== undefined) {
     const w1 = p.window || c.window, w2 = p.window2 !== undefined ? p.window2 : c.window2;
     const err = checkWindows(w1.start, w1.end, w2 ? w2.start : null, w2 ? w2.end : null, '数える');
@@ -195,7 +218,6 @@ function setConfig(patch, actorId) {
     c.window = { start: w1.start, end: w1.end };
     c.window2 = w2 ? { start: w2.start, end: w2.end } : null;
   }
-  const int = (v, min, max) => Number.isInteger(v) && v >= min && v <= max;
   if (p.dailyCap !== undefined) { if (!int(p.dailyCap, 10, 1440)) return '1日の上限は10〜1440分にしてください'; c.dailyCap = p.dailyCap; }
   if (p.weekly !== undefined) {
     if (p.weekly === null) c.weekly = null;
@@ -220,6 +242,25 @@ function setConfig(patch, actorId) {
       if (!w.some(x => x.on)) return '数える曜日を1つ以上えらんでください';
       c.weekly = w;
     }
+  }
+  return null;
+}
+function setConfig(patch, actorId) {
+  const c = getConfig();
+  const p = patch || {};
+  const int = (v, min, max) => Number.isInteger(v) && v >= min && v <= max;
+  let err = applyRules(c, p);
+  if (err) return err;
+  if (p.hs !== undefined) {
+    const h = p.hs || {};
+    const hs = { ...c.hs };
+    err = applyRules(hs, h);
+    if (err) return '高校生：' + err;
+    if (h.sessionsPerWeek !== undefined) { if (!int(h.sessionsPerWeek, 1, 7)) return '高校生：週の回数は1〜7回にしてください'; hs.sessionsPerWeek = h.sessionsPerWeek; }
+    if (h.sessionMinutes !== undefined) { if (!int(h.sessionMinutes, 10, 720)) return '高校生：1回の時間は10〜720分にしてください'; hs.sessionMinutes = h.sessionMinutes; }
+    if (h.weekBonus !== undefined) { if (!int(h.weekBonus, 0, 1000)) return '高校生：週のボーナスは0〜1000ポイントにしてください'; hs.weekBonus = h.weekBonus; }
+    if (h.lateMinutes !== undefined) { if (!int(h.lateMinutes, 1, 240)) return '高校生：遅れの通知は1〜240分後にしてください'; hs.lateMinutes = h.lateMinutes; }
+    c.hs = hs;
   }
   if (p.streakByGrade !== undefined) {
     const g = p.streakByGrade;
@@ -248,7 +289,7 @@ function setConfig(patch, actorId) {
     c.terms = p.terms;
   }
   if (p.trees !== undefined) {
-    if (!Array.isArray(p.trees) || p.trees.length !== 3) return '木は3本です';
+    if (!Array.isArray(p.trees) || p.trees.length !== 4) return '木は4本です（中学生3本・高校生1本）';
     const trees = [];
     for (const t of p.trees) {
       const name = String((t && t.name) || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 12);
@@ -345,17 +386,20 @@ function setManual(userId, day, minutes, actorId) {
 function tick(online, opt = {}) {
   const c = getConfig();
   const t = jst(opt.date || new Date());
-  const r = ruleFor(t.day, c);
-  if (!r.on || !r.windows.some(w => t.hm >= w.start && t.hm < w.end)) return [];
+  const rules = { jh: ruleFor(t.day, c), hs: ruleFor(t.day, c, 'hs') };
+  const open = (r) => r.on && r.windows.some(w => t.hm >= w.start && t.hm < w.end);
+  if (!open(rules.jh) && !open(rules.hs)) return [];
   const added = [];
   const up = db.prepare(`INSERT INTO study_days (user_id, day, auto_min) VALUES (?, ?, 1)
     ON CONFLICT(user_id, day) DO UPDATE SET auto_min = auto_min + 1`);
   db.exec('BEGIN');
   try {
     for (const p of online.values()) {
-      if (p.user.role !== 'student' || p.room !== 'study' || p.away) continue;
+      if (p.user.role !== 'student' || !SM.isStudyRoom(p.room) || p.away) continue;
       if (c.requireSeat && !p.seat) continue;
       if (c.requireCamera && opt.photosOn && !p.studyCam) continue;
+      const r = rules[isHS(p.user.grade) ? 'hs' : 'jh'];
+      if (!open(r)) continue;
       if (dayTotal(p.id, t.day) >= r.cap) continue;
       up.run(p.id, t.day);
       added.push(p.id);
@@ -377,9 +421,11 @@ function creditGap(userId, fromMs, toMs, maxMin = 5) {
   const up = db.prepare(`INSERT INTO study_days (user_id, day, auto_min) VALUES (?, ?, 1)
     ON CONFLICT(user_id, day) DO UPDATE SET auto_min = auto_min + 1`);
   let added = 0;
+  const u = db.prepare('SELECT grade FROM users WHERE id = ?').get(userId);
+  const group = u && isHS(u.grade) ? 'hs' : null;
   for (let i = 1; i <= n; i++) {
     const t = jst(new Date(fromMs + i * 60_000));
-    const r = ruleFor(t.day, c);
+    const r = ruleFor(t.day, c, group);
     if (!r.on || !r.windows.some(w => t.hm >= w.start && t.hm < w.end)) continue;
     if (dayTotal(userId, t.day) >= r.cap) continue;
     up.run(userId, t.day);
@@ -397,6 +443,8 @@ function streakMinFor(userId, c = getConfig()) {
 // 連続自習の日数（今日まだ達していなくても、昨日まで続いていれば数える）
 function streak(userId, date = new Date()) {
   const c = getConfig();
+  const gu = db.prepare('SELECT grade FROM users WHERE id = ?').get(userId);
+  if (gu && isHS(gu.grade)) return hsWeeks(userId, date, c).streak; // 高校生は「週」で数える
   const min = streakMinFor(userId, c);
   const today = jst(date).day;
   const rows = db.prepare(`SELECT day, ${totalExpr} AS m FROM study_days WHERE user_id = ? AND day <= ? AND day >= ? ORDER BY day DESC`)
@@ -492,7 +540,9 @@ function points(userId, date = new Date()) {
   const c = getConfig();
   const today = jst(date).day;
   // ポイントは年度をまたいで引きつぐ（数え始めた日からの合計）
-  const earned = Math.floor(minutesBetween(userId, c.pointsFrom, today) / c.minutesPerPoint);
+  const gu = db.prepare('SELECT grade FROM users WHERE id = ?').get(userId);
+  const bonus = gu && isHS(gu.grade) ? hsWeeks(userId, date, c).achievedWeeks * c.hs.weekBonus : 0; // 高校生：週のノルマ達成ボーナス
+  const earned = Math.floor(minutesBetween(userId, c.pointsFrom, today) / c.minutesPerPoint) + bonus;
   const spent = db.prepare('SELECT COALESCE(SUM(price), 0) AS s FROM shop_owned WHERE user_id = ?').get(userId).s;
   return { earned, spent, balance: earned - spent, yearMinutes: minutesBetween(userId, c.yearStart, today) };
 }
@@ -687,6 +737,85 @@ function reportData(token) {
   };
 }
 
+// ───────── 高校生：週のノルマ・週の連続・称号 ─────────
+// その日をふくむ週の月曜日
+const mondayOf = (day) => addDays(day, -((weekdayOf(day) + 6) % 7));
+/**
+ * 高校生の週の記録
+ * @returns {{ week:{start,sessions,need,minutes,needMinutes,achieved}, today:{minutes,sessionMinutes,done}, streak:number, achievedWeeks:number }}
+ */
+function hsWeeks(userId, date = new Date(), c = getConfig()) {
+  const hs = c.hs, today = jst(date).day, mon = mondayOf(today);
+  const rows = db.prepare(`SELECT day, ${totalExpr} AS m FROM study_days WHERE user_id = ? AND day >= ? AND day <= ?`).all(userId, mondayOf(c.pointsFrom), today);
+  const byWeek = new Map(); // 月曜日 -> { sessions, minutes }
+  for (const r of rows) {
+    const w = mondayOf(r.day), v = byWeek.get(w) || { sessions: 0, minutes: 0 };
+    v.minutes += r.m; if (r.m >= hs.sessionMinutes) v.sessions++;
+    byWeek.set(w, v);
+  }
+  const ok = (w) => (byWeek.get(w) || { sessions: 0 }).sessions >= hs.sessionsPerWeek;
+  let achievedWeeks = 0;
+  for (const w of byWeek.keys()) if (ok(w)) achievedWeeks++;
+  let streak = 0;
+  for (let w = ok(mon) ? mon : addDays(mon, -7), i = 0; i < 300 && ok(w); i++, w = addDays(w, -7)) streak++;
+  const cur = byWeek.get(mon) || { sessions: 0, minutes: 0 };
+  const todayMin = dayTotal(userId, today);
+  return {
+    week: { start: mon, sessions: cur.sessions, need: hs.sessionsPerWeek, minutes: cur.minutes, needMinutes: hs.sessionsPerWeek * hs.sessionMinutes, achieved: cur.sessions >= hs.sessionsPerWeek },
+    today: { minutes: todayMin, sessionMinutes: hs.sessionMinutes, done: todayMin >= hs.sessionMinutes },
+    streak, achievedWeeks, bonus: hs.weekBonus,
+  };
+}
+// 高校生の称号（自習時間の合計で決まる）。{ name, hours, next:{ name, hoursLeft } }
+function titleOf(userId) {
+  const u = db.prepare('SELECT grade FROM users WHERE id = ?').get(userId);
+  if (!u || !isHS(u.grade)) return null;
+  const total = db.prepare(`SELECT COALESCE(SUM(${totalExpr}), 0) AS m FROM study_days WHERE user_id = ?`).get(userId).m;
+  const hours = total / 60;
+  let name = null, next = null;
+  for (const [h, n] of TITLES) { if (hours >= h) name = n; else { next = { name: n, hoursLeft: Math.ceil(h - hours) }; break; } }
+  return { name, hours: Math.floor(hours), next };
+}
+
+// 今日やること（3つ）。1つ16文字まで
+function setPlan(userId, items, date = new Date()) {
+  if (!Array.isArray(items) || items.length !== 3) return '今日やることを3つ書いてください';
+  const clean = items.map(t => String(t || '').replace(/[\u0000-\u001f\u007f<>]/g, '').trim().slice(0, 16));
+  if (clean.some(t => !t)) return '今日やることを3つとも書いてください';
+  db.prepare(`INSERT INTO study_plans (user_id, day, items, updated_at) VALUES (?, ?, ?, ?)
+    ON CONFLICT(user_id, day) DO UPDATE SET items = excluded.items, updated_at = excluded.updated_at`).run(userId, jst(date).day, JSON.stringify(clean), now());
+  return null;
+}
+function planOf(userId, date = new Date()) {
+  const r = db.prepare('SELECT items FROM study_plans WHERE user_id = ? AND day = ?').get(userId, jst(date).day);
+  try { return r ? JSON.parse(r.items) : null; } catch (e) { return null; }
+}
+// 来る曜日と時刻（高校生）。days は 0(日)〜6(土) の配列
+function normVisit(days, time) {
+  if (days == null || (Array.isArray(days) && !days.length)) return { days: null, time: null };
+  if (!Array.isArray(days) || !days.every(d => Number.isInteger(d) && d >= 0 && d <= 6)) return null;
+  if (!RE_HM.test(time || '') || time === '24:00') return null;
+  return { days: [...new Set(days)].sort().join(','), time };
+}
+/**
+ * 決めた曜日・時刻を過ぎても来ていない高校生（1日1回だけ返す）
+ * @param {Set<number>} onlineIds いまつないでいる人
+ */
+function lateStudents(onlineIds, date = new Date()) {
+  const c = getConfig(), t = jst(date), wd = weekdayOf(t.day);
+  const out = [];
+  for (const u of db.prepare("SELECT id, display_name AS name, grade, visit_days, visit_time FROM users WHERE role = 'student' AND is_active = 1 AND visit_days IS NOT NULL AND visit_time IS NOT NULL").all()) {
+    if (!isHS(u.grade) || !u.visit_days.split(',').map(Number).includes(wd)) continue;
+    const [h, m] = u.visit_time.split(':').map(Number);
+    const due = h * 60 + m + c.hs.lateMinutes, [nh, nm] = t.hm.split(':').map(Number);
+    if (nh * 60 + nm < due) continue;
+    if (onlineIds.has(u.id) || dayTotal(u.id, t.day) > 0) continue; // 来ている・今日すでに自習した
+    const r = db.prepare('INSERT OR IGNORE INTO late_alerts (user_id, day, sent_at) VALUES (?, ?, ?)').run(u.id, t.day, now());
+    if (r.changes) out.push({ id: u.id, name: u.name, weekday: WEEKDAYS[wd], time: u.visit_time });
+  }
+  return out;
+}
+
 // ───────── 誕生日 ─────────
 const RE_MD = /^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 // '04-05' のような月-日。正しくなければ null
@@ -722,6 +851,8 @@ function celebrateBirthday(userId, date = new Date()) {
 }
 
 module.exports = {
+  setPlan, planOf, normVisit, lateStudents,
+  HS_GRADES, isHS, hsWeeks, titleOf, TITLES, mondayOf,
   normBirthday, birthdayInfo, celebrateBirthday,
   creditGap,
   streakMinFor,

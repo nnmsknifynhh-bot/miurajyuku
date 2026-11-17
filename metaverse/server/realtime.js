@@ -45,7 +45,8 @@ function pub(p) {
     id: p.id, name: p.user.display_name, role: p.user.role, color: p.user.avatar_color,
     x: p.x, y: p.y, dir: p.dir, moving: p.moving, room: p.room, seat: p.seat, hand: p.hand, handAt: p.handAt,
     inPrivate: inActiveCall(p), away: p.away || null, studyCam: !!p.studyCam, topic: p.topic || null, today: p.today10 ?? null,
-    bday: !!(p.bday && p.bday.public), // 誕生日（ほかの生徒にも見せる設定のときだけ。先生だけの設定は staff にだけ別に送る）
+    bday: !!(p.bday && p.bday.public),
+    hs: !!p.hs, title: p.title || null, plan: p.plan || null, // 高校生：称号・今日やること（🔥は週で数える） // 誕生日（ほかの生徒にも見せる設定のときだけ。先生だけの設定は staff にだけ別に送る）
     equip: equipView(p.equip), streak: p.streak || 0,
   };
 }
@@ -103,6 +104,7 @@ function entryError(p, roomId) {
   const room = getRoom(roomId);
   if (!room) return null;
   if (!canEnterRoom(p.user, room)) {
+    if (p.user.role === 'student' && room.type === 'study') return room.id === 'class3' ? '高校生自習室は高校生の部屋です' : '高校生は「高校生自習室」で自習してね';
     return p.user.role === 'teacher' ? `${room.name}には入れません（担当の教室ではありません）` : `${room.name}には入れません`;
   }
   if (p.user.role === 'student') {
@@ -204,7 +206,7 @@ function endCall(call, reason, actorId) {
 function setRoom(p, roomId) {
   if (p.room === roomId) return;
   if (p.hand) lowerHand(p);
-  if (p.room === 'study') clearStudyPhoto(p);
+  if (SM.isStudyRoom(p.room)) clearStudyPhoto(p);
   if (p.room) leaveClassRoom(p, p.room, 'moved');
   p.room = roomId;
   io.emit('user-updated', { id: p.id, room: roomId });
@@ -279,7 +281,7 @@ function attach(httpServer) {
     const old = online.get(user.id);
     if (old) {
       // 前の接続がまだ残っていた（スマホの通信が切れたのに、サーバーが気づく前につながり直した）ときも、元の席にもどす
-      if (old.user.role === 'student' && old.room === 'study' && !old.away) studyGaps.set(old.id, { at: Date.now(), seat: old.seat });
+      if (old.user.role === 'student' && SM.isStudyRoom(old.room) && !old.away) studyGaps.set(old.id, { at: Date.now(), seat: old.seat, room: old.room });
       kickPresence(old, '別の端末（またはタブ）で入室したため、こちらは切断しました');
     }
 
@@ -294,12 +296,13 @@ function attach(httpServer) {
     p.streak = user.role === 'student' ? ganbari.streak(p.id) : 0;
     p.today10 = user.role === 'student' ? Math.floor(ganbari.dayTotal(p.id, ganbari.jst().day) / 10) * 10 : null;
     p.bday = user.role === 'student' ? ganbari.birthdayInfo(p.id) : null;
+    refreshHS(p, false);
     p.room = roomIdAt(p.x, p.y);
     // 自習中に通信が切れていた生徒：すぐもどってきたら、元の席にすわらせ、切れていた間も数える
     let gapMinutes = 0;
     const gap = studyGaps.get(p.id);
     studyGaps.delete(p.id);
-    if (gap && user.role === 'student' && Date.now() - gap.at <= STUDY_GAP_MS && p.room === 'study') {
+    if (gap && user.role === 'student' && Date.now() - gap.at <= STUDY_GAP_MS && p.room === gap.room) {
       if (gap.seat && ![...online.values()].some(o => o.id !== p.id && o.seat === gap.seat)) {
         const [sx, sy] = gap.seat.split(',').map(Number);
         const c = SM.tileCenter(sx, sy);
@@ -325,7 +328,7 @@ function attach(httpServer) {
       me: { ...pub(p), bday: !!p.bday }, users: [...online.values()].filter(o => o !== p).map(pub), rooms: roomCounts(), reactions: REACTIONS,
       classes: classState(), classCall: livekit.enabled,
     });
-    if (gap && p.room === 'study' && Date.now() - gap.at <= STUDY_GAP_MS) socket.emit('study-resumed', { minutes: gapMinutes, seat: p.seat });
+    if (gap && p.room === gap.room && Date.now() - gap.at <= STUDY_GAP_MS) socket.emit('study-resumed', { minutes: gapMinutes, seat: p.seat });
     socket.broadcast.emit('user-joined', pub(p));
     // 誕生日を「先生だけ」に見せる生徒：先生・オーナーにだけ🎂を知らせる
     if (p.bday && !p.bday.public) socket.to('staff').emit('user-updated', { id: p.id, bday: true });
@@ -594,6 +597,16 @@ function attach(httpServer) {
       io.emit('user-updated', { id: p.id, topic: p.topic });
       ack({ ok: true, topic: p.topic });
     });
+    // 高校生：今日やること（3つ）を書く。高校生自習室にいるときだけ
+    socket.on('study-plan', (d, ack) => {
+      if (typeof ack !== 'function') ack = () => {};
+      if (p.user.role !== 'student' || !ganbari.isHS(p.user.grade)) return ack({ ok: false, error: '高校生の機能です' });
+      if (p.room !== 'class3') return ack({ ok: false, error: '高校生自習室に入ってから書いてください' });
+      const err = ganbari.setPlan(p.id, d && d.items);
+      if (err) return ack({ ok: false, error: err });
+      refreshHS(p);
+      ack({ ok: true, plan: p.plan });
+    });
     // 先生がほかの人の吹き出しを消す（ふさわしくない内容など）
     socket.on('study-topic-clear', (targetId, ack) => {
       if (typeof ack !== 'function') ack = () => {};
@@ -620,7 +633,7 @@ function attach(httpServer) {
       if (typeof ack !== 'function') ack = () => {};
       if (!canViewStudyPhotos(p.user)) return ack({ ok: false, error: '権限がありません' });
       const t = online.get(Number(d && d.studentId));
-      if (!t || t.room !== 'study' || !t.studyCam) return ack({ ok: false, error: 'カメラがオンの自習中の生徒だけ撮影できます' });
+      if (!t || !SM.isStudyRoom(t.room) || !t.studyCam) return ack({ ok: false, error: 'カメラがオンの自習中の生徒だけ撮影できます' });
       if (Date.now() - (t.lastPhotoRequestAt || 0) < 30_000) return ack({ ok: false, error: '30秒ほど待ってからもう一度押してください' });
       t.lastPhotoRequestAt = Date.now(); // 連打防止（30秒に1回）
       t.photoRequestedAt = Date.now();   // 未使用の撮影リクエスト（1回使うと消える）
@@ -631,7 +644,7 @@ function attach(httpServer) {
 
     // ── 自習室の見守りカメラのオン/オフ（表示用。写真そのものは HTTP で送る） ──
     socket.on('study-camera', (d) => {
-      const on = !!(d && d.on) && p.user.role === 'student' && p.room === 'study' && studyPhotosEnabled();
+      const on = !!(d && d.on) && p.user.role === 'student' && SM.isStudyRoom(p.room) && studyPhotosEnabled();
       if (on === !!p.studyCam) return;
       p.studyCam = on;
       io.emit('user-updated', { id: p.id, studyCam: on });
@@ -653,7 +666,7 @@ function attach(httpServer) {
       if (p.room) leaveClassRoom(p, p.room, 'disconnected');
       lastPos.set(p.id, { x: p.x, y: p.y });
       lastOffline.set(p.id, Date.now());
-      if (p.user.role === 'student' && p.room === 'study' && !p.away) studyGaps.set(p.id, { at: Date.now(), seat: p.seat });
+      if (p.user.role === 'student' && SM.isStudyRoom(p.room) && !p.away) studyGaps.set(p.id, { at: Date.now(), seat: p.seat, room: p.room });
       online.delete(p.id);
       pendingMoves.delete(p.id);
       io.emit('user-left', { id: p.id });
@@ -688,7 +701,9 @@ function attach(httpServer) {
         if (s !== p.streak) { p.streak = s; io.emit('user-updated', { id, streak: s }); }
         p.socket.emit('study-minute');
       }
-      for (const p of online.values()) { updateToday(p); refreshBirthday(p); } // 日付が変わったときも 0 にもどる
+      for (const p of online.values()) { updateToday(p); refreshBirthday(p); refreshHS(p); } // 日付が変わったときも 0 にもどる
+      // 決めた曜日・時刻を過ぎても来ていない高校生を、先生に知らせる
+      for (const s of ganbari.lateStudents(new Set(online.keys()))) notify.studentLate(s, online).catch(e => console.error('遅れの通知に失敗:', e.message));
     } catch (e) { console.error('自習時間の記録に失敗:', e.message); }
   }, Number(process.env.STUDY_TICK_MS || 60_000)).unref();
 
@@ -735,6 +750,7 @@ function refreshUser(userId) {
   const hadScreen = can(p.user, 'share_screen');
   p.user = { ...u, sessionTokenHash: p.tokenHash };
   refreshBirthday(p); // 誕生日の登録・見せ方が変わったとき
+  refreshHS(p);
   // 授業中に通話・画面共有の権限が外されたら授業を終了する
   for (const [roomId, c] of classes) {
     if (c.teacherId !== p.id) continue;
@@ -754,6 +770,15 @@ function refreshUser(userId) {
 
 function refreshRooms() { broadcastRooms(); }
 
+// 高校生の称号・今日やることを読みなおす（変わったら知らせる）
+function refreshHS(p, emit = true) {
+  const hs = p.user.role === 'student' && ganbari.isHS(p.user.grade);
+  const t = hs ? ganbari.titleOf(p.id) : null;
+  const next = { hs, title: t && t.name ? t.name : null, plan: hs ? ganbari.planOf(p.id) : null };
+  const changed = next.hs !== !!p.hs || next.title !== (p.title || null) || JSON.stringify(next.plan) !== JSON.stringify(p.plan || null);
+  Object.assign(p, next);
+  if (changed && emit && io) io.emit('user-updated', { id: p.id, hs: next.hs, title: next.title, plan: next.plan });
+}
 // 誕生日カード：その日にはじめてのときだけ（ganbari 側で1日1回に限る）
 function sendBirthdayCard(p) {
   try {
@@ -815,6 +840,7 @@ function refreshGanbari(userId) {
   p.streak = p.user.role === 'student' ? ganbari.streak(p.id) : 0;
   io.emit('user-updated', { id: p.id, equip: equipView(p.equip), streak: p.streak });
   updateToday(p);
+  refreshHS(p);
 }
 function refreshAllGanbari() { for (const id of online.keys()) refreshGanbari(id); }
 
@@ -824,7 +850,7 @@ function storeStudyPhoto(userId, buf, meta = {}) {
   if (!studyPhotosEnabled()) return '見守り写真はオフになっています';
   const p = online.get(Number(userId));
   if (!p || p.user.role !== 'student') return '送信できません';
-  if (p.room !== 'study') return '自習室に入ってから送信してください';
+  if (!SM.isStudyRoom(p.room)) return '自習室に入ってから送信してください';
   if (!Buffer.isBuffer(buf) || buf.length < 100 || buf[0] !== 0xff || buf[1] !== 0xd8) return '写真の形式が正しくありません';
   const prev = studyPhotos.get(p.id);
   const requested = p.photoRequestedAt && Date.now() - p.photoRequestedAt < 60_000;

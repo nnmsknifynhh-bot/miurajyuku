@@ -84,7 +84,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 const ROOM_SEED = [
   { id: 'class1', name: '教室1', type: 'classroom', sort: 1 },
   { id: 'class2', name: '教室2', type: 'classroom', sort: 2 },
-  { id: 'class3', name: '教室3', type: 'classroom', sort: 3 },
+  { id: 'class3', name: '高校生自習室', type: 'study', sort: 3 }, // 教室3を高校生自習室（カフェ風）に改装
   { id: 'study', name: '自習室', type: 'study', sort: 4 },
 ];
 const insertRoom = db.prepare('INSERT OR IGNORE INTO rooms (id, name, type, capacity, max_capacity, sort_order) VALUES (?, ?, ?, ?, ?, ?)');
@@ -92,6 +92,14 @@ for (const r of ROOM_SEED) {
   const max = SchoolMap.seatCount(r.id);
   const def = r.type === 'study' ? Math.min(30, max) : max;
   insertRoom.run(r.id, r.name, r.type, def, max, r.sort);
+}
+// すでに「教室3」として保存されているデータを、高校生自習室に切りかえる（1回だけ）
+{
+  const r3 = db.prepare("SELECT type FROM rooms WHERE id = 'class3'").get();
+  if (r3 && r3.type === 'classroom') {
+    const max = SchoolMap.seatCount('class3');
+    db.prepare("UPDATE rooms SET type = 'study', name = '高校生自習室', capacity = ?, max_capacity = ? WHERE id = 'class3'").run(max, max);
+  }
 }
 
 const now = () => new Date().toISOString();

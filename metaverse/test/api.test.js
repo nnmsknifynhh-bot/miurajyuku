@@ -72,11 +72,11 @@ test('生徒・先生は管理 API を使えない（サーバー側で拒否）
   assert.equal((await teacher('PATCH', '/api/admin/rooms/class1', { capacity: 5 })).status, 403);
 });
 
-test('入室できる教室：先生は担当教室のみ、生徒は全教室', async () => {
+test('入室できる教室：先生は担当教室のみ、生徒は教室と自習室（高校生自習室は高校生だけ）', async () => {
   const t = (await teacher('GET', '/api/me')).data.rooms;
-  assert.deepEqual(t.filter(r => r.canEnter).map(r => r.id), ['class1', 'study']);
+  assert.deepEqual(t.filter(r => r.canEnter).map(r => r.id), ['class1', 'class3', 'study'], '先生は担当教室と、2つの自習室');
   const s = (await student('GET', '/api/me')).data.rooms;
-  assert.deepEqual(s.filter(r => r.canEnter).map(r => r.id), ['class1', 'class2', 'class3', 'study']);
+  assert.deepEqual(s.filter(r => r.canEnter).map(r => r.id), ['class1', 'class2', 'study']);
 });
 
 test('教室管理の権限を付けた先生は定員を変更できる（座席数が上限）', async () => {

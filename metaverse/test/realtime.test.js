@@ -78,7 +78,7 @@ test('準備：オーナー・先生3人・生徒46人を作成', async () => {
     teachers[id] = { id: r.data.user.id, cookie: await login('tch' + id, 'teacherpw1') };
   }
   for (let i = 1; i <= 46; i++) {
-    const r = await http('POST', '/api/admin/users', { role: 'student', displayName: `生徒${i}`, loginId: `stu${i}`, password: 'studentpw1' }, ownerCookie);
+    const r = await http('POST', '/api/admin/users', { role: 'student', displayName: `生徒${i}`, loginId: `stu${i}`, password: 'studentpw1', grade: i >= 31 && i <= 45 ? '高1' : undefined }, ownerCookie); // 31〜45人目は高校生（高校生自習室へ）
     assert.equal(r.status, 201);
     students.push({ id: r.data.user.id, cookie: await login(`stu${i}`, 'studentpw1') });
   }
@@ -93,7 +93,7 @@ test('ログインしていない接続・他サイトからの接続は拒否�
   }), /forbidden/);
 });
 
-test('45人の生徒と先生3人が同時に接続し、3教室に15人ずつ入れる', async () => {
+test('45人の生徒と先生3人が同時に接続し、教室1・2と高校生自習室に15人ずつ入れる', async () => {
   for (const s of students) s.c = await connect(s.cookie);
   for (const t of Object.values(teachers)) t.c = await connect(t.cookie);
   const groups = ['class1', 'class2', 'class3'];

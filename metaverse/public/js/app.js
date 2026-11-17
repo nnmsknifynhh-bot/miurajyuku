@@ -90,6 +90,9 @@
       toast(birthday ? `🎂 ${name}さんが入室しました（${time}）。今日は誕生日です。声をかけてあげてね` : `🔔 ${name}さんが入室しました（${time}）`, birthday ? 9000 : 6000);
       chime();
     });
+    // 高校生が決めた曜日に来ていないとき（先生・オーナーへ）
+    socket.on('student-late', ({ name, weekday, time }) => { toast(`⏰ ${name}さんがまだ来ていません（${weekday}曜 ${time}〜の予定）`, 9000); chime(); });
+    socket.on('study-minute', () => { if (state.user && state.user.role === 'student') refreshWeek(); });
     // 誕生日のお祝いカード（その日にはじめて入ったとき）
     socket.on('birthday', ({ name, message, gift }) => {
       $('#bday-title').textContent = `${name}さん、お誕生日おめでとう！`;
@@ -140,7 +143,7 @@
       state.counts = d.rooms; state.reactions = d.reactions;
       state.classes = d.classes || {}; state.classCall = !!d.classCall;
       state.path = []; state.pathSeat = null; state.ready = true;
-      buildReactions(); updateAll();
+      buildReactions(); updateAll(); refreshWeek(true);
     });
     socket.on('class-state', (c) => { state.classes = c; state.call.sync(); });
     socket.on('class-ended', ({ room, reason }) => {
@@ -292,21 +295,23 @@
   const STAND_LIMIT_MS = 10_000;
   let standingSince = 0;
   function studySeats() {
-    const z = SM.ZONES.find(v => v.id === 'study'), seats = [];
+    const z = SM.ZONES.find(v => v.id === ((state.me && SM.isStudyRoom(state.me.room)) ? state.me.room : 'study')), seats = [];
     for (let y = z.y1; y <= z.y2; y++) for (let x = z.x1; x <= z.x2; x++) if (SM.tileAt(x, y) === 'c') seats.push({ x, y });
     return seats;
   }
   function openSeatPicker() {
     const map = $('#seat-map'); map.textContent = '';
     const occ = occupiedSeats(), seats = studySeats();
-    const midX = (SM.FOREST[0].x + 1); // 学年の木の通路で左右に分ける
-    for (const [label, side] of [['左がわ', seats.filter(s => s.x < midX)], ['右がわ', seats.filter(s => s.x >= midX)]]) {
+    const roomId = SM.isStudyRoom(state.me.room) ? state.me.room : 'study';
+    const groups = (SM.SEAT_GROUPS[roomId] || [{ label: '席' }]).map(gp => [gp.label, seats.filter(s =>
+      (gp.x1 == null || (s.x >= gp.x1 && s.x <= gp.x2)) && (gp.y1 == null || (s.y >= gp.y1 && s.y <= gp.y2)))]);
+    for (const [label, side] of groups) {
       if (!side.length) continue;
       const xs = [...new Set(side.map(s => s.x))].sort((a, b) => a - b), ys = [...new Set(side.map(s => s.y))].sort((a, b) => a - b);
       const box = document.createElement('div'); box.className = 'seat-side';
       const title = document.createElement('b'); title.textContent = label;
       const grid = document.createElement('div'); grid.className = 'seat-grid';
-      grid.style.gridTemplateColumns = `repeat(${xs.length}, 44px)`;
+      grid.style.gridTemplateColumns = `repeat(${xs.length}, minmax(0, 44px))`;
       for (const st of side) {
         const b = document.createElement('button'); b.type = 'button';
         const taken = occ.has(SM.seatId(st.x, st.y));
@@ -320,6 +325,51 @@
     }
     if (!$('#seat-dialog').open) $('#seat-dialog').showModal();
   }
+  // ───────── 高校生：週のノルマ・今日やること ─────────
+  let weekBusy = false, lastWeekAt = 0;
+  async function refreshWeek(force) {
+    const me = state.me;
+    if (!me || !state.user || state.user.role !== 'student' || !me.hs) { $('#week-chip').hidden = true; return; }
+    if (weekBusy || (!force && Date.now() - lastWeekAt < 50_000)) return;
+    weekBusy = true; lastWeekAt = Date.now();
+    try {
+      const g = await api('GET', '/api/me/ganbari');
+      if (!g.hs) { $('#week-chip').hidden = true; return; }
+      const w = g.hs.week, t = g.hs.today;
+      const hmm = (m) => `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`;
+      const marks = Array.from({ length: w.need }, (_, i) => i < w.sessions ? '●' : '○').join('');
+      $('#week-chip').textContent = '';
+      $('#week-chip').append(document.createTextNode(`📅 今週 ${marks} ${w.sessions}/${w.need}回` + (w.achieved ? ' 達成！🎉' : '')));
+      const sm = document.createElement('small');
+      sm.textContent = t.done ? `今日 ${hmm(t.minutes)} ✓ 1回クリア` : `今日 ${hmm(t.minutes)} / ${hmm(t.sessionMinutes)}（あと${t.sessionMinutes - t.minutes}分）`;
+      $('#week-chip').append(sm);
+      $('#week-chip').hidden = false;
+      state.hsInfo = g.hs;
+    } catch (e) { /* 次の機会に */ } finally { weekBusy = false; }
+  }
+  setInterval(() => refreshWeek(), 60_000);
+  // 高校生自習室に入ったら「今日やること」を書く（今日まだ書いていなければ）
+  function checkPlan() {
+    const me = state.me;
+    if (!me || !me.hs || state.user.role !== 'student' || me.room !== 'class3' || me.plan) return;
+    if ($('#plan-dialog').open || document.querySelector('dialog[open]')) return;
+    $('#plan-error').hidden = true;
+    $('#plan-dialog').showModal();
+    setTimeout(() => $('#plan-1').focus(), 50);
+  }
+  setInterval(checkPlan, 1500);
+  $('#plan-dialog').addEventListener('cancel', (e) => e.preventDefault()); // 書くまで閉じない
+  $('#plan-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const items = [1, 2, 3].map(i => $('#plan-' + i).value);
+    state.socket.emit('study-plan', { items }, (r) => {
+      if (!r || !r.ok) { $('#plan-error').textContent = (r && r.error) || '保存できませんでした'; $('#plan-error').hidden = false; return; }
+      state.me.plan = r.plan; $('#plan-dialog').close(); toast('☕ 今日やることを書きました。がんばろう！'); refreshWeek(true);
+    });
+  });
+  // 自習室から出たら、書きかけの画面は閉じる
+  setInterval(() => { if ($('#plan-dialog').open && state.me && state.me.room !== 'class3') $('#plan-dialog').close(); }, 1000);
+
   $('#bday-close').onclick = () => { $('#bday-dialog').close(); if (state.gb && state.gb.refreshForest) state.gb.refreshForest(); };
   $('#seat-close').onclick = () => { $('#seat-dialog').close(); standingSince = Date.now(); };
   $('#seat-near').onclick = () => {
@@ -332,7 +382,7 @@
   };
   setInterval(() => {
     const me = state.me;
-    const watching = state.ready && me && state.user && state.user.role === 'student' && me.room === 'study' && !me.seat
+    const watching = state.ready && me && state.user && state.user.role === 'student' && SM.isStudyRoom(me.room) && !me.seat
       && !state.pathSeat && document.visibilityState === 'visible' && !document.querySelector('dialog[open]');
     if (!watching) { standingSince = 0; return; } // すわった・歩いて席へ向かっている・ほかの画面を開いている・アプリを見ていないときは数えない
     if (!standingSince) { standingSince = Date.now(); return; }
@@ -413,7 +463,7 @@
     $('#topic-warn').textContent = warn || ''; $('#topic-warn').hidden = !warn;
     const chips = $('#topic-chips'); chips.textContent = '';
     const student = state.user.role === 'student';
-    $('#topic-title').textContent = student && state.me.room === 'study' ? '✏️ なにを勉強する？' : '💬 吹き出しに書く';
+    $('#topic-title').textContent = student && SM.isStudyRoom(state.me.room) ? '✏️ なにを勉強する？' : '💬 吹き出しに書く';
     let saved = '';
     try { saved = localStorage.getItem('juku-topic-' + state.user.id) || ''; } catch (e) {}
     $('#topic-input').value = state.me.topic || saved;
@@ -505,7 +555,7 @@
     $('#hand-label').textContent = me && me.hand ? '手をおろす' : '手をあげる';
     // 自習室では「手をあげる」の代わりに「勉強内容」ボタン
     // 自習室では挙手を使わないので「手をあげる」を隠す（吹き出しボタンはどこでも表示）
-    const inStudy = !!(me && me.room === 'study');
+    const inStudy = !!(me && SM.isStudyRoom(me.room));
     $('#btn-hand').hidden = inStudy;
     $('#btn-topic').classList.toggle('on', !!(me && me.topic));
     $('#btn-hand').classList.toggle('hand-on', !!(me && me.hand));
@@ -570,7 +620,7 @@
   function renderStudyPanel() {
     const box = $('#panel-study'); box.textContent = '';
     if (!state.studyPhotos) { box.append(el('p', 'panel-empty', '見守り写真はオフです（オーナーが管理画面の「教室の設定」でオンにできます）')); return; }
-    const students = [...state.others.values()].filter(u => u.room === 'study' && u.role === 'student').sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+    const students = [...state.others.values()].filter(u => SM.isStudyRoom(u.room) && u.role === 'student').sort((a, b) => a.name.localeCompare(b.name, 'ja'));
     if (!students.length) { box.append(el('p', 'panel-empty', 'いま自習室にいる生徒はいません')); return; }
     for (const u of students) {
       const meta = state.photoMeta[u.id];
@@ -986,7 +1036,7 @@
   // 画面が消えると音が止まったり、通信が切れて自習時間が数えられなくなる端末があるため）
   let wakeLock = null;
   async function updateWakeLock() {
-    const studying = state.user && state.user.role === 'student' && state.me && state.me.room === 'study';
+    const studying = state.user && state.user.role === 'student' && state.me && SM.isStudyRoom(state.me.room);
     const need = document.visibilityState === 'visible' && (studying || (state.call && state.call.connected()) || (state.pc && state.pc.active()));
     try {
       if (need && !wakeLock && navigator.wakeLock) {

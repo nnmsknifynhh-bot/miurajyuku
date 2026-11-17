@@ -68,6 +68,7 @@ function publicUser(u) {
     id: u.id, loginId: u.login_id, displayName: u.display_name, role: u.role, avatarColor: u.avatar_color,
     isActive: u.is_active, permissions: u.permissions, rooms: u.rooms, grade: u.grade || null,
     birthday: u.birthday || null, birthdayPublic: u.birthday_public === undefined ? true : !!u.birthday_public,
+    visitDays: u.visit_days ? u.visit_days.split(',').map(Number) : [], visitTime: u.visit_time || null,
   };
 }
 function listRooms(user) {
@@ -174,7 +175,8 @@ app.get('/api/me/ganbari', auth.requireAuth, (req, res) => {
     points: ganbari.points(u.id), streak: ganbari.streak(u.id), equip: ganbari.getEquip(u.id),
     shop: ganbari.shopFor(u.id), goal: term ? ganbari.goalOf(u.id, term.key) : null,
     dressup: ganbari.dressupInfo(), myItems: ganbari.getEquip(u.id, { ignorePeriod: true }).ids,
-    rules: { minutesPerPoint: c.minutesPerPoint, streakMin: ganbari.streakMinFor(u.id, c), window: c.window, window2: c.window2, requireSeat: c.requireSeat, today: ganbari.ruleFor(today, c) },
+    hs: ganbari.isHS(u.grade) ? { ...ganbari.hsWeeks(u.id), title: ganbari.titleOf(u.id), plan: ganbari.planOf(u.id), visitDays: u.visit_days ? u.visit_days.split(',').map(Number) : [], visitTime: u.visit_time || null } : null,
+    rules: { minutesPerPoint: c.minutesPerPoint, streakMin: ganbari.streakMinFor(u.id, c), window: c.window, window2: c.window2, requireSeat: c.requireSeat, today: ganbari.ruleFor(today, c, ganbari.isHS(u.grade) ? 'hs' : null) },
   });
 });
 app.post('/api/me/shop/buy', auth.requireAuth, (req, res) => {
@@ -342,12 +344,14 @@ admin.post('/users', requireOwner, (req, res) => {
   const grade = role === 'student' && ganbari.GRADES.includes(b.grade) ? b.grade : null;
   const birthday = role === 'student' ? ganbari.normBirthday(b.birthday) : null;
   if (birthday === undefined) return bad(res, '誕生日が正しくありません');
+  const visit = role === 'student' ? ganbari.normVisit(b.visitDays, b.visitTime) : { days: null, time: null };
+  if (!visit) return bad(res, '来る曜日と時刻が正しくありません');
   const id = transaction(() => {
     const r = db.prepare('INSERT INTO users (login_id, display_name, role, password_hash, avatar_color, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(loginId, displayName, role, auth.hashPassword(b.password), color, now(), now());
     const id = Number(r.lastInsertRowid);
     if (grade) db.prepare('UPDATE users SET grade = ? WHERE id = ?').run(grade, id);
-    if (role === 'student') db.prepare('UPDATE users SET birthday = ?, birthday_public = ? WHERE id = ?').run(birthday, b.birthdayPublic === false ? 0 : 1, id);
+    if (role === 'student') db.prepare('UPDATE users SET birthday = ?, birthday_public = ?, visit_days = ?, visit_time = ? WHERE id = ?').run(birthday, b.birthdayPublic === false ? 0 : 1, visit.days, visit.time, id);
     applyPermissionsAndRooms(id, role, b.permissions, b.rooms);
     return id;
   });
@@ -383,6 +387,12 @@ admin.patch('/users/:id', requireOwner, (req, res) => {
         db.prepare('UPDATE users SET birthday = ? WHERE id = ?').run(bd, id); changes.push('birthday');
       }
       if (b.birthdayPublic !== undefined) { db.prepare('UPDATE users SET birthday_public = ? WHERE id = ?').run(b.birthdayPublic ? 1 : 0, id); changes.push('birthdayPublic'); }
+    }
+    if (b.visitDays !== undefined) {
+      if (target.role !== 'student') return '来る曜日は生徒だけに設定できます';
+      const v = ganbari.normVisit(b.visitDays, b.visitTime);
+      if (!v) return '来る曜日と時刻が正しくありません（曜日をえらんだら時刻も入れてください）';
+      db.prepare('UPDATE users SET visit_days = ?, visit_time = ? WHERE id = ?').run(v.days, v.time, id); changes.push('visit');
     }
     if (b.avatarColor !== undefined) {
       if (!RE_COLOR.test(b.avatarColor)) return '色の指定が正しくありません';

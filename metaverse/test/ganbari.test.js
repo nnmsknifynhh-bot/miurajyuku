@@ -91,12 +91,12 @@ test('学年の木：学年の「平均」時間で育つ（人数の差が出�
 });
 
 test('木の名前・学年・段階の時間はオーナーが変えられる', () => {
-  assert.equal(G.setConfig({ trees: [{ name: '小学生の木', grades: ['小5', '小6'] }, { name: '中1・中2の木', grades: ['中1', '中2'] }, { name: '受験生の木', grades: ['中3'] }] }), null);
+  assert.equal(G.setConfig({ trees: [{ name: '小学生の木', grades: ['小5', '小6'] }, { name: '中1・中2の木', grades: ['中1', '中2'] }, { name: '受験生の木', grades: ['中3'] }, { name: '高校生の木', grades: ['高1', '高2', '高3'] }] }), null);
   const f = G.forest(at(C().terms[1]));
   assert.equal(f.trees[1].students, 3);
   assert.equal(f.trees[1].avgMinutes, 240, '(120+0+600)/3');
   assert.match(G.setConfig({ stages: [0, 5, 4, 30, 50, 80] }), /段階/);
-  G.setConfig({ trees: [{ name: '中1の木', grades: ['中1'] }, { name: '中2の木', grades: ['中2'] }, { name: '中3の木', grades: ['中3'] }] });
+  G.setConfig({ trees: [{ name: '中1の木', grades: ['中1'] }, { name: '中2の木', grades: ['中2'] }, { name: '中3の木', grades: ['中3'] }, { name: '高校生の木', grades: ['高1', '高2', '高3'] }] });
 });
 
 test('ポイント：今年度の自習時間で増え、買うと減る。期間限定・足りないときは買えない', () => {

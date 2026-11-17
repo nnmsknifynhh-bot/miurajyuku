@@ -85,16 +85,62 @@
         : { start: s1.value, end: endVal(e1), start2: night[1].checked ? s2.value : null, end2: night[1].checked ? endVal(e2) : null };
       return { all, night, am, pm, sync, value };
     };
-    // 毎日同じ数え方
-    const common = slotInputs(c.window, c.window2);
-    const allDay = common.all;
-    const syncCommon = () => common.sync(false);
-    allDay[1].onchange = common.night[1].onchange = syncCommon; syncCommon();
-    const cap = numInput(c.dailyCap, 10, 1440), streakMin = numInput(c.streakMin, 1, 600), mpp = numInput(c.minutesPerPoint, 1, 120);
+    // 数える時間帯・上限・曜日ごと（中学生と高校生で別々）
+    const WD = ['日', '月', '火', '水', '木', '金', '土'];
+    const ruleBlock = (src, title, note) => {
+      const box = el('div', 'gb-box');
+      box.append(el('b', null, title));
+      if (note) box.append(el('p', 'muted', note));
+      const common = slotInputs(src.window, src.window2);
+      const syncC = () => common.sync(false);
+      common.all[1].onchange = common.night[1].onchange = syncC; syncC();
+      const capI = numInput(src.dailyCap, 10, 1440);
+      const winRow = el('div', 'gb-slots'); winRow.append(common.all[0], common.am, common.pm);
+      const winField = el('div', 'field'); winField.append(el('span', null, '数える時間帯'), winRow, el('small', null, '朝だけ・夜だけのときは「朝」の欄だけ使ってください'));
+      const capField = field('1日に数える上限（分）', capI, '朝と夜の合計');
+      const g = el('div', 'gb-grid'); g.append(winField, capField);
+      const byDay = check('曜日ごとに変える（数える曜日・時間帯・上限）', Array.isArray(src.weekly));
+      const wkBox = el('div', 'gb-week');
+      const wkRows = WD.map((name, i) => {
+        const w = (src.weekly && src.weekly[i]) || { on: true, start: src.window.start, end: src.window.end, start2: src.window2 && src.window2.start, end2: src.window2 && src.window2.end, cap: src.dailyCap };
+        const row = el('div', 'gb-wd');
+        const on = check(name + '曜', w.on);
+        const sl = slotInputs(w, w.start2 && w.end2 ? { start: w.start2, end: w.end2 } : null);
+        const cp = numInput(w.cap, 10, 1440);
+        const sync = () => { const off = !on[1].checked; sl.sync(off); cp.disabled = off; row.classList.toggle('off', off); };
+        on[1].onchange = sl.all[1].onchange = sl.night[1].onchange = sync; sync();
+        const capL = el('span', 'gb-row'); capL.append(el('span', 'muted', '上限'), cp, el('span', 'muted', '分'));
+        const head = el('div', 'gb-row'); head.append(on[0], sl.all[0], capL);
+        row.append(head, sl.am, sl.pm);
+        wkBox.append(row);
+        return () => ({ on: on[1].checked, ...sl.value(), cap: Number(cp.value) });
+      });
+      const wkNote = el('p', 'muted', 'チェックをはずした曜日は自習時間を数えません。');
+      const syncWeek = () => { const w = byDay[1].checked; wkBox.hidden = wkNote.hidden = !w; winField.hidden = capField.hidden = w; };
+      byDay[1].onchange = syncWeek; syncWeek();
+      box.append(byDay[0], wkBox, wkNote, g);
+      return {
+        box,
+        value: () => {
+          const v = common.value();
+          return { window: { start: v.start, end: v.end }, window2: v.start2 ? { start: v.start2, end: v.end2 } : null, dailyCap: Number(capI.value), weekly: byDay[1].checked ? wkRows.map(f => f()) : null };
+        },
+      };
+    };
+    const jh = ruleBlock(c, '📚 自習室（中学生など）');
+    const hs = ruleBlock(c.hs, '☕ 高校生自習室（高校生）', '高校生（高1〜高3）の数え方です。中学生とは別に決められます。');
+    // 高校生の週のノルマ
+    const hsSessions = numInput(c.hs.sessionsPerWeek, 1, 7), hsMinutes = numInput(c.hs.sessionMinutes, 10, 720);
+    const hsBonus = numInput(c.hs.weekBonus, 0, 1000), hsLate = numInput(c.hs.lateMinutes, 1, 240);
+    const hg = el('div', 'gb-grid');
+    hg.append(field('週のノルマ：週に何回', hsSessions, '例：2回'), field('1回とする時間（分）', hsMinutes, '例：180 = 3時間。この時間をこえた日を「1回」と数えます'),
+      field('ノルマ達成のボーナス（ポイント）', hsBonus, '週のノルマを達成すると、この分ポイントがふえます'), field('来ていない通知（予定の何分後）', hsLate, '来る曜日と時刻は「ユーザー」の生徒の編集で決めます'));
+    hs.box.append(el('b', null, '📅 週のノルマ'), hg, el('p', 'muted', '高校生の連続🔥は「ノルマを達成した週」が続いた数です（例：🔥3週）。'));
+
+    const streakMin = numInput(c.streakMin, 1, 600), mpp = numInput(c.minutesPerPoint, 1, 120);
     const seat = check('席に座っているときだけ数える', c.requireSeat), cam = check('見守り写真がオンのときは、カメラがオンのときだけ数える', c.requireCamera);
     const grid = el('div', 'gb-grid');
-    const winRow = el('div', 'gb-slots'); winRow.append(allDay[0], common.am, common.pm);
-    grid.append((() => { const d = el('div', 'field'); d.append(el('span', null, '数える時間帯'), winRow, el('small', null, '朝だけ・夜だけのときは「朝」の欄だけ使ってください')); return d; })(), field('1日に数える上限（分）', cap, '例：300 = 5時間（朝と夜の合計）'), field('連続自習🔥の最低時間（分）：下の学年以外', streakMin, '例：小学生・高校生'), field('何分で1ポイント', mpp));
+    grid.append(field('何分で1ポイント', mpp, '中学生・高校生共通'), field('連続自習🔥の最低時間（分）：下の学年以外', streakMin, '例：小学生'));
     // 連続自習🔥の最低時間（学年別）
     const SG = ['中1', '中2', '中3'];
     const sgInputs = SG.map(g => [g, numInput((c.streakByGrade || {})[g] || c.streakMin, 1, 600)]);
@@ -103,40 +149,17 @@
     sgInputs.forEach(([g, i]) => { i.style.width = '72px'; const one = el('span', 'gb-row'); one.style.flexWrap = 'nowrap'; one.append(el('span', null, g), i, el('span', 'muted', '分')); sgRow.append(one); });
     sgBox.append(el('span', null, '連続自習🔥の1日の最低時間（学年別）'), sgRow, el('small', null, 'この時間より多く自習した日が続くと🔥がふえます'));
     const saveRule = el('button', 'btn', '保存する');
-    // 曜日ごとの数え方
-    const WD = ['日', '月', '火', '水', '木', '金', '土'];
-    const byDay = check('曜日ごとに変える（数える曜日・時間帯・上限）', Array.isArray(c.weekly));
-    const wkBox = el('div', 'gb-week');
-    const wkRows = WD.map((name, i) => {
-      const w = (c.weekly && c.weekly[i]) || { on: true, start: c.window.start, end: c.window.end, start2: c.window2 && c.window2.start, end2: c.window2 && c.window2.end, cap: c.dailyCap };
-      const row = el('div', 'gb-wd');
-      const on = check(name + '曜', w.on);
-      const sl = slotInputs(w, w.start2 && w.end2 ? { start: w.start2, end: w.end2 } : null);
-      const cp = numInput(w.cap, 10, 1440);
-      const sync = () => { const off = !on[1].checked; sl.sync(off); cp.disabled = off; row.classList.toggle('off', off); };
-      on[1].onchange = sl.all[1].onchange = sl.night[1].onchange = sync; sync();
-      const capL = el('span', 'gb-row'); capL.append(el('span', 'muted', '上限'), cp, el('span', 'muted', '分'));
-      const head = el('div', 'gb-row'); head.append(on[0], sl.all[0], capL);
-      row.append(head, sl.am, sl.pm);
-      wkBox.append(row);
-      return () => ({ on: on[1].checked, ...sl.value(), cap: Number(cp.value) });
-    });
-    const wkNote = el('p', 'muted', 'チェックをはずした曜日は自習時間を数えません。その曜日は連続自習🔥も途切れません（お休みの日として、とばして数えます）。');
-    const syncWeek = () => { const w = byDay[1].checked; wkBox.hidden = wkNote.hidden = !w; grid.querySelectorAll('.gb-common').forEach(x => { x.hidden = w; }); };
-    grid.children[0].classList.add('gb-common'); grid.children[1].classList.add('gb-common');
-    byDay[1].onchange = syncWeek; syncWeek();
     saveRule.onclick = () => {
-      const v = common.value();
       const y = window.scrollY;
       return save({
-        window: { start: v.start, end: v.end }, window2: v.start2 ? { start: v.start2, end: v.end2 } : null,
-        dailyCap: Number(cap.value), streakMin: Number(streakMin.value), minutesPerPoint: Number(mpp.value),
+        ...jh.value(),
+        streakMin: Number(streakMin.value), minutesPerPoint: Number(mpp.value),
         streakByGrade: { ...(c.streakByGrade || {}), ...Object.fromEntries(sgInputs.map(([g, i]) => [g, Number(i.value)])) },
         requireSeat: seat[1].checked, requireCamera: cam[1].checked,
-        weekly: byDay[1].checked ? wkRows.map(f => f()) : null,
+        hs: { ...hs.value(), sessionsPerWeek: Number(hsSessions.value), sessionMinutes: Number(hsMinutes.value), weekBonus: Number(hsBonus.value), lateMinutes: Number(hsLate.value) },
       }, '数え方を保存しました').then(ok => { if (ok) load(root, ctx).then(() => window.scrollTo(0, y)); });
     };
-    rule.append(byDay[0], wkBox, wkNote, grid, sgBox, seat[0], cam[0], saveRule);
+    rule.append(jh.box, hs.box, grid, sgBox, seat[0], cam[0], saveRule);
 
     // ═════ 学期と年度 ═════
     const termSec = section('📅 学期と年度', `今は ${cfg.current ? cfg.current.name : '学期の期間外'}です。保護者レポートは学期ごとに作れます。`);

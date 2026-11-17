@@ -85,6 +85,11 @@
       </label>
       <label class="field color-field">アバターの色<input id="f-color" type="color" value="#64b5f6"></label>
       <label class="field" id="grade-field">学年（学年の木に使います）<select id="f-grade"></select></label>
+      <div class="field" id="visit-field">
+        <span>来る曜日と時刻（高校生）。この時刻をすぎても来ていないと、先生に通知が届きます</span>
+        <div class="visit-days" id="f-vdays"></div>
+        <div class="bday-row"><input type="time" id="f-vtime"><span>から</span></div>
+      </div>
       <div class="field" id="bday-field">
         <span>誕生日（月・日だけ。誕生日に入室するとお祝いします）</span>
         <div class="bday-row"><select id="f-bmonth"></select><span>月</span><select id="f-bday"></select><span>日</span></div>

@@ -231,9 +231,13 @@ body:not(.is-student) .me-menu .student-only { display: none; }
 .seat-side { display: grid; gap: 6px; }
 .seat-side b { font-size: 13px; color: var(--muted); text-align: center; }
 .seat-grid { display: grid; gap: 6px; }
-.seat-grid button { width: 44px; height: 44px; border: 2px solid var(--line); border-radius: 10px; background: #fff; font-size: 22px; padding: 0; }
+.seat-grid button { width: 100%; aspect-ratio: 1; height: auto; max-width: 44px; border: 2px solid var(--line); border-radius: 10px; background: #fff; font-size: 22px; padding: 0; }
 .seat-grid button:disabled { background: #eee; opacity: .6; }
 .seat-grid button:not(:disabled):active { background: #eaf2fd; border-color: var(--primary); }
+.plan-card { background: linear-gradient(160deg, #fffaf2, #f6ece0); }
+.plan-card h2 { color: #6d4c41; }
+.week-chip { position: fixed; left: 10px; top: calc(env(safe-area-inset-top) + 64px); z-index: 12; background: rgba(255,250,242,.94); border: 1.5px solid #d7b894; color: #5d3a22; border-radius: 12px; padding: 3px 9px; font-size: 11.5px; font-weight: 800; box-shadow: 0 2px 6px rgba(60,40,20,.15); line-height: 1.4; max-width: calc(100vw - 150px); }
+.week-chip small { display: block; font-weight: 700; color: #8a6a50; font-size: 11px; }
 .bday-card { background: linear-gradient(160deg, #fff7e0, #ffe3ec); }
 .bday-card .dialog-body { text-align: center; }
 .bday-cake { font-size: 64px; line-height: 1; }
@@ -242,3 +246,4 @@ body:not(.is-student) .me-menu .student-only { display: none; }
 .bday-gift { margin: 0; background: #fff; border: 2px dashed #f5a623; border-radius: 12px; padding: 10px; font-weight: 800; }
 .bday-from { margin: 0; color: var(--muted); font-weight: 700; }
 .bday-card .dialog-actions { justify-content: center; }
+#shop-sub { white-space: pre-line; }

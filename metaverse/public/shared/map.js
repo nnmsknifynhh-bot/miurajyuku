@@ -11,7 +11,7 @@
    *  .  床          _  出入口       p  教壇(歩ける)  r  ラグ(歩ける)         m  玄関マット(歩ける)
    *  T  教卓        D  生徒の机     c  椅子(座れる)  b  学習ブースの机        L  ロッカー
    *  P  観葉植物    B  本棚/下駄箱  k  受付カウンター  F  ウォーターサーバー   S  ベンチ(座れる)
- *  Y  がんばりの木の根元（描画は動的）
+ *  Y  がんばりの木の根元（描画は動的）      q  カフェのテーブル
    */
   const grid = [];
   for (let y = 0; y < H; y++) grid.push(new Array(W).fill('.'));
@@ -26,8 +26,8 @@
   fill(0, 19, W - 1, 19, '#');               // 廊下と下の部屋の間
   fill(34, 19, 34, H - 1, '#');              // 自習室とロビーの間
 
-  // ── 授業教室（3部屋・各15席） ──
-  const CLASSROOM_X = [1, 18, 35];
+  // ── 授業教室（2部屋・各15席）。3つ目（x=35〜）は高校生自習室（カフェ風）に改装 ──
+  const CLASSROOM_X = [1, 18];
   const classroomSeats = {};
   CLASSROOM_X.forEach((ox, i) => {
     const id = 'class' + (i + 1);
@@ -47,6 +47,22 @@
     set(ox + 13, 14, '_'); set(ox + 14, 14, '_'); // 出入口
   });
 
+  // ── 高校生自習室（教室3を改装・カフェ風） ──
+  {
+    fill(35, 0, 50, 0, 'w');                  // 大きな窓
+    fill(36, 1, 39, 1, 'k');                  // カフェのカウンター
+    for (let x = 43; x <= 49; x++) { set(x, 1, 'b'); set(x, 2, 'c'); } // 窓ぎわのカウンター席（7席）
+    for (const ty of [6, 10]) {
+      for (const tx of [37, 41, 45]) { set(tx, ty, 'q'); set(tx, ty - 1, 'c'); set(tx, ty + 1, 'c'); } // テーブル席（12席）
+    }
+    fill(47, 5, 50, 10, 'r');                 // 高校生の木のまわりのラグ
+    set(48, 8, 'Y'); set(49, 8, 'Y');
+    [[35, 1], [50, 1], [35, 13], [41, 13]].forEach(([x, y]) => set(x, y, 'P'));
+    fill(36, 13, 39, 13, 'B');                // 本棚
+    set(50, 12, 'F');
+    set(48, 14, '_'); set(49, 14, '_');       // 出入口
+  }
+
   // ── 廊下 ──
   [[1, 15], [50, 15], [1, 18], [50, 18]].forEach(([x, y]) => set(x, y, 'P'));
 
@@ -60,7 +76,8 @@
   }
   fill(15, 22, 18, 31, 'r');                 // 中央のラグ
   // がんばりの木（学年ごとに3本）。根元の2マスは通れない。左右（x=15, 18）は通路
-  const FOREST = [{ x: 16, y: 23 }, { x: 16, y: 26 }, { x: 16, y: 29 }];
+  // 4本目は高校生の木（高校生自習室の中）
+  const FOREST = [{ x: 16, y: 23 }, { x: 16, y: 26 }, { x: 16, y: 29 }, { x: 48, y: 8 }];
   for (const f of FOREST) { set(f.x, f.y, 'Y'); set(f.x + 1, f.y, 'Y'); }
   fill(2, 32, 7, 32, 'B');
   fill(26, 32, 31, 32, 'B');
@@ -81,7 +98,7 @@
   const ZONES = [
     { id: 'class1', name: '教室1', type: 'classroom', x1: 1, y1: 1, x2: 16, y2: 13 },
     { id: 'class2', name: '教室2', type: 'classroom', x1: 18, y1: 1, x2: 33, y2: 13 },
-    { id: 'class3', name: '教室3', type: 'classroom', x1: 35, y1: 1, x2: 50, y2: 13 },
+    { id: 'class3', name: '高校生自習室', type: 'study', style: 'cafe', x1: 35, y1: 1, x2: 50, y2: 13 },
     { id: 'hall', name: 'ろうか', type: 'hall', x1: 1, y1: 15, x2: 50, y2: 18 },
     { id: 'study', name: '自習室', type: 'study', x1: 1, y1: 20, x2: 33, y2: 32 },
     { id: 'lobby', name: 'ロビー', type: 'lobby', x1: 35, y1: 20, x2: 50, y2: 32 },
@@ -94,7 +111,14 @@
   // 部屋から出されたときの移動先（扉の外の廊下）
   const EXIT = { class1: { x: 14, y: 15 }, class2: { x: 31, y: 15 }, class3: { x: 48, y: 15 }, study: { x: 16, y: 18 } };
   // 教壇の立ち位置
-  const PODIUM = { class1: { x: 8, y: 1 }, class2: { x: 25, y: 1 }, class3: { x: 42, y: 1 } };
+  const PODIUM = { class1: { x: 8, y: 1 }, class2: { x: 25, y: 1 } };
+  // 自習室（自習時間を数える部屋）。study＝中学生など、class3＝高校生
+  const isStudyRoom = (id) => { const z = ZONES.find(v => v.id === id); return !!(z && z.type === 'study'); };
+  // 席えらびの画面での席の分け方
+  const SEAT_GROUPS = {
+    study: [{ label: '左がわ', x1: 1, x2: 15 }, { label: '右がわ', x1: 16, x2: 33 }],
+    class3: [{ label: '窓ぎわのカウンター', y1: 1, y2: 3 }, { label: 'テーブル席', y1: 4, y2: 13 }],
+  };
 
   const WALKABLE = new Set(['.', '_', 'p', 'r', 'm', 'c', 'S']);
   const SEATS = new Set(['c', 'S']);
@@ -108,8 +132,8 @@
   // 椅子の向き：机が上にあれば上向き、下にあれば下向き
   const seatFacing = (tx, ty) => {
     const up = tileAt(tx, ty - 1), down = tileAt(tx, ty + 1);
-    if (up === 'D' || up === 'b') return 'up';
-    if (down === 'D' || down === 'b') return 'down';
+    if (up === 'D' || up === 'b' || up === 'q') return 'up';
+    if (down === 'D' || down === 'b' || down === 'q') return 'down';
     return 'down';
   };
 
@@ -151,7 +175,7 @@
   for (let y = 28; y <= 31; y++) for (let x = 40; x <= 45; x++) SPAWN.push({ x, y });
 
   return {
-    W, H, TILE, grid, ZONES, ENTRY, EXIT, PODIUM, SPAWN, classroomSeats, FOREST,
+    W, H, TILE, grid, ZONES, ENTRY, EXIT, PODIUM, SPAWN, classroomSeats, FOREST, isStudyRoom, SEAT_GROUPS,
     tileAt, isWalkable, isSeat, zoneAt, zoneAtPx, seatId, tileCenter, seatFacing, findPath, seatCount,
   };
 });

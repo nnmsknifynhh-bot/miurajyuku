@@ -61,7 +61,7 @@
       name.append(el('span', 'badge ' + u.role, ROLE_LABEL[u.role]));
       if (!u.isActive) name.append(el('span', 'badge off', '無効'));
       if (u.locked) name.append(el('span', 'badge off', '🔒 ロック中'));
-      const sub = [`ID: ${u.loginId}`, ...(u.role === "student" ? [`学年: ${u.grade || "未設定"}`] : []), ...(u.birthday ? [`🎂 ${Number(u.birthday.slice(0, 2))}月${Number(u.birthday.slice(3))}日${u.birthdayPublic ? '' : '（先生だけ）'}`] : []), `ログイン中の端末: ${u.activeSessions}`];
+      const sub = [`ID: ${u.loginId}`, ...(u.role === "student" ? [`学年: ${u.grade || "未設定"}`] : []), ...(u.visitDays && u.visitDays.length ? [`📅 ${u.visitDays.map(i => '日月火水木金土'[i]).join('・')} ${u.visitTime}〜`] : []), ...(u.birthday ? [`🎂 ${Number(u.birthday.slice(0, 2))}月${Number(u.birthday.slice(3))}日${u.birthdayPublic ? '' : '（先生だけ）'}`] : []), `ログイン中の端末: ${u.activeSessions}`];
       if (u.role === 'teacher') sub.push('担当: ' + (u.rooms.length ? u.rooms.map(roomName).join('・') : 'なし'));
       info.append(name, el('div', 'sub', sub.join('　')));
       const actions = el('div', 'actions');
@@ -137,12 +137,23 @@
     for (let d = 1; d <= 31; d++) { const o = el('option', null, String(d)); o.value = String(d).padStart(2, '0'); dsel.append(o); }
     msel.value = bm; dsel.value = bd;
     $('#f-bpublic').checked = u ? u.birthdayPublic !== false : true;
+    // 来る曜日（高校生）
+    const vbox = $('#f-vdays'); vbox.textContent = '';
+    ['日', '月', '火', '水', '木', '金', '土'].forEach((w, i) => {
+      const lab = el('label'); const cb = el('input'); cb.type = 'checkbox'; cb.value = String(i);
+      cb.checked = !!(u && u.visitDays && u.visitDays.includes(i));
+      lab.append(cb, document.createTextNode(w)); vbox.append(lab);
+    });
+    $('#f-vtime').value = u && u.visitTime ? u.visitTime : '';
+    const syncVisit = () => { $('#visit-field').hidden = currentRole() !== 'student' || !/^高[123]$/.test($('#f-grade').value); };
+    $('#f-grade').onchange = syncVisit; syncVisit();
     $('#user-dialog').showModal();
   }
 
   function renderPermFields(role, u) {
     $('#grade-field').hidden = role !== 'student';
     $('#bday-field').hidden = role !== 'student';
+    $('#visit-field').hidden = role !== 'student' || !/^高[123]$/.test(($('#f-grade') || {}).value || '');
     const isOwner = role === 'owner';
     $('#rooms-field').hidden = role !== 'teacher';
     const rbox = $('#f-rooms'); rbox.textContent = '';
@@ -186,6 +197,12 @@
       if (!!m !== !!d) { $('#user-error').textContent = '誕生日は月と日の両方を選んでください（登録しないときは両方「—」）'; return; }
       body.birthday = m ? `${m}-${d}` : null;
       body.birthdayPublic = $('#f-bpublic').checked;
+      if (/^高[123]$/.test(body.grade || '')) {
+        const days = [...document.querySelectorAll('#f-vdays input:checked')].map(cb => Number(cb.value));
+        const t = $('#f-vtime').value;
+        if (days.length && !t) { $('#user-error').textContent = '来る曜日をえらんだら、時刻も入れてください'; return; }
+        body.visitDays = days; body.visitTime = days.length ? t : null;
+      }
     }
     const pw = $('#f-pw').value;
     if (role !== 'owner') { body.permissions = permissions; if (role === 'teacher') body.rooms = rooms; }
@@ -272,7 +289,7 @@
   }
 
   // ═════════ 入室状況 ═════════
-  const ROOM_LABEL = { class1: '教室1', class2: '教室2', class3: '教室3', study: '自習室', hall: 'ろうか', lobby: 'ロビー' };
+  const ROOM_LABEL = { class1: '教室1', class2: '教室2', class3: '高校生自習室', study: '自習室', hall: 'ろうか', lobby: 'ロビー' };
   async function loadStatus() {
     let data;
     try { data = await api('GET', '/api/admin/presence'); } catch (e) { return toast(e.message); }

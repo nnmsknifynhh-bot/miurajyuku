@@ -22,7 +22,9 @@
     function renderShop() {
       const me = g.me;
       $('#shop-points').textContent = me.points.balance;
-      $('#shop-sub').textContent = `今日 ${hm(me.todayMinutes)}・今学期 ${hm(me.termMinutes)}・${me.rules.minutesPerPoint}分で1ポイント` + (me.streak >= 1 ? `・🔥${me.streak}日連続` : '') + (me.rules.today && !me.rules.today.on ? `・今日（${me.rules.today.weekday}曜）は自習時間を数えない日です` : '');
+      $('#shop-sub').textContent = `今日 ${hm(me.todayMinutes)}・今学期 ${hm(me.termMinutes)}・${me.rules.minutesPerPoint}分で1ポイント` + (me.streak >= 1 ? `・🔥${me.streak}${me.hs ? '週' : '日'}連続` : '')
+        + (me.hs ? `・今週 ${me.hs.week.sessions}/${me.hs.week.need}回（達成で+${me.hs.bonus}pt）` : '')
+        + (me.hs && me.hs.title ? `\n🎓 称号：${me.hs.title.name || 'まだなし'}（合計${me.hs.title.hours}時間）` + (me.hs.title.next ? `・あと${me.hs.title.next.hoursLeft}時間で「${me.hs.title.next.name}」` : '・最高の称号です！') : '') + (me.rules.today && !me.rules.today.on ? `・今日（${me.rules.today.weekday}曜）は自習時間を数えない日です` : '');
       document.querySelectorAll('#shop-tabs button').forEach(b => b.classList.toggle('on', b.dataset.slot === g.shopSlot));
       // 着せかえ期間の外は、見る・買う・着ることができない
       const open = me.dressup.open;

@@ -99,6 +99,20 @@
     </div>
   </dialog>
 
+  <!-- 高校生：今日やること（高校生自習室に入ったら書く） -->
+  <dialog id="plan-dialog" class="plan-card">
+    <form class="dialog-body" id="plan-form">
+      <h2>☕ 今日やること</h2>
+      <p class="muted">今日の3時間でやることを3つ書いてから始めよう。頭の上に表示されます。</p>
+      <label class="field">①<input id="plan-1" maxlength="16" placeholder="例：数学 青チャート p.40〜" autocomplete="off" required></label>
+      <label class="field">②<input id="plan-2" maxlength="16" placeholder="例：英単語 100こ" autocomplete="off" required></label>
+      <label class="field">③<input id="plan-3" maxlength="16" placeholder="例：古文の予習" autocomplete="off" required></label>
+      <p class="chat-warn" id="plan-error" hidden></p>
+      <div class="dialog-actions"><button type="submit" class="btn">この3つで始める</button></div>
+    </form>
+  </dialog>
+  <div class="week-chip" id="week-chip" hidden></div>
+
   <!-- 誕生日のお祝いカード -->
   <dialog id="bday-dialog" class="bday-card">
     <div class="dialog-body">

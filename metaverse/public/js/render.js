@@ -7,13 +7,14 @@
     classroom: ['#e8c48f', '#e1bb84', '#c9a06a'],
     hall: ['#ebe7df', '#e4dfd5', '#d5cec2'],
     study: ['#f5e4c6', '#efdcba', '#dcc49d'],
+    cafe: ['#a47551', '#956a49', '#7d5739'],
     lobby: ['#f1ece4', '#ebe4d9', '#d8cfc1'],
     none: ['#e9e3d9', '#e2dbcf', '#d2c9bb'],
   };
 
   function zoneTypeNear(x, y) {
     const z = SM.zoneAt(x, y) || SM.zoneAt(x, y - 1) || SM.zoneAt(x, y + 1) || SM.zoneAt(x - 1, y) || SM.zoneAt(x + 1, y);
-    return z ? z.type : 'none';
+    return z ? (z.style || z.type) : 'none';
   }
 
   function buildMap() {
@@ -33,6 +34,15 @@
           g.fillStyle = seam; g.fillRect(px, py + i * 16 + 15, T, 1);
           if ((x + y + i * 2) % 4 === 0) g.fillRect(px + ((y + i) % 2 ? 10 : 22), py + i * 16, 1, 15);
           g.fillStyle = 'rgba(160,110,60,.08)'; g.fillRect(px + 4, py + i * 16 + 6, 18, 1);
+        }
+      } else if (type === 'cafe') {
+        // 落ち着いた濃い木目（ヘリンボーン風）
+        for (let i = 0; i < 4; i++) {
+          const ox = ((y + i) % 2) * 8;
+          g.fillStyle = (x * 3 + y + i) % 3 === 0 ? b : a;
+          g.fillRect(px, py + i * 8, T, 8);
+          g.fillStyle = seam; g.fillRect(px, py + i * 8 + 7, T, 1);
+          g.fillRect(px + ox, py + i * 8, 1, 8); g.fillRect(px + ox + 16, py + i * 8, 1, 8);
         }
       } else if (type === 'classroom') {
         g.fillStyle = (x + y) % 2 ? a : b; g.fillRect(px, py, T, T);
@@ -102,7 +112,13 @@
           rr(px + 3, py + 4, T - 6, T - 9, 4, '#c08d55');
           rr(px + 5, py + 6, T - 10, T - 13, 3, '#d6a771');
           g.fillStyle = '#fff'; g.fillRect(px + 9, py + 9, 11, 8); g.fillStyle = '#8fb4e8'; g.fillRect(px + 10, py + 10, 9, 1); break;
-        case 'b': {
+        case 'b': if (zt === 'cafe') {
+          // 窓ぎわのカウンター（一枚板）＋マグカップ
+          rr(px - 1, py + 4, T + 2, T - 12, 2, '#6b4226'); g.fillStyle = '#86562f'; g.fillRect(px - 1, py + 4, T + 2, 4);
+          if (x % 2) { circle(px + 22, py + 13, 4, '#f5f0e8'); circle(px + 22, py + 13, 2.4, '#6b3f22'); }
+          else { g.fillStyle = '#fff'; g.fillRect(px + 6, py + 10, 10, 7); g.fillStyle = '#c9d8ea'; g.fillRect(px + 7, py + 12, 8, 1); }
+          break;
+        } else {
           // 個別ブース：木の天板＋白いパーティション＋手元ライト
           const chairBelow = SM.tileAt(x, y + 1) === 'c';
           rr(px + 2, py + (chairBelow ? 6 : 2), T - 4, T - 8, 3, '#dcb98a');
@@ -116,7 +132,18 @@
           g.fillStyle = '#fff'; g.fillRect(px + 8, py + (chairBelow ? 13 : 9), 9, 7);
           break;
         }
-        case 'c': {
+        case 'q': // カフェの丸テーブル
+          g.fillStyle = 'rgba(0,0,0,.15)'; g.beginPath(); g.ellipse(px + 16, py + 24, 13, 4, 0, 0, Math.PI * 2); g.fill();
+          circle(px + 16, py + 16, 13, '#5d3a22'); circle(px + 16, py + 15, 11.5, '#7a4b2a');
+          circle(px + 11, py + 12, 3.4, '#f5f0e8'); circle(px + 11, py + 12, 2, '#6b3f22');
+          g.fillStyle = '#fff'; g.fillRect(px + 15, py + 13, 8, 6); break;
+        case 'c': if (zt === 'cafe') { // カフェの革張りのいす
+          const facing = SM.seatFacing(x, y);
+          circle(px + 16, py + 16, 9, '#8d3b2f'); circle(px + 16, py + 16, 6.5, '#a8493a');
+          if (facing === 'up') rr(px + 8, py + T - 9, T - 16, 5, 2.5, '#6e2c22');
+          else rr(px + 8, py + 4, T - 16, 5, 2.5, '#6e2c22');
+          break;
+        } else {
           const facing = SM.seatFacing(x, y);
           const col = zt === 'study' ? '#7aa38a' : '#5d6e88', dark = zt === 'study' ? '#5c8a6f' : '#46556b';
           rr(px + 8, py + 8, T - 16, T - 14, 5, col);
@@ -148,11 +175,21 @@
 
     // 黒板の文字・スクリーン表示
     g.textAlign = 'center'; g.textBaseline = 'middle';
+    // カフェのカウンターのメニュー
+    g.fillStyle = '#f5e6c8'; g.font = 'bold 11px sans-serif'; g.fillText('☕ Study Café', 38 * T, 1.55 * T);
     for (const z of SM.ZONES.filter(z => z.type === 'classroom')) {
       g.fillStyle = 'rgba(255,255,255,.85)'; g.font = 'bold 12px sans-serif';
       g.fillText('きょうも いっしょに がんばろう！', (z.x1 + 6) * T, 0.45 * T);
       g.fillStyle = '#7fa6d9'; g.font = 'bold 10px sans-serif';
       g.fillText('スクリーン', (z.x1 + 12) * T, 0.45 * T);
+    }
+    // 高校生自習室：テーブルの上のペンダントライト（あたたかい光）
+    const cafe = SM.ZONES.find(z => z.id === 'class3');
+    for (const [lx, ly] of [[37.5, 6.5], [41.5, 6.5], [45.5, 6.5], [37.5, 10.5], [41.5, 10.5], [45.5, 10.5], [46, 2.2], [42, 2.2]]) {
+      const grd = g.createRadialGradient(lx * T, ly * T, 0, lx * T, ly * T, 3.2 * T);
+      grd.addColorStop(0, 'rgba(255,200,120,.32)'); grd.addColorStop(1, 'rgba(255,200,120,0)');
+      g.fillStyle = grd;
+      g.fillRect(cafe.x1 * T, cafe.y1 * T, (cafe.x2 - cafe.x1 + 1) * T, (cafe.y2 - cafe.y1 + 1) * T);
     }
     // 自習室のやわらかい照明
     const study = SM.ZONES.find(z => z.id === 'study');
@@ -169,10 +206,11 @@
       rr(cx - w / 2, cy - 12, w, 24, 8, bg);
       g.fillStyle = '#fff'; g.fillText(text, cx, cy + 1);
     };
-    sign('教室1', 15 * T, 15.5 * T, '#2f7de1'); sign('教室2', 32 * T, 15.5 * T, '#2fa36b'); sign('教室3', 49 * T, 15.5 * T, '#e07b10');
+    sign('教室1', 15 * T, 15.5 * T, '#2f7de1'); sign('教室2', 32 * T, 15.5 * T, '#2fa36b'); sign('高校生自習室', 49 * T, 15.5 * T, '#6d4c41');
     sign('自習室', 17 * T, 18.5 * T, '#8b6b4a'); sign('ロビー', 43 * T, 18.5 * T, '#7a6f86');
     sign('🌿 自習室　しずかに集中しよう', 17 * T, 31.3 * T, 'rgba(110,85,60,.75)');
     sign('ようこそ 三浦塾へ', 43 * T, 21.5 * T, 'rgba(120,110,135,.8)');
+    sign('☕ 高校生自習室　自分のペースで、しっかり集中', 42 * T, 12.4 * T, 'rgba(93,58,34,.8)');
     g.textAlign = 'start'; g.textBaseline = 'alphabetic';
     return cv;
   }
@@ -343,9 +381,11 @@
     const byTag = by - ((u.equip && u.equip.head && !(u.equip.costume)) || (u.equip && u.equip.costume) ? 12 : 0);
     // 名札（連続自習の日数🔥つき）
     const tag = ROLE_TAG[u.role];
-    const label = (u.bday ? '🎂 ' : '') + (tag ? tag + ' ' : '') + u.name + (u.streak >= 2 ? ` 🔥${u.streak}` : '');
+    // 高校生：称号を名前の前に、🔥は「週」で数える
+    const fire = u.hs ? (u.streak >= 1 ? ` 🔥${u.streak}週` : '') : (u.streak >= 2 ? ` 🔥${u.streak}` : '');
+    const label = (u.bday ? '🎂 ' : '') + (tag ? tag + ' ' : '') + (u.title ? `【${u.title}】` : '') + u.name + fire;
     ctx.font = 'bold 12px sans-serif';
-    const tw = Math.min(160, ctx.measureText(label).width + 12);
+    const tw = Math.min(200, ctx.measureText(label).width + 12);
     ctx.fillStyle = opts.isMe ? 'rgba(47,125,225,.95)' : TAG_BG[u.role];
     if (u.bday) { // 誕生日：金色の名札
       const gr = ctx.createLinearGradient(x - tw / 2, 0, x + tw / 2, 0);
@@ -355,7 +395,7 @@
     ctx.beginPath(); ctx.roundRect(x - tw / 2, byTag - 42, tw, 17, 8.5); ctx.fill();
     if (u.bday) { ctx.strokeStyle = '#fff6d0'; ctx.lineWidth = 1.5; ctx.stroke(); }
     ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(label, x, byTag - 33, 150);
+    ctx.fillText(label, x, byTag - 33, 190);
     if (opts.isMe && !u.hand) { // 自分の目印
       ctx.fillStyle = '#ffcf3d';
       const ay = byTag - 50 + Math.sin(t * 4) * 2;
@@ -380,17 +420,31 @@
       ctx.beginPath(); ctx.arc(x, hy, 14, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       ctx.font = '18px sans-serif'; ctx.fillText('✋', x, hy + 1);
     }
-    // 今日の自習時間（自習室の生徒・10分単位）
+    // 今日やること（高校生自習室の高校生・3つ）
     let topicH = 0;
-    if (u.role === 'student' && u.room === 'study' && typeof u.today === 'number' && !u.topic) {
+    if (u.hs && u.plan && u.room === 'class3' && !u.topic) {
+      ctx.font = 'bold 11px sans-serif';
+      const lines = u.plan.map((t, i) => `${'①②③'[i]} ${t}`);
+      const bw = Math.min(170, Math.max(...lines.map(l => ctx.measureText(l).width)) + 16), lh = 14, bh = lines.length * lh + 8;
+      const top = byTag - 66 - bh - 4;
+      ctx.fillStyle = 'rgba(255,250,240,.97)'; ctx.strokeStyle = '#b08968'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.roundRect(x - bw / 2, top, bw, bh, 8); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#5d3a22'; ctx.textAlign = 'left';
+      lines.forEach((l, i) => ctx.fillText(l, x - bw / 2 + 8, top + 4 + lh * i + lh / 2, bw - 14));
+      ctx.textAlign = 'center';
+      topicH = bh + 4;
+    }
+    // 今日の自習時間（自習室の生徒・10分単位）
+    if (u.role === 'student' && SM.isStudyRoom(u.room) && typeof u.today === 'number' && !u.topic) {
       const h = Math.floor(u.today / 60), m = u.today % 60;
       const text = '📚 今日 ' + (h ? `${h}時間${m ? m + '分' : ''}` : `${m}分`);
       ctx.font = 'bold 11px sans-serif';
       const bw = ctx.measureText(text).width + 14, bh = 19, top = byTag - 66;
+      void bh;
       ctx.fillStyle = 'rgba(232,245,233,.96)'; ctx.strokeStyle = '#7cb987'; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.roundRect(x - bw / 2, top, bw, bh, 9); ctx.fill(); ctx.stroke();
       ctx.fillStyle = '#1f5a2b'; ctx.fillText(text, x, top + bh / 2 + 1);
-      topicH = 26;
+      topicH += 26;
     }
     // 吹き出し（先生・オーナー。生徒は先生と話すときだけ）
     if (u.topic) {
