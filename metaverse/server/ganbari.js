@@ -125,7 +125,7 @@ function defaults(today = jst()) {
     events: Object.fromEntries(EVENTS.map(e => [e.id, true])), // 季節の飾り（オン/オフ）
     birthdayMessage: 'いつもがんばっているね。すてきな1年になりますように！', // 誕生日カードのひとこと
     // 季節のお楽しみ（オン/オフと条件）
-    fun: { santa: true, santaDays: 10, santaMinMinutes: 30, toshikoshi: true, asakatsu: true, asakatsuStart: '06:00', asakatsuEnd: '07:30', asakatsuMinutes: 15, asakatsuPoints: 3 },
+    fun: { santa: true, santaDays: 10, santaMinMinutes: 30, toshikoshi: true, asakatsu: true, asakatsuStart: '06:00', asakatsuEnd: '07:30', asakatsuMinutes: 30, asakatsuPoints: 3 },
   };
 }
 

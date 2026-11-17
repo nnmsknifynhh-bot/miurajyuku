@@ -253,7 +253,7 @@
     const fSantaDays = numInput(f.santaDays || 10, 1, 30), fSantaMin = numInput(f.santaMinMinutes || 30, 1, 600);
     const fNy = check('🎆 年越し自習（1/1 0:00〜0:10 に自習室にいた生徒に記念バッジ）', f.toshikoshi !== false);
     const fAsa = check('🌅 朝活チャレンジ（朝の自習で早起きスタンプとポイント）', f.asakatsu !== false);
-    const fAsaMin = numInput(f.asakatsuMinutes || 15, 1, 120), fAsaPt = numInput(f.asakatsuPoints ?? 3, 0, 100);
+    const fAsaMin = numInput(f.asakatsuMinutes || 30, 1, 120), fAsaPt = numInput(f.asakatsuPoints ?? 3, 0, 100);
     const fAsaS = timeInput(f.asakatsuStart || '06:00'), fAsaE = timeInput(f.asakatsuEnd || '07:30');
     const fAsaRow = el('div', 'gb-row'); fAsaRow.append(fAsaS, el('span', null, '〜'), fAsaE);
     const fg1 = el('div', 'gb-grid'); fg1.append(field('がんばりサンタ：自習した日の数', fSantaDays, '例：10日以上'), field('がんばりサンタ：1日に何分以上を「自習した日」にするか', fSantaMin, '例：30分'));

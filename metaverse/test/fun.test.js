@@ -52,11 +52,11 @@ test('年越し自習：1/1 0:00〜0:10だけ。バッジは1年に1回', () => 
   assert.ok(F.badgesOf(U.aaa.id).some(b => b.label.includes('年越し自習')));
 });
 
-test('朝活：6:00〜7:30に数えた時間が15分になった日にスタンプと3ポイント（バッジはなし）', () => {
+test('朝活：6:00〜7:30に数えた時間が30分になった日にスタンプと3ポイント（バッジはなし）', () => {
   const before = G.points(U.bbb.id).earned;
   let got = [];
-  for (let m = 0; m < 15; m++) got = got.concat(F.morningTick([U.bbb.id], at(`${Y}-10-01`, `06:${String(10 + m).padStart(2, '0')}`)));
-  assert.equal(got.length, 1, '15分になったときに1回だけ');
+  for (let m = 0; m < 35; m++) got = got.concat(F.morningTick([U.bbb.id], at(`${Y}-10-01`, `06:${String(10 + m).padStart(2, '0')}`)));
+  assert.equal(got.length, 1, '30分になったときに1回だけ');
   assert.equal(got[0].stamps, 1); assert.equal(got[0].points, 3);
   assert.equal(G.points(U.bbb.id).earned, before + 3, 'スタンプのポイント');
   assert.deepEqual(F.morningTick([U.bbb.id], at(`${Y}-10-02`, '07:30')), [], '7:30からは数えない');
