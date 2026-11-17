@@ -183,6 +183,7 @@
   function drawBody(ctx, x, by, h, u, clothes, costume) {
     const rr = (bx, byy, w, hh, r, color) => { ctx.fillStyle = color; ctx.beginPath(); ctx.roundRect(bx, byy, w, hh, r); ctx.fill(); };
     if (costume) {
+      if (costume.wings && u.dir !== 'down') { ctx.fillStyle = costume.wings; [[-1], [1]].forEach(([sd]) => { ctx.beginPath(); ctx.moveTo(x + sd * 6, by - 3); ctx.lineTo(x + sd * 18, by - 9); ctx.lineTo(x + sd * 15, by + 2); ctx.lineTo(x + sd * 18, by + 6); ctx.closePath(); ctx.fill(); }); }
       rr(x - 11, by - 5, 22, h + 1, 8, costume.body);
       if (costume.belly) rr(x - 6, by - 2, 12, h - 4, 6, costume.belly);
       if (costume.spikes && u.dir !== 'down') { ctx.fillStyle = costume.spikes; for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.moveTo(x - 3, by - 2 + i * 4); ctx.lineTo(x + 3, by - 2 + i * 4); ctx.lineTo(x, by - 7 + i * 4); ctx.fill(); } }
@@ -191,6 +192,7 @@
     const C = {
       uniform: { base: '#2c3e66' }, parka: { base: u.color }, jersey: { base: '#1f5fbf' }, kimono: { base: '#d6456e' },
       dress: { base: '#f48fb1' }, tuxedo: { base: '#222' }, armor: { base: '#9aa5b1' }, hero: { base: '#e53935' },
+      ninja: { base: '#26304a' }, astronaut: { base: '#eef1f5' }, king: { base: '#6a1b9a' },
     }[clothes] || { base: u.color };
     if (clothes === 'dress') { // すそが広がる
       ctx.fillStyle = C.base; ctx.beginPath(); ctx.moveTo(x - 7, by - 5); ctx.lineTo(x + 7, by - 5); ctx.lineTo(x + 13, by + h - 1); ctx.lineTo(x - 13, by + h - 1); ctx.closePath(); ctx.fill();
@@ -220,6 +222,16 @@
         ctx.strokeStyle = '#6d7782'; ctx.lineWidth = 1; for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.moveTo(x - 8, by + i * 4); ctx.lineTo(x + 8, by + i * 4); ctx.stroke(); } break;
       case 'hero':
         ctx.fillStyle = '#ffd54f'; ctx.beginPath(); ctx.moveTo(x, by - 3); ctx.lineTo(x + 4, by + 1); ctx.lineTo(x, by + 5); ctx.lineTo(x - 4, by + 1); ctx.fill(); break;
+      case 'ninja':
+        ctx.fillStyle = '#c62828'; ctx.fillRect(x - 10, by + 3, 20, 3);
+        ctx.strokeStyle = '#3d4a6b'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x - 6, by - 5); ctx.lineTo(x + 2, by + 3); ctx.moveTo(x + 6, by - 5); ctx.lineTo(x - 2, by + 3); ctx.stroke(); break;
+      case 'astronaut':
+        ctx.fillStyle = '#90a4ae'; ctx.fillRect(x - 10, by + 3, 20, 2);
+        ctx.fillStyle = '#1e88e5'; ctx.fillRect(x - 5, by - 3, 10, 6);
+        ctx.fillStyle = '#e53935'; ctx.fillRect(x - 3, by - 2, 2, 2); ctx.fillStyle = '#ffeb3b'; ctx.fillRect(x + 1, by - 2, 2, 2); break;
+      case 'king':
+        ctx.fillStyle = '#ffd54f'; ctx.fillRect(x - 10, by - 5, 20, 2.5); ctx.fillRect(x - 1.5, by - 5, 3, h);
+        ctx.fillStyle = '#fff'; ctx.fillRect(x - 10, by + h - 3, 20, 2.5); break;
       default:
         if (u.role !== 'student') { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(x - 4, by - 5); ctx.lineTo(x + 4, by - 5); ctx.lineTo(x, by + 1); ctx.fill(); }
     }
@@ -233,6 +245,8 @@
     penguin: { body: '#2b2f3a', belly: '#ffffff', ear: null, earColor: '#2b2f3a', beak: true },
     panda: { body: '#ffffff', belly: '#ffffff', ear: 'round', earColor: '#222', inner: '#222', patches: true },
     dino: { body: '#5fbf6a', belly: '#d9f2c4', ear: 'spike', earColor: '#3e8e48', spikes: '#3e8e48' },
+    unicorn: { body: '#ffffff', belly: '#fce4ec', ear: 'horn', earColor: '#ffd54f', mane: ['#f48fb1', '#ce93d8', '#81d4fa'] },
+    dragon: { body: '#d84315', belly: '#ffcc80', ear: 'horns', earColor: '#ffd54f', spikes: '#8d2a0b', wings: '#ff7043' },
   };
   function drawHood(ctx, x, by, dir, c) {
     const hy = by - 13;
@@ -241,6 +255,8 @@
     if (c.ear === 'round') { [[-8, -8], [8, -8]].forEach(([dx, dy]) => { ctx.beginPath(); ctx.arc(x + dx, hy + dy, 4.5, 0, Math.PI * 2); ctx.fill(); }); }
     if (c.ear === 'tri') { [[-8, 1], [8, -1]].forEach(([dx, s]) => { ctx.beginPath(); ctx.moveTo(x + dx - 4 * s - 1, hy - 6); ctx.lineTo(x + dx + 4, hy - 6); ctx.lineTo(x + dx, hy - 15); ctx.closePath(); ctx.fill(); }); }
     if (c.ear === 'long') { [[-5, -0.15], [5, 0.15]].forEach(([dx, rot]) => { ctx.save(); ctx.translate(x + dx, hy - 14); ctx.rotate(rot); ctx.beginPath(); ctx.ellipse(0, 0, 3.5, 9, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = c.inner; ctx.beginPath(); ctx.ellipse(0, 1, 1.6, 6, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); ctx.fillStyle = c.earColor; }); }
+    if (c.ear === 'horn') { ctx.beginPath(); ctx.moveTo(x - 3, hy - 9); ctx.lineTo(x + 3, hy - 9); ctx.lineTo(x, hy - 21); ctx.fill(); ctx.strokeStyle = '#e0a800'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x - 2, hy - 12); ctx.lineTo(x + 2, hy - 14); ctx.moveTo(x - 1.5, hy - 16); ctx.lineTo(x + 1.5, hy - 18); ctx.stroke(); }
+    if (c.ear === 'horns') { [[-7, -1], [7, 1]].forEach(([dx, s]) => { ctx.beginPath(); ctx.moveTo(x + dx - 3, hy - 7); ctx.lineTo(x + dx + 3, hy - 7); ctx.lineTo(x + dx + s * 4, hy - 17); ctx.fill(); }); }
     if (c.ear === 'spike') { for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(x + i * 6 - 3, hy - 9); ctx.lineTo(x + i * 6 + 3, hy - 9); ctx.lineTo(x + i * 6, hy - 16); ctx.fill(); } }
     // フード（頭をつつむ。正面は顔が見える）
     ctx.fillStyle = c.body;
@@ -251,6 +267,8 @@
       if (c.patches) { ctx.fillStyle = '#222'; ctx.beginPath(); ctx.ellipse(x - 4, hy + 1, 2.4, 3, 0.3, 0, Math.PI * 2); ctx.ellipse(x + 4, hy + 1, 2.4, 3, -0.3, 0, Math.PI * 2); ctx.fill(); }
       if (c.beak) { ctx.fillStyle = '#ffb300'; ctx.beginPath(); ctx.moveTo(x - 2, hy + 4); ctx.lineTo(x + 2, hy + 4); ctx.lineTo(x, hy + 7); ctx.fill(); }
     }
+    if (c.mane && dir !== 'down') { c.mane.forEach((col, i) => { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x + (dir === 'left' ? 8 : dir === 'right' ? -8 : 0) + (i - 1) * 3, hy - 8 + i * 5, 3.5, 0, Math.PI * 2); ctx.fill(); }); }
+    if (c.mane && dir === 'down') { c.mane.forEach((col, i) => { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x - 6 + i * 6, hy - 10, 2.6, 0, Math.PI * 2); ctx.fill(); }); }
     if (c.inner && c.ear === 'round' && !c.patches) { ctx.fillStyle = c.inner; [[-8, -8], [8, -8]].forEach(([dx, dy]) => { ctx.beginPath(); ctx.arc(x + dx, hy + dy, 2, 0, Math.PI * 2); ctx.fill(); }); }
   }
   const TAG_BG = { owner: 'rgba(139,92,246,.95)', teacher: 'rgba(224,123,16,.95)', student: 'rgba(45,42,50,.78)' };
@@ -279,6 +297,7 @@
     const clothes = !costume && eq.clothes ? eq.clothes : null;
     const bodyH = seated ? 13 : 15;
     // ヒーローのマント（体の後ろ）
+    if (clothes === 'king' && u.dir !== 'down') { ctx.fillStyle = '#b71c1c'; ctx.beginPath(); ctx.moveTo(x - 10, by - 5); ctx.lineTo(x + 10, by - 5); ctx.lineTo(x + 14, by + 14); ctx.lineTo(x - 14, by + 14); ctx.fill(); ctx.fillStyle = '#fff'; for (let i = -12; i <= 12; i += 4) { ctx.beginPath(); ctx.arc(x + i, by + 14, 1.6, 0, Math.PI * 2); ctx.fill(); } }
     if (clothes === 'hero' && u.dir !== 'down') { ctx.fillStyle = '#c62828'; ctx.beginPath(); ctx.moveTo(x - 9, by - 4); ctx.lineTo(x + 9, by - 4); ctx.lineTo(x + 12, by + 13); ctx.lineTo(x - 12, by + 13); ctx.fill(); }
     // 体（洋服・着ぐるみ）
     drawBody(ctx, x, by, bodyH, u, clothes, costume);
@@ -466,16 +485,99 @@
 
   // ───────── 季節の飾り（正月・バレンタイン・卒業・入学・こどもの日・お月見・ハロウィン・クリスマス） ─────────
   // マップの決まった場所に飾る（画面に舞う演出はしない）
+  // 飾り。'@' で始まるものは絵文字にないので、絵で描く
   const DECOR = {
-    newyear: { banner: '🎍 あけましておめでとう 🎍', big: '🎍', items: ['🎍', '🎌', '🍊'], garland: ['🎍', '🧧'] },
+    newyear: { banner: '🎍 あけましておめでとう 🎍', big: '🎍', items: ['@kagami', '@daruma', '🍊'], garland: ['🎍', '@daruma'] },
+    winter: { banner: '❄️ 冬・雪 ❄️', big: '⛄', items: ['❄️', '⛄', '🧣'], garland: ['❄️', '✨'] },
+    setsubun: { banner: '👹 鬼は外！ 福は内！ 👹', big: '👹', items: ['👹', '@mame', '@okame'], garland: ['👹', '@okame'] },
     valentine: { banner: '💝 ハッピーバレンタイン 💝', big: '💝', items: ['🍫', '💕', '🍬'], garland: ['💗', '💖'] },
-    graduation: { banner: '🎓 卒業おめでとう！ 🎓', big: '💐', items: ['🎓', '🌸', '📜'], garland: ['🌸', '🎉'] },
-    entrance: { banner: '🌸 入学おめでとう！ 🌸', big: '🌸', items: ['🎒', '✏️', '🌷'], garland: ['🌸', '🌷'] },
-    kodomo: { banner: '🎏 こどもの日 🎏', big: '🎏', items: ['🎏', '⚔️', '🍡'], garland: ['🎏', '🌿'] },
-    tsukimi: { banner: '🎑 お月見 🎑', big: '🎑', items: ['🌕', '🍡', '🐇'], garland: ['🌕', '🌾'] },
+    hina: { banner: '🎎 ひな祭り 🎎', big: '🎎', items: ['🎎', '🌸', '🍡'], garland: ['🌸', '🎎'] },
+    whiteday: { banner: '💝 ホワイトデー 💝', big: '🎁', items: ['🎀', '🤍', '🍬'], garland: ['🎀', '🤍'] },
+    graduation: { banner: '🎓 卒業おめでとう！ 🎓', big: '💐', items: ['🌸', '📜', '💐'], garland: ['🌸', '🎉'] },
+    entrance: { banner: '🌸 入学おめでとう！ 🌸', big: '🌸', items: ['🎒', '🌸', '✏️'], garland: ['🌸', '🌷'] },
+    hanami: { banner: '🌸 お花見 🌸', big: '🌸', items: ['🌷', '🦋', '🍡'], garland: ['🌸', '🌼'] },
+    kodomo: { banner: '🎏 こどもの日 🎏', big: '🎏', items: ['🎏', '@kabuto', '🍡'], garland: ['🎏', '@kabuto'] },
+    mothersday: { banner: '💐 母の日 ありがとう 💐', big: '💐', items: ['🌺', '💐', '💌'], garland: ['🌺', '💗'] },
+    shinryoku: { banner: '🌿 新緑の季節 🌿', big: '🌳', items: ['🌿', '🍀', '🌱'], garland: ['🍃', '🍀'] },
+    ajisai: { banner: '☔ あじさいの季節 ☔', big: '☔', items: ['@ajisai', '🐌', '☂️'], garland: ['@ajisai', '💧'] },
+    tanabata: { banner: '🎋 七夕 願いがかないますように 🎋', big: '🎋', items: ['🎋', '@tanzaku', '🌌'], garland: ['⭐', '@tanzaku'] },
+    summer: { banner: '🌻 夏だ！ 🌻', big: '🌻', items: ['🌊', '🍉', '🌻'], garland: ['🌻', '☀️'] },
+    matsuri: { banner: '🎆 夏祭り 🎆', big: '🏮', items: ['🎆', '🏮', '🍧'], garland: ['🏮', '🎇'] },
+    earlyautumn: { banner: '🍂 秋の始まり 🍂', big: '@cosmos', items: ['@cosmos', '@tombo', '🍂'], garland: ['@cosmos', '@tombo'] },
+    tsukimi: { banner: '🎑 お月見 🎑', big: '🎑', items: ['🌕', '🐇', '🌾'], garland: ['🌕', '🌾'] },
     halloween: { banner: '🎃 ハッピーハロウィン 🎃', big: '🎃', items: ['👻', '🦇', '🍬'], garland: ['🎃', '🦇'] },
+    koyo: { banner: '🍁 紅葉 🍁', big: '🍁', items: ['🍁', '@icho', '🍂'], garland: ['🍁', '@icho'] },
+    harvest: { banner: '🌰 秋の収穫祭 🌰', big: '🍄', items: ['🌰', '🍄', '🍠'], garland: ['🌰', '🍄'] },
     christmas: { banner: '🎄 メリークリスマス 🎄', big: '🎄', items: ['🎁', '⛄', '🔔'], garland: ['⭐', '🔔'] },
+    prenewyear: { banner: '🎍 よいお年を 🎍', big: '🎍', items: ['🎍', '@shimenawa', '🍊'], garland: ['🎍', '@shimenawa'] },
   };
+  // 絵文字にない飾りの絵（中心 x,y・大きさ s）
+  const ART = {
+    kagami(c, x, y, s) { // 鏡餅
+      c.fillStyle = '#c9302c'; c.fillRect(x - s * .45, y + s * .22, s * .9, s * .18);
+      c.fillStyle = '#fff'; c.strokeStyle = '#ddd'; c.lineWidth = 1;
+      c.beginPath(); c.ellipse(x, y + s * .12, s * .4, s * .16, 0, 0, Math.PI * 2); c.fill(); c.stroke();
+      c.beginPath(); c.ellipse(x, y - s * .08, s * .3, s * .13, 0, 0, Math.PI * 2); c.fill(); c.stroke();
+      c.fillStyle = '#ff9800'; c.beginPath(); c.arc(x, y - s * .24, s * .11, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#4caf50'; c.fillRect(x - s * .02, y - s * .38, s * .05, s * .06);
+    },
+    daruma(c, x, y, s) { // だるま
+      c.fillStyle = '#d32f2f'; c.beginPath(); c.ellipse(x, y + s * .04, s * .34, s * .4, 0, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#fbe9e7'; c.beginPath(); c.ellipse(x, y - s * .08, s * .2, s * .17, 0, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#222'; c.beginPath(); c.arc(x - s * .08, y - s * .1, s * .04, 0, Math.PI * 2); c.arc(x + s * .08, y - s * .1, s * .04, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#ffca28'; c.fillRect(x - s * .12, y + s * .2, s * .24, s * .06);
+    },
+    mame(c, x, y, s) { // 枡と福豆
+      c.fillStyle = '#d7b47a'; c.fillRect(x - s * .32, y - s * .05, s * .64, s * .36);
+      c.strokeStyle = '#a07b3f'; c.lineWidth = 1.5; c.strokeRect(x - s * .32, y - s * .05, s * .64, s * .36);
+      c.fillStyle = '#f0d9a8'; [[-.16, -.1], [0, -.14], [.16, -.1], [-.08, -.2], [.08, -.2]].forEach(([dx, dy]) => { c.beginPath(); c.arc(x + dx * s, y + dy * s, s * .08, 0, Math.PI * 2); c.fill(); });
+    },
+    okame(c, x, y, s) { // おかめ
+      c.fillStyle = '#222'; c.beginPath(); c.arc(x, y - s * .06, s * .4, Math.PI, 0); c.fill();
+      c.fillStyle = '#fff6ec'; c.beginPath(); c.ellipse(x, y + s * .04, s * .34, s * .36, 0, 0, Math.PI * 2); c.fill();
+      c.fillStyle = 'rgba(244,143,177,.8)'; c.beginPath(); c.arc(x - s * .18, y + s * .12, s * .08, 0, Math.PI * 2); c.arc(x + s * .18, y + s * .12, s * .08, 0, Math.PI * 2); c.fill();
+      c.strokeStyle = '#222'; c.lineWidth = 1.5; c.beginPath(); c.arc(x - s * .1, y, s * .05, Math.PI, 0); c.moveTo(x + s * .15, y); c.arc(x + s * .1, y, s * .05, 0, Math.PI, true); c.stroke();
+      c.fillStyle = '#d32f2f'; c.beginPath(); c.arc(x, y + s * .2, s * .04, 0, Math.PI * 2); c.fill();
+    },
+    kabuto(c, x, y, s) { // かぶと
+      c.fillStyle = '#1e3a5f'; c.beginPath(); c.arc(x, y + s * .1, s * .3, Math.PI, 0); c.fill();
+      c.fillRect(x - s * .42, y + s * .1, s * .84, s * .12);
+      c.fillStyle = '#ffc107'; c.beginPath(); c.moveTo(x - s * .05, y - s * .1); c.lineTo(x - s * .35, y - s * .42); c.lineTo(x - s * .15, y - s * .12); c.fill();
+      c.beginPath(); c.moveTo(x + s * .05, y - s * .1); c.lineTo(x + s * .35, y - s * .42); c.lineTo(x + s * .15, y - s * .12); c.fill();
+      c.beginPath(); c.arc(x, y - s * .08, s * .07, 0, Math.PI * 2); c.fill();
+    },
+    ajisai(c, x, y, s) { // あじさい
+      c.fillStyle = '#4caf50'; c.beginPath(); c.ellipse(x - s * .25, y + s * .25, s * .18, s * .08, -.5, 0, Math.PI * 2); c.fill();
+      const cols = ['#7e57c2', '#5c6bc0', '#ab47bc', '#42a5f5'];
+      for (let i = 0; i < 13; i++) { const a = i * 2.4, r = s * .26 * Math.sqrt(i / 13); c.fillStyle = cols[i % 4]; c.beginPath(); c.arc(x + Math.cos(a) * r, y + Math.sin(a) * r, s * .1, 0, Math.PI * 2); c.fill(); }
+    },
+    tanzaku(c, x, y, s) { // 短冊
+      [['#e53935', -.2, -.15], ['#fdd835', 0, 0], ['#1e88e5', .2, -.1]].forEach(([col, dx, rot]) => { c.save(); c.translate(x + dx * s, y); c.rotate(rot); c.fillStyle = col; c.fillRect(-s * .07, -s * .32, s * .14, s * .64); c.restore(); });
+    },
+    cosmos(c, x, y, s) { // コスモス
+      c.fillStyle = '#f48fb1'; for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; c.beginPath(); c.ellipse(x + Math.cos(a) * s * .2, y + Math.sin(a) * s * .2, s * .14, s * .07, a, 0, Math.PI * 2); c.fill(); }
+      c.fillStyle = '#ffca28'; c.beginPath(); c.arc(x, y, s * .08, 0, Math.PI * 2); c.fill();
+    },
+    tombo(c, x, y, s) { // とんぼ
+      c.fillStyle = 'rgba(200,230,255,.85)'; [[-.18, -.08, -.3], [.18, -.08, .3], [-.16, .06, .3], [.16, .06, -.3]].forEach(([dx, dy, r]) => { c.beginPath(); c.ellipse(x + dx * s, y + dy * s, s * .18, s * .06, r, 0, Math.PI * 2); c.fill(); });
+      c.fillStyle = '#e65100'; c.fillRect(x - s * .03, y - s * .12, s * .06, s * .45);
+      c.beginPath(); c.arc(x, y - s * .14, s * .06, 0, Math.PI * 2); c.fill();
+    },
+    icho(c, x, y, s) { // いちょう
+      c.fillStyle = '#fbc02d'; c.beginPath(); c.moveTo(x, y + s * .15); c.arc(x, y + s * .15, s * .35, Math.PI * 1.15, Math.PI * 1.85); c.closePath(); c.fill();
+      c.strokeStyle = '#a07b00'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(x, y + s * .15); c.lineTo(x, y + s * .35); c.stroke();
+    },
+    shimenawa(c, x, y, s) { // しめ縄
+      c.strokeStyle = '#c8a24a'; c.lineWidth = s * .12; c.beginPath(); c.moveTo(x - s * .4, y - s * .15); c.quadraticCurveTo(x, y + s * .05, x + s * .4, y - s * .15); c.stroke();
+      c.fillStyle = '#fff'; c.strokeStyle = '#ccc'; c.lineWidth = 1;
+      [-.2, .2].forEach(dx => { c.beginPath(); c.moveTo(x + dx * s - s * .06, y - s * .02); c.lineTo(x + dx * s + s * .06, y + s * .06); c.lineTo(x + dx * s - s * .06, y + s * .14); c.lineTo(x + dx * s + s * .06, y + s * .24); c.lineTo(x + dx * s - s * .02, y + s * .24); c.lineTo(x + dx * s - s * .12, y + s * .14); c.closePath(); c.fill(); c.stroke(); });
+    },
+  };
+  // 飾りを1つ置く（絵文字は文字で、@ は絵で）
+  function put(ctx, token, x, y, size) {
+    if (token[0] === '@') { const f = ART[token.slice(1)]; if (f) { ctx.save(); f(ctx, x, y, size * 1.4); ctx.restore(); } return; }
+    ctx.font = `${size}px sans-serif`; ctx.fillText(token, x, y);
+  }
   function drawDecorations(ctx, eventId, time) {
     const d = DECOR[eventId];
     if (!d) return;
@@ -490,19 +592,15 @@
       ctx.fillStyle = '#5a3b00'; ctx.fillText(text, cx, cy + 1);
     };
     // ロビー：大きな飾り（入口の両側）と横断幕
-    ctx.font = '40px sans-serif';
-    ctx.fillText(d.big, 40.5 * T, 21 * T); ctx.fillText(d.big, 45.5 * T, 21 * T);
-    ctx.font = '22px sans-serif';
-    d.items.forEach((e, i) => ctx.fillText(e, (37 + i) * T, 22.4 * T + Math.sin(t * 2 + i) * 1.5));
-    d.items.forEach((e, i) => ctx.fillText(e, (47 + i) * T, 25 * T + Math.sin(t * 2 + i + 1) * 1.5));
+    put(ctx, d.big, 40.5 * T, 21 * T, 40); put(ctx, d.big, 45.5 * T, 21 * T, 40);
+    d.items.forEach((e, i) => put(ctx, e, (37 + i) * T, 22.4 * T + Math.sin(t * 2 + i) * 1.5, 22));
+    d.items.forEach((e, i) => put(ctx, e, (47 + i) * T, 25 * T + Math.sin(t * 2 + i + 1) * 1.5, 22));
     sign(d.banner, 43 * T, 27 * T);
     // ろうか：飾りの列（上の壁ぞい）
-    ctx.font = '16px sans-serif';
-    for (let x = 3, i = 0; x <= 48; x += 3, i++) ctx.fillText(d.garland[i % d.garland.length], x * T, 15.25 * T + Math.sin(t * 1.5 + i) * 1.2);
+    for (let x = 3, i = 0; x <= 48; x += 3, i++) put(ctx, d.garland[i % d.garland.length], x * T, 15.25 * T + Math.sin(t * 1.5 + i) * 1.2, 16);
     sign(d.banner, 25 * T, 17 * T);
     // 自習室：木のそば
-    ctx.font = '24px sans-serif';
-    ctx.fillText(d.big, 14.5 * T, 23 * T); ctx.fillText(d.items[0], 19.5 * T, 28 * T);
+    put(ctx, d.big, 14.5 * T, 23 * T, 24); put(ctx, d.items[0], 19.5 * T, 28 * T, 24);
     ctx.restore();
   }
 

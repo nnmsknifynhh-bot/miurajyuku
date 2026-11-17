@@ -105,14 +105,29 @@ function defaults(today = jst()) {
 // ───────── 季節の飾り ─────────
 // from/to は「月-日」。to が from より前なら年をまたぐ
 const EVENTS = [
-  { id: 'newyear', name: '正月', from: '01-01', to: '01-15' },
-  { id: 'valentine', name: 'バレンタイン', from: '02-01', to: '02-14' },
-  { id: 'graduation', name: '卒業', from: '03-01', to: '03-25' },
-  { id: 'entrance', name: '入学', from: '04-01', to: '04-20' },
-  { id: 'kodomo', name: 'こどもの日', from: '04-21', to: '05-05' },
-  { id: 'tsukimi', name: 'お月見', from: '09-10', to: '09-30' },
-  { id: 'halloween', name: 'ハロウィン', from: '10-15', to: '10-31' },
+  { id: 'newyear', name: 'お正月', from: '01-01', to: '01-15' },
+  { id: 'winter', name: '冬・雪', from: '01-16', to: '01-31' },
+  { id: 'setsubun', name: '節分', from: '02-01', to: '02-03' },
+  { id: 'valentine', name: 'バレンタイン', from: '02-04', to: '02-14' },
+  { id: 'hina', name: 'ひな祭り', from: '02-15', to: '03-03' },
+  { id: 'whiteday', name: 'ホワイトデー', from: '03-04', to: '03-14' },
+  { id: 'graduation', name: '卒業式', from: '03-15', to: '03-31' },
+  { id: 'entrance', name: '入学式', from: '04-01', to: '04-10' },
+  { id: 'hanami', name: 'お花見', from: '04-11', to: '04-30' },
+  { id: 'kodomo', name: 'こどもの日', from: '05-01', to: '05-05' },
+  { id: 'mothersday', name: '母の日', from: '05-06', to: '05-15' },
+  { id: 'shinryoku', name: '新緑', from: '05-16', to: '05-31' },
+  { id: 'ajisai', name: 'あじさい・梅雨', from: '06-01', to: '06-30' },
+  { id: 'tanabata', name: '七夕', from: '07-01', to: '07-07' },
+  { id: 'summer', name: '夏・ひまわり', from: '07-08', to: '07-31' },
+  { id: 'matsuri', name: '夏祭り・花火', from: '08-01', to: '08-31' },
+  { id: 'earlyautumn', name: '秋の始まり', from: '09-01', to: '09-15' },
+  { id: 'tsukimi', name: 'お月見', from: '09-16', to: '09-30' },
+  { id: 'halloween', name: 'ハロウィン', from: '10-01', to: '10-31' },
+  { id: 'koyo', name: '紅葉・秋', from: '11-01', to: '11-15' },
+  { id: 'harvest', name: '秋の収穫祭', from: '11-16', to: '11-30' },
   { id: 'christmas', name: 'クリスマス', from: '12-01', to: '12-25' },
+  { id: 'prenewyear', name: 'お正月準備', from: '12-26', to: '12-31' },
 ];
 function currentEvent(date = new Date(), c = getConfig()) {
   const md = jst(date).day.slice(5);
@@ -360,6 +375,9 @@ const SHOP = [
   { id: 'sunflower', slot: 'head', emoji: '🌻', name: 'ひまわり', price: 30, months: [7, 8] },
   { id: 'maple', slot: 'head', emoji: '🍁', name: 'もみじ', price: 30, months: [10, 11] },
   { id: 'santa', slot: 'head', emoji: '🎅', name: 'サンタ', price: 40, months: [12] },
+  { id: 'star', slot: 'head', emoji: '🌟', name: 'スターのかんむり', price: 400 },
+  { id: 'rainbow', slot: 'head', emoji: '🌈', name: 'にじのわっか', price: 600 },
+  { id: 'diamond', slot: 'head', emoji: '💎', name: 'ダイヤのかざり', price: 1000 },
   // 洋服（形と色で表示）
   { id: 'uniform', slot: 'clothes', style: 'uniform', emoji: '👔', name: '制服', price: 30 },
   { id: 'parka', slot: 'clothes', style: 'parka', emoji: '🧥', name: 'パーカー', price: 30 },
@@ -369,10 +387,14 @@ const SHOP = [
   { id: 'tuxedo', slot: 'clothes', style: 'tuxedo', emoji: '🤵', name: 'タキシード', price: 100 },
   { id: 'armor', slot: 'clothes', style: 'armor', emoji: '🛡️', name: 'よろい', price: 150 },
   { id: 'hero', slot: 'clothes', style: 'hero', emoji: '🦸', name: 'ヒーロースーツ', price: 200 },
+  { id: 'ninja', slot: 'clothes', style: 'ninja', emoji: '🥷', name: '忍者の服', price: 300 },
+  { id: 'astronaut', slot: 'clothes', style: 'astronaut', emoji: '👨‍🚀', name: '宇宙服', price: 500 },
+  { id: 'king', slot: 'clothes', style: 'king', emoji: '🤴', name: '王様のマント', price: 800 },
   // 眼鏡
   { id: 'glasses', slot: 'face', emoji: '👓', name: 'メガネ', price: 30 },
   { id: 'sunglasses', slot: 'face', emoji: '🕶️', name: 'サングラス', price: 40 },
   { id: 'goggles', slot: 'face', emoji: '🥽', name: 'ゴーグル', price: 60 },
+  { id: 'mask', slot: 'face', emoji: '🎭', name: '仮面', price: 300 },
   // 手に持つもの（杖・剣など）
   { id: 'wand', slot: 'hand', emoji: '🪄', name: '魔法の杖', price: 60 },
   { id: 'sword', slot: 'hand', emoji: '🗡️', name: '剣', price: 80 },
@@ -380,6 +402,9 @@ const SHOP = [
   { id: 'bow', slot: 'hand', emoji: '🏹', name: '弓矢', price: 100 },
   { id: 'swords', slot: 'hand', emoji: '⚔️', name: '二刀流', price: 150 },
   { id: 'trident', slot: 'hand', emoji: '🔱', name: '伝説の槍', price: 250 },
+  { id: 'thunder', slot: 'hand', emoji: '⚡', name: 'いなずまの杖', price: 400 },
+  { id: 'meteor', slot: 'hand', emoji: '🌠', name: 'ながれ星のステッキ', price: 600 },
+  { id: 'trophy', slot: 'hand', emoji: '🏆', name: '自習王のトロフィー', price: 1000 },
   // ペット
   { id: 'chick', slot: 'pet', emoji: '🐤', name: 'ひよこ', price: 40 },
   { id: 'cat', slot: 'pet', emoji: '🐱', name: 'ねこ', price: 60 },
@@ -388,6 +413,11 @@ const SHOP = [
   { id: 'panda', slot: 'pet', emoji: '🐼', name: 'パンダ', price: 100 },
   { id: 'unicorn', slot: 'pet', emoji: '🦄', name: 'ユニコーン', price: 180 },
   { id: 'dragon', slot: 'pet', emoji: '🐲', name: 'ドラゴン', price: 250 },
+  { id: 'lion', slot: 'pet', emoji: '🦁', name: 'ライオン', price: 300 },
+  { id: 'eagle', slot: 'pet', emoji: '🦅', name: 'わし', price: 350 },
+  { id: 'peacock', slot: 'pet', emoji: '🦚', name: 'くじゃく', price: 450 },
+  { id: 'whale', slot: 'pet', emoji: '🐳', name: 'くじら', price: 600 },
+  { id: 'brachio', slot: 'pet', emoji: '🦕', name: '首長りゅう', price: 800 },
   { id: 'pumpkin', slot: 'pet', emoji: '🎃', name: 'かぼちゃ', price: 50, months: [10] },
   { id: 'snowman', slot: 'pet', emoji: '⛄', name: '雪だるま', price: 50, months: [12, 1, 2] },
   // 着ぐるみ（体と頭をすっぽり。着ているあいだは帽子・洋服は表示しない）
@@ -397,6 +427,8 @@ const SHOP = [
   { id: 'k_penguin', slot: 'costume', style: 'penguin', emoji: '🐧', name: 'ペンギンの着ぐるみ', price: 180 },
   { id: 'k_panda', slot: 'costume', style: 'panda', emoji: '🐼', name: 'パンダの着ぐるみ', price: 200 },
   { id: 'k_dino', slot: 'costume', style: 'dino', emoji: '🦖', name: 'きょうりゅうの着ぐるみ', price: 300 },
+  { id: 'k_unicorn', slot: 'costume', style: 'unicorn', emoji: '🦄', name: 'ユニコーンの着ぐるみ', price: 500 },
+  { id: 'k_dragon', slot: 'costume', style: 'dragon', emoji: '🐉', name: 'ドラゴンの着ぐるみ', price: 800 },
 ];
 const itemById = (id) => SHOP.find(i => i.id === id);
 

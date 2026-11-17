@@ -227,12 +227,21 @@ test('着せかえ期間：管理画面で決めた期間だけ、買える・�
   G.setConfig({ dressup: { mode: 'always', periods: [] } });
 });
 
-test('季節の飾り：正月〜クリスマスの8つ。オン/オフできる', () => {
+test('季節の飾り：1年中なにかの飾りがある（23こ）。オン/オフできる', () => {
   const y = Number(C().yearStart.slice(0, 4));
   const ev = (md) => (G.currentEvent(at(`${y}-${md}`)) || {}).name || null;
-  assert.equal(ev('01-03'), '正月'); assert.equal(ev('02-10'), 'バレンタイン'); assert.equal(ev('03-15'), '卒業');
-  assert.equal(ev('04-05'), '入学'); assert.equal(ev('05-05'), 'こどもの日'); assert.equal(ev('09-20'), 'お月見');
-  assert.equal(ev('10-31'), 'ハロウィン'); assert.equal(ev('12-24'), 'クリスマス'); assert.equal(ev('06-15'), null);
+  assert.equal(G.EVENTS.length, 23);
+  assert.equal(ev('01-03'), 'お正月'); assert.equal(ev('01-20'), '冬・雪'); assert.equal(ev('02-03'), '節分');
+  assert.equal(ev('02-10'), 'バレンタイン'); assert.equal(ev('02-20'), 'ひな祭り'); assert.equal(ev('03-03'), 'ひな祭り');
+  assert.equal(ev('03-14'), 'ホワイトデー'); assert.equal(ev('03-15'), '卒業式'); assert.equal(ev('04-05'), '入学式');
+  assert.equal(ev('05-05'), 'こどもの日'); assert.equal(ev('06-15'), 'あじさい・梅雨'); assert.equal(ev('07-07'), '七夕');
+  assert.equal(ev('08-15'), '夏祭り・花火'); assert.equal(ev('09-20'), 'お月見'); assert.equal(ev('10-31'), 'ハロウィン');
+  assert.equal(ev('11-20'), '秋の収穫祭'); assert.equal(ev('12-24'), 'クリスマス'); assert.equal(ev('12-31'), 'お正月準備');
+  // うるう年の2/29 もふくめて、すきまの日がない
+  for (let d = new Date(Date.UTC(2028, 0, 1)); d.getUTCFullYear() === 2028; d.setUTCDate(d.getUTCDate() + 1)) {
+    const md = d.toISOString().slice(5, 10);
+    assert.equal(G.EVENTS.filter(e => md >= e.from && md <= e.to).length, 1, md);
+  }
   G.setConfig({ events: { christmas: false } });
   assert.equal(ev('12-24'), null);
   G.setConfig({ events: {} });
