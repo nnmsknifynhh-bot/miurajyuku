@@ -77,6 +77,8 @@ const addDays = (day, n) => { const d = new Date(day + 'T00:00:00Z'); d.setUTCDa
 const addYears = (day, n) => { const [y, m, d] = day.split('-'); return `${Number(y) + n}-${m}-${d}`; };
 const RE_DAY = /^\d{4}-\d{2}-\d{2}$/;
 const RE_HM = /^([01]\d|2[0-3]):[0-5]\d$|^24:00$/;
+const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
+const weekdayOf = (day) => new Date(day + 'T00:00:00Z').getUTCDay();
 
 // ───────── 設定 ─────────
 function defaults(today = jst()) {
@@ -84,6 +86,7 @@ function defaults(today = jst()) {
   return {
     window: { start: '00:00', end: '24:00' }, // 数える時間帯
     dailyCap: 300,         // 1日に数える上限（分）
+    weekly: null,          // 曜日ごとの数え方（null＝毎日同じ）。[日,月,…,土] の7つ：{ on, start, end, cap }
     requireSeat: true,     // 席に座っているときだけ数える
     requireCamera: false,  // 見守り写真がオンのとき、カメラがオンのときだけ数える
     streakMin: 90,         // 連続自習に数える1日の最低時間（分）
@@ -122,6 +125,14 @@ function getConfig() {
     dressup: { ...d.dressup, ...(saved.dressup || {}) }, events: { ...d.events, ...(saved.events || {}) },
   };
 }
+// その日の数え方（曜日ごとの設定があればそれ、なければ毎日同じ設定）
+function ruleFor(day, c = getConfig()) {
+  if (Array.isArray(c.weekly) && c.weekly.length === 7) {
+    const w = c.weekly[weekdayOf(day)];
+    return { weekday: WEEKDAYS[weekdayOf(day)], on: !!w.on, start: w.start, end: w.end, cap: w.cap };
+  }
+  return { weekday: WEEKDAYS[weekdayOf(day)], on: true, start: c.window.start, end: c.window.end, cap: c.dailyCap };
+}
 // 連続自習の最低時間を 90分 に変更（以前の初期値20分のまま保存されている場合だけ、1回だけ直す）
 (function migrate() {
   if (getSetting('ganbari_streak90') === '1') return;
@@ -141,6 +152,24 @@ function setConfig(patch, actorId) {
   }
   const int = (v, min, max) => Number.isInteger(v) && v >= min && v <= max;
   if (p.dailyCap !== undefined) { if (!int(p.dailyCap, 10, 1440)) return '1日の上限は10〜1440分にしてください'; c.dailyCap = p.dailyCap; }
+  if (p.weekly !== undefined) {
+    if (p.weekly === null) c.weekly = null;
+    else {
+      if (!Array.isArray(p.weekly) || p.weekly.length !== 7) return '曜日ごとの設定は日〜土の7つです';
+      const w = [];
+      for (let i = 0; i < 7; i++) {
+        const d = p.weekly[i] || {};
+        const on = !!d.on, cap = d.cap === undefined ? c.dailyCap : d.cap;
+        if (on) {
+          if (!RE_HM.test(d.start || '') || !RE_HM.test(d.end || '') || d.start >= d.end) return `${WEEKDAYS[i]}曜日の時間帯が正しくありません`;
+          if (!int(cap, 10, 1440)) return `${WEEKDAYS[i]}曜日の上限は10〜1440分にしてください`;
+        }
+        w.push({ on, start: RE_HM.test(d.start || '') ? d.start : '00:00', end: RE_HM.test(d.end || '') ? d.end : '24:00', cap: int(cap, 10, 1440) ? cap : c.dailyCap });
+      }
+      if (!w.some(x => x.on)) return '数える曜日を1つ以上えらんでください';
+      c.weekly = w;
+    }
+  }
   if (p.streakMin !== undefined) { if (!int(p.streakMin, 1, 600)) return '連続自習の最低時間は1〜600分にしてください'; c.streakMin = p.streakMin; }
   if (p.minutesPerPoint !== undefined) { if (!int(p.minutesPerPoint, 1, 120)) return 'ポイントの設定は1〜120分にしてください'; c.minutesPerPoint = p.minutesPerPoint; }
   if (p.requireSeat !== undefined) c.requireSeat = !!p.requireSeat;
@@ -249,7 +278,8 @@ function setManual(userId, day, minutes, actorId) {
 function tick(online, opt = {}) {
   const c = getConfig();
   const t = jst(opt.date || new Date());
-  if (t.hm < c.window.start || t.hm >= c.window.end) return [];
+  const r = ruleFor(t.day, c);
+  if (!r.on || t.hm < r.start || t.hm >= r.end) return [];
   const added = [];
   const up = db.prepare(`INSERT INTO study_days (user_id, day, auto_min) VALUES (?, ?, 1)
     ON CONFLICT(user_id, day) DO UPDATE SET auto_min = auto_min + 1`);
@@ -259,7 +289,7 @@ function tick(online, opt = {}) {
       if (p.user.role !== 'student' || p.room !== 'study' || p.away) continue;
       if (c.requireSeat && !p.seat) continue;
       if (c.requireCamera && opt.photosOn && !p.studyCam) continue;
-      if (dayTotal(p.id, t.day) >= c.dailyCap) continue;
+      if (dayTotal(p.id, t.day) >= r.cap) continue;
       up.run(p.id, t.day);
       added.push(p.id);
     }
@@ -275,9 +305,15 @@ function streak(userId, date = new Date()) {
   const rows = db.prepare(`SELECT day, ${totalExpr} AS m FROM study_days WHERE user_id = ? AND day <= ? AND day >= ? ORDER BY day DESC`)
     .all(userId, today, addDays(today, -400));
   const ok = new Set(rows.filter(r => r.m >= c.streakMin).map(r => r.day));
-  let day = ok.has(today) ? today : addDays(today, -1);
+  // 数えない曜日（お休みの曜日）は、とばしてつなげる。その日に自習していれば1日に数える
+  const off = (d) => !ruleFor(d, c).on;
+  let day = today;
+  if (!ok.has(day)) day = addDays(day, -1);
   let n = 0;
-  while (ok.has(day)) { n++; day = addDays(day, -1); }
+  for (let i = 0; i < 400; i++, day = addDays(day, -1)) {
+    if (ok.has(day)) n++;
+    else if (!off(day)) break;
+  }
   return n;
 }
 
@@ -533,6 +569,7 @@ function reportData(token) {
 }
 
 module.exports = {
+  ruleFor, WEEKDAYS,
   SLOTS, EVENTS, currentEvent, dressupOpen, dressupInfo,
   GRADES, STAGE_NAMES, SHOP, jst, addDays, getConfig, setConfig, termOf, allTerms, dayTotal, minutesBetween, daysBetween, setManual, tick,
   streak, points, owned, getEquip, buy, equip, shopFor, setGoal, goalOf, listGoals, reviewGoal, forest, studentSummary, newYear,

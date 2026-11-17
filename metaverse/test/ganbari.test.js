@@ -139,6 +139,33 @@ test('連続自習の🔥：1日の最低時間（初期90分）を続けた日�
   assert.equal(G.streak(U.a2.id, at(d0)), 4);
 });
 
+test('曜日ごとの数え方：数える曜日・時間帯・上限を曜日で変えられる。お休みの曜日は🔥が途切れない', () => {
+  const base = G.addDays(C().terms[2], 40);
+  const wd = (d) => new Date(d + 'T00:00:00Z').getUTCDay();
+  const day = base, offDay = G.addDays(base, 1); // 曜日のちがう2日
+  const weekly = Array.from({ length: 7 }, () => ({ on: true, start: '00:00', end: '24:00', cap: 300 }));
+  weekly[wd(day)] = { on: true, start: '18:00', end: '21:00', cap: 10 };
+  weekly[wd(offDay)] = { on: false, start: '00:00', end: '24:00', cap: 300 };
+  assert.equal(G.setConfig({ weekly }), null);
+  assert.equal(G.ruleFor(offDay).on, false);
+  const o = new Map([[1, fake(U.b1)]]);
+  assert.deepEqual(G.tick(o, { date: at(day, '17:00') }), [], 'その曜日の時間帯の外');
+  for (let m = 0; m < 10; m++) G.tick(o, { date: at(day, `18:${String(m).padStart(2, '0')}`) });
+  assert.equal(G.dayTotal(U.b1.id, day), 10);
+  assert.deepEqual(G.tick(o, { date: at(day, '18:30') }), [], 'その曜日の上限');
+  assert.deepEqual(G.tick(o, { date: at(offDay, '19:00') }), [], '数えない曜日');
+  // 🔥：お休みの曜日はとばす
+  const d2 = G.addDays(offDay, 1);
+  G.setManual(U.b1.id, day, 95, null); G.setManual(U.b1.id, d2, 95, null);
+  assert.equal(G.streak(U.b1.id, at(d2)), 2, 'お休みの曜日をはさんでも続く');
+  assert.match(G.setConfig({ weekly: weekly.map(w => ({ ...w, on: false })) }), /1つ以上/);
+  assert.match(G.setConfig({ weekly: weekly.map(w => ({ ...w, start: '22:00', end: '18:00' })) }), /時間帯/);
+  assert.match(G.setConfig({ weekly: [] }), /7つ/);
+  assert.equal(G.setConfig({ weekly: null }), null);
+  assert.equal(G.ruleFor(offDay).on, true, '毎日同じ設定にもどせる');
+  assert.equal(G.streak(U.b1.id, at(d2)), 1, '毎日数えるなら、その日で途切れる');
+});
+
 test('着せかえ：6種類（帽子・洋服・眼鏡・杖や剣・ペット・着ぐるみ）があり、値段に差がある', () => {
   const slots = new Set(G.SHOP.map(i => i.slot));
   for (const sl of ['head', 'clothes', 'face', 'hand', 'pet', 'costume']) assert.ok(slots.has(sl), sl);

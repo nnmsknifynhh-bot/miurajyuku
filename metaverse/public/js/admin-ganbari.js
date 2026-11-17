@@ -79,7 +79,35 @@
       dailyCap: Number(cap.value), streakMin: Number(streakMin.value), minutesPerPoint: Number(mpp.value),
       requireSeat: seat[1].checked, requireCamera: cam[1].checked,
     }, '数え方を保存しました');
-    rule.append(allDay[0], grid, seat[0], cam[0], saveRule);
+    // 曜日ごとの数え方
+    const WD = ['日', '月', '火', '水', '木', '金', '土'];
+    const byDay = check('曜日ごとに変える（数える曜日・時間帯・上限）', Array.isArray(c.weekly));
+    const wkBox = el('div', 'gb-week');
+    const wkRows = WD.map((name, i) => {
+      const w = (c.weekly && c.weekly[i]) || { on: true, start: c.window.start, end: c.window.end, cap: c.dailyCap };
+      const row = el('div', 'gb-wd');
+      const on = check(name + '曜', w.on);
+      const s = timeInput(w.start), e = timeInput(w.end), cp = numInput(w.cap, 10, 1440);
+      const all = check('いつでも', w.start === '00:00' && w.end === '24:00');
+      const sync = () => { const off = !on[1].checked; s.disabled = e.disabled = off || all[1].checked; cp.disabled = all[1].disabled = off; row.classList.toggle('off', off); };
+      on[1].onchange = all[1].onchange = sync; sync();
+      const t = el('span', 'gb-row'); t.append(s, el('span', null, '〜'), e);
+      const capL = el('span', 'gb-row'); capL.append(el('span', 'muted', '上限'), cp, el('span', 'muted', '分'));
+      row.append(on[0], all[0], t, capL);
+      wkBox.append(row);
+      return () => ({ on: on[1].checked, start: all[1].checked ? '00:00' : s.value, end: all[1].checked ? '24:00' : (e.value === '23:59' ? '24:00' : e.value), cap: Number(cp.value) });
+    });
+    const wkNote = el('p', 'muted', 'チェックをはずした曜日は自習時間を数えません。その曜日は連続自習🔥も途切れません（お休みの日として、とばして数えます）。');
+    const syncWeek = () => { const w = byDay[1].checked; wkBox.hidden = wkNote.hidden = !w; grid.querySelectorAll('.gb-common').forEach(x => { x.hidden = w; }); allDay[0].hidden = w; };
+    grid.children[0].classList.add('gb-common'); grid.children[1].classList.add('gb-common');
+    byDay[1].onchange = syncWeek; syncWeek();
+    saveRule.onclick = () => save({
+      window: allDay[1].checked ? { start: '00:00', end: '24:00' } : { start: wStart.value, end: wEnd.value === '23:59' ? '24:00' : wEnd.value },
+      dailyCap: Number(cap.value), streakMin: Number(streakMin.value), minutesPerPoint: Number(mpp.value),
+      requireSeat: seat[1].checked, requireCamera: cam[1].checked,
+      weekly: byDay[1].checked ? wkRows.map(f => f()) : null,
+    }, '数え方を保存しました');
+    rule.append(allDay[0], byDay[0], wkBox, wkNote, grid, seat[0], cam[0], saveRule);
 
     // ═════ 学期と年度 ═════
     const termSec = section('📅 学期と年度', `今は ${cfg.current ? cfg.current.name : '学期の期間外'}です。保護者レポートは学期ごとに作れます。`);
