@@ -251,7 +251,7 @@
     const funSec = section('🎉 季節のお楽しみ', 'がんばりサンタ・年越し自習・朝活チャレンジのオン/オフと条件です。');
     const fSanta = check('🎅 がんばりサンタ（11/1〜30 にがんばった生徒に、12/1〜7 にプレゼント箱）', f.santa !== false);
     const fSantaDays = numInput(f.santaDays || 10, 1, 30);
-    const fNy = check('🎆 年越し自習（1/1 0:00〜0:10 に自習室にいた生徒に記念バッジ）', f.toshikoshi !== false);
+    const fNy = check('🎆 年越し自習（12/31 23:50〜1/1 0:10 に自習室にいた生徒に記念バッジ。0:00 ちょうどに全員の画面で花火）', f.toshikoshi !== false);
     const fAsa = check('🌅 朝活チャレンジ（朝の自習で早起きスタンプとポイント）', f.asakatsu !== false);
     const fAsaMin = numInput(f.asakatsuMinutes || 30, 1, 120), fAsaPt = numInput(f.asakatsuPoints ?? 3, 0, 100);
     const fAsaS = timeInput(f.asakatsuStart || '06:00'), fAsaE = timeInput(f.asakatsuEnd || '07:30');

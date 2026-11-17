@@ -43,10 +43,13 @@ test('がんばりサンタ：11/1〜30に学年の最低時間（中2は60分�
   assert.match(G.buy(U.bbb.id, 'x_reindeer'), /買えません/, 'お店では買えない');
 });
 
-test('年越し自習：1/1 0:00〜0:10だけ。バッジは1年に1回', () => {
+test('年越し自習：12/31 23:50〜1/1 0:10。バッジは明けた年で1年に1回', () => {
+  assert.equal(F.toshikoshiYear(at(`${Y}-12-31`, '23:49')), null);
+  assert.equal(F.toshikoshiYear(at(`${Y}-12-31`, '23:50')), Y + 1, '23:50から（明けた年）');
+  assert.equal(F.toshikoshiYear(at(`${Y}-12-31`, '23:59')), Y + 1);
   assert.equal(F.toshikoshiYear(at(`${Y + 1}-01-01`, '00:00')), Y + 1);
-  assert.equal(F.toshikoshiYear(at(`${Y + 1}-01-01`, '00:10')), null);
-  assert.equal(F.toshikoshiYear(at(`${Y}-12-31`, '23:59')), null);
+  assert.equal(F.toshikoshiYear(at(`${Y + 1}-01-01`, '00:09')), Y + 1);
+  assert.equal(F.toshikoshiYear(at(`${Y + 1}-01-01`, '00:10')), null, '0:10まで');
   assert.equal(F.awardToshikoshi(U.aaa.id, Y + 1), true);
   assert.equal(F.awardToshikoshi(U.aaa.id, Y + 1), false, '2回目はなし');
   assert.ok(F.badgesOf(U.aaa.id).some(b => b.label.includes('年越し自習')));

@@ -96,7 +96,7 @@
     // 季節のお楽しみ
     socket.on('fun-event', (d) => {
       if (d.kind === 'asa') toast(`🌅 早起きスタンプ！ +${d.points}ポイント（ぜんぶで${d.stamps}こ）`, 6000);
-      if (d.kind === 'newyear') { $('#newyear-title').textContent = `あけましておめでとう！ ${d.year}年`; showWhenFree($('#newyear-dialog')); }
+      if (d.kind === 'newyear') { state.nyBadgeYear = d.year; if (!state.nyShowing) showNewYearDialog(d.year); }
       refreshFun(true);
     });
     // 誕生日のお祝いカード（その日にはじめて入ったとき）
@@ -149,6 +149,7 @@
       state.counts = d.rooms; state.reactions = d.reactions;
       state.classes = d.classes || {}; state.classCall = !!d.classCall;
       state.path = []; state.pathSeat = null; state.ready = true;
+      state.newYearShow = !!d.newYearShow; scheduleNewYear();
       buildReactions(); updateAll(); refreshWeek(true); refreshFun(true);
     });
     socket.on('class-state', (c) => { state.classes = c; state.call.sync(); });
@@ -417,6 +418,72 @@
     } catch (e) { box.classList.remove('shake'); $('#santa-open').disabled = false; toast(e.message); }
   };
   $('#newyear-close').onclick = () => $('#newyear-dialog').close();
+  function showNewYearDialog(year) {
+    if (state.nyDialogShown === year) return;
+    state.nyDialogShown = year;
+    $('#newyear-title').textContent = `あけましておめでとう！ ${year}年`;
+    showWhenFree($('#newyear-dialog'));
+  }
+  // ───── 🎆 1/1 0:00（日本時間）ちょうどに「A Happy New Year」と花火（そのときだけ） ─────
+  let nyTimer = null;
+  function scheduleNewYear() {
+    clearTimeout(nyTimer);
+    if (!state.newYearShow) return;
+    const now = Date.now();
+    const jstYear = new Date(now + 9 * 3600e3).getUTCFullYear();
+    const target = Date.UTC(jstYear + 1, 0, 1, 0, 0, 0) - 9 * 3600e3; // 次の1/1 0:00（日本時間）
+    const ms = target - now;
+    if (ms > 0 && ms < 24 * 3600e3) nyTimer = setTimeout(() => playNewYear(jstYear + 1), ms);
+  }
+  function playNewYear(year) {
+    if (state.nyShowing) return;
+    state.nyShowing = true;
+    const box = $('#ny-show'), cv = $('#ny-canvas'), g = cv.getContext('2d');
+    $('#ny-year').textContent = year;
+    box.classList.remove('out'); box.hidden = false;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const resize = () => { cv.width = innerWidth * dpr; cv.height = innerHeight * dpr; g.setTransform(dpr, 0, 0, dpr, 0, 0); };
+    resize();
+    const COLORS = ['#ffd166', '#ef476f', '#06d6a0', '#118ab2', '#f78c6b', '#c77dff', '#ffffff'];
+    const rockets = [], sparks = [];
+    const DURATION = 12000, start = performance.now();
+    let lastLaunch = 0;
+    const launch = () => rockets.push({ x: innerWidth * (0.15 + Math.random() * 0.7), y: innerHeight + 10, vy: -(innerHeight * (0.011 + Math.random() * 0.004)), ty: innerHeight * (0.15 + Math.random() * 0.3), c: COLORS[Math.floor(Math.random() * COLORS.length)] });
+    const burst = (r) => {
+      const n = 46 + Math.floor(Math.random() * 20), sp = 2.2 + Math.random() * 1.8;
+      for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; sparks.push({ x: r.x, y: r.y, vx: Math.cos(a) * sp * (0.6 + Math.random() * 0.5), vy: Math.sin(a) * sp * (0.6 + Math.random() * 0.5), life: 1, c: Math.random() < 0.25 ? '#fff' : r.c }); }
+    };
+    const frame = (t) => {
+      const el = t - start;
+      g.fillStyle = 'rgba(5,6,20,.22)'; g.fillRect(0, 0, innerWidth, innerHeight); // 光の尾を残しながら消す
+      if (el < DURATION - 2500 && t - lastLaunch > 380) { lastLaunch = t; launch(); if (Math.random() < 0.4) launch(); }
+      for (let i = rockets.length - 1; i >= 0; i--) {
+        const r = rockets[i]; r.y += r.vy;
+        g.fillStyle = r.c; g.beginPath(); g.arc(r.x, r.y, 2.4, 0, Math.PI * 2); g.fill();
+        if (r.y <= r.ty) { burst(r); rockets.splice(i, 1); }
+      }
+      for (let i = sparks.length - 1; i >= 0; i--) {
+        const s = sparks[i]; s.x += s.vx; s.y += s.vy; s.vy += 0.035; s.vx *= 0.985; s.vy *= 0.985; s.life -= 0.012;
+        if (s.life <= 0) { sparks.splice(i, 1); continue; }
+        g.globalAlpha = Math.max(0, s.life); g.fillStyle = s.c; g.beginPath(); g.arc(s.x, s.y, 2, 0, Math.PI * 2); g.fill(); g.globalAlpha = 1;
+      }
+      if (el < DURATION) requestAnimationFrame(frame);
+      else {
+        box.classList.add('out');
+        setTimeout(() => {
+          box.hidden = true; state.nyShowing = false;
+          // 年越し自習のバッジをもらっていたら、お祝いの画面
+          if (state.user && state.user.role === 'student') {
+            refreshFun(true).then(() => { const b = state.fun && state.fun.badges && state.fun.badges.find(x => x.badge === `toshikoshi-${year}`); if (b || state.nyBadgeYear === year) showNewYearDialog(year); });
+          }
+        }, 1000);
+      }
+    };
+    requestAnimationFrame(frame);
+    window.addEventListener('resize', resize, { once: true });
+  }
+  // 動作確認用：アドレスの最後に #newyear-test をつけて開くと、花火をためせる（記録やバッジは変わらない）
+  if (location.hash === '#newyear-test') setTimeout(() => playNewYear(new Date().getFullYear() + 1), 2500);
 
   $('#bday-close').onclick = () => { $('#bday-dialog').close(); if (state.gb && state.gb.refreshForest) state.gb.refreshForest(); };
   $('#seat-close').onclick = () => { $('#seat-dialog').close(); standingSince = Date.now(); };

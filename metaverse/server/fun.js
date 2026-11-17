@@ -58,10 +58,13 @@ function openSanta(userId, date = new Date()) {
 }
 
 // ───────── 🎆 年越し自習 ─────────
-// 1/1 0:00〜0:10 に自習室にいた生徒にバッジ（1年に1回）。いまの時刻が対象なら年を返す
+// 12/31 23:50〜1/1 0:10 に自習室にいた生徒にバッジ（1年に1回）。いまの時刻が対象なら、明けた年（新しい年）を返す
 function toshikoshiYear(date = new Date()) {
   const t = G.jst(date);
-  return cfg().toshikoshi && md(t) === '01-01' && t.hm < '00:10' ? t.year : null;
+  if (!cfg().toshikoshi) return null;
+  if (md(t) === '12-31' && t.hm >= '23:50') return t.year + 1;
+  if (md(t) === '01-01' && t.hm < '00:10') return t.year;
+  return null;
 }
 function awardToshikoshi(userId, year) {
   return awardBadge(userId, `toshikoshi-${year}`, `${year}年 年越し自習`, '🎍');

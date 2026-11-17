@@ -327,7 +327,7 @@ function attach(httpServer) {
 
     socket.emit('init', {
       me: { ...pub(p), bday: !!p.bday }, users: [...online.values()].filter(o => o !== p).map(pub), rooms: roomCounts(), reactions: REACTIONS,
-      classes: classState(), classCall: livekit.enabled,
+      classes: classState(), classCall: livekit.enabled, newYearShow: !!ganbari.getConfig().fun.toshikoshi,
     });
     if (gap && p.room === gap.room && Date.now() - gap.at <= STUDY_GAP_MS) socket.emit('study-resumed', { minutes: gapMinutes, seat: p.seat });
     socket.broadcast.emit('user-joined', pub(p));
@@ -708,9 +708,11 @@ function attach(httpServer) {
         if (p) p.socket.emit('fun-event', { kind: 'asa', stamps: r.stamps, points: r.points });
       }
       // 🎆 年越し自習：年が明けた瞬間（0:00〜0:10）に自習室にいた生徒にバッジ
+      // （年が明ける前にもらった生徒は、0:00 の花火のあとに画面で知らせる。明けてから来た生徒には、すぐ知らせる）
       const ny = fun.toshikoshiYear();
+      const afterMidnight = ganbari.jst().day.endsWith('-01-01');
       if (ny) for (const p of online.values()) {
-        if (p.user.role === 'student' && SM.isStudyRoom(p.room) && !p.away && fun.awardToshikoshi(p.id, ny)) p.socket.emit('fun-event', { kind: 'newyear', year: ny });
+        if (p.user.role === 'student' && SM.isStudyRoom(p.room) && !p.away && fun.awardToshikoshi(p.id, ny) && afterMidnight) p.socket.emit('fun-event', { kind: 'newyear', year: ny });
       }
       for (const p of online.values()) { updateToday(p); refreshBirthday(p); refreshHS(p); } // 日付が変わったときも 0 にもどる
       // 決めた曜日・時刻を過ぎても来ていない高校生を、先生に知らせる
