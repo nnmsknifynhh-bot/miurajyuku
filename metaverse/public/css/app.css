@@ -227,3 +227,10 @@ body:not(.is-student) .me-menu .student-only { display: none; }
 .quiz-result { margin: 0; font-size: 20px; font-weight: 800; }
 .btn.big { min-height: 56px; font-size: 19px; }
 .chat-warn { margin: 0; background: #fff3e0; border: 2px solid #ffb74d; color: #8a4b00; border-radius: 12px; padding: 10px 12px; font-weight: 800; font-size: 15px; }
+.seat-map { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; }
+.seat-side { display: grid; gap: 6px; }
+.seat-side b { font-size: 13px; color: var(--muted); text-align: center; }
+.seat-grid { display: grid; gap: 6px; }
+.seat-grid button { width: 44px; height: 44px; border: 2px solid var(--line); border-radius: 10px; background: #fff; font-size: 22px; padding: 0; }
+.seat-grid button:disabled { background: #eee; opacity: .6; }
+.seat-grid button:not(:disabled):active { background: #eaf2fd; border-color: var(--primary); }

@@ -99,6 +99,19 @@
     </div>
   </dialog>
 
+  <!-- 自習室：立ち歩きが続いたときの席えらび -->
+  <dialog id="seat-dialog">
+    <div class="dialog-body">
+      <h2>🪑 どこにすわる？</h2>
+      <p class="chat-warn">⚠️ 立ち歩きが10秒をこえたよ。席にすわって勉強しよう！</p>
+      <p class="muted">空いている席（🪑）をタップすると、その席まで歩いてすわります。</p>
+      <div class="seat-map" id="seat-map"></div>
+      <div class="dialog-actions">
+        <button type="button" class="btn secondary" id="seat-close">あとで</button>
+        <button type="button" class="btn" id="seat-near">近くの席にすわる</button>
+      </div>
+    </div>
+  </dialog>
   <!-- 自習室：勉強内容の吹き出し -->
   <dialog id="topic-dialog">
     <form class="dialog-body" id="topic-form">

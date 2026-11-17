@@ -278,6 +278,56 @@
     sit(best.x, best.y);
   }
 
+  // ───────── 自習室：立ち歩きが10秒をこえたら、席えらびを出す ─────────
+  const STAND_LIMIT_MS = 10_000;
+  let standingSince = 0;
+  function studySeats() {
+    const z = SM.ZONES.find(v => v.id === 'study'), seats = [];
+    for (let y = z.y1; y <= z.y2; y++) for (let x = z.x1; x <= z.x2; x++) if (SM.tileAt(x, y) === 'c') seats.push({ x, y });
+    return seats;
+  }
+  function openSeatPicker() {
+    const map = $('#seat-map'); map.textContent = '';
+    const occ = occupiedSeats(), seats = studySeats();
+    const midX = (SM.FOREST[0].x + 1); // 学年の木の通路で左右に分ける
+    for (const [label, side] of [['左がわ', seats.filter(s => s.x < midX)], ['右がわ', seats.filter(s => s.x >= midX)]]) {
+      if (!side.length) continue;
+      const xs = [...new Set(side.map(s => s.x))].sort((a, b) => a - b), ys = [...new Set(side.map(s => s.y))].sort((a, b) => a - b);
+      const box = document.createElement('div'); box.className = 'seat-side';
+      const title = document.createElement('b'); title.textContent = label;
+      const grid = document.createElement('div'); grid.className = 'seat-grid';
+      grid.style.gridTemplateColumns = `repeat(${xs.length}, 44px)`;
+      for (const st of side) {
+        const b = document.createElement('button'); b.type = 'button';
+        const taken = occ.has(SM.seatId(st.x, st.y));
+        b.textContent = taken ? '👤' : '🪑'; b.disabled = taken;
+        b.title = taken ? 'ほかの人が使っています' : 'この席にすわる';
+        b.style.gridColumn = xs.indexOf(st.x) + 1; b.style.gridRow = ys.indexOf(st.y) + 1;
+        b.onclick = () => { $('#seat-dialog').close(); walkTo(st.x, st.y, true); };
+        grid.append(b);
+      }
+      box.append(title, grid); map.append(box);
+    }
+    if (!$('#seat-dialog').open) $('#seat-dialog').showModal();
+  }
+  $('#seat-close').onclick = () => { $('#seat-dialog').close(); standingSince = Date.now(); };
+  $('#seat-near').onclick = () => {
+    $('#seat-dialog').close();
+    const me = state.me, occ = occupiedSeats();
+    const free = studySeats().filter(s => !occ.has(SM.seatId(s.x, s.y)))
+      .sort((a, b) => Math.hypot(SM.tileCenter(a.x, a.y).x - me.x, SM.tileCenter(a.x, a.y).y - me.y) - Math.hypot(SM.tileCenter(b.x, b.y).x - me.x, SM.tileCenter(b.x, b.y).y - me.y));
+    if (!free.length) return toast('空いている席がありません');
+    walkTo(free[0].x, free[0].y, true);
+  };
+  setInterval(() => {
+    const me = state.me;
+    const watching = state.ready && me && state.user && state.user.role === 'student' && me.room === 'study' && !me.seat
+      && !state.pathSeat && document.visibilityState === 'visible' && !document.querySelector('dialog[open]');
+    if (!watching) { standingSince = 0; return; } // すわった・歩いて席へ向かっている・ほかの画面を開いている・アプリを見ていないときは数えない
+    if (!standingSince) { standingSince = Date.now(); return; }
+    if (Date.now() - standingSince > STAND_LIMIT_MS) { standingSince = 0; openSeatPicker(); }
+  }, 1000);
+
   // ───────── 移動 ─────────
   function update(dt) {
     const me = state.me;
