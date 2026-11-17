@@ -88,3 +88,14 @@ h3.sec { margin: 22px 0 8px; font-size: 17px; }
 .gb-report { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .gb-sec .field input[type=number], .gb-sec .field input[type=time], .gb-sec .field input[type=date] { max-width: 220px; }
 @media (max-width: 640px) { .gb-goal { grid-template-columns: 1fr; } }
+.gb-period input:not([type=date]) { min-width: 160px; }
+.gb-periods { display: grid; gap: 6px; }
+
+/* 漢字テスト */
+.kq-form input, .kq-form select { min-height: 44px; border: 2px solid var(--line); border-radius: 10px; padding: 0 8px; font-size: 15px; width: 140px; }
+.kq-list { display: grid; gap: 6px; }
+.kq-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border: 2px solid var(--line); border-radius: 12px; }
+.kq-row.off { opacity: .55; }
+.kq-word { font-size: 20px; }
+.kq-ans { color: var(--success); font-weight: 700; }
+.kq-acts { margin-left: auto; display: flex; gap: 6px; }

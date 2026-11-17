@@ -28,17 +28,30 @@
   </section>
   <div id="lk-audio" hidden></div>
 
+  <!-- 入室前の漢字テスト -->
+  <section class="quiz" id="quiz" hidden>
+    <div class="quiz-card">
+      <p class="quiz-top"><span class="quiz-badge" id="quiz-level"></span> 入室の前に、漢字の読みを1問！</p>
+      <div class="quiz-word" id="quiz-word"></div>
+      <p class="quiz-q">読み方はどれ？</p>
+      <div class="quiz-choices" id="quiz-choices"></div>
+      <p class="quiz-result" id="quiz-result" hidden></p>
+      <button class="btn big quiz-enter" id="quiz-enter" hidden>入室する</button>
+    </div>
+  </section>
+
   <!-- がんばり：ポイントと着せかえ -->
   <dialog id="shop-dialog">
     <div class="dialog-body">
       <h2>🎁 ポイントと着せかえ</h2>
       <div class="shop-pt"><span>いまのポイント</span><b id="shop-points">0</b><span>pt</span></div>
       <p class="muted" id="shop-sub"></p>
+      <p class="shop-closed" id="shop-closed" hidden></p>
       <div class="shop-tabs" id="shop-tabs">
-        <button data-slot="head">🎩 帽子・かざり</button><button data-slot="face">👓 メガネ</button><button data-slot="pet">🐱 ペット</button>
+        <button data-slot="head">🎩 帽子</button><button data-slot="clothes">👕 洋服</button><button data-slot="face">👓 眼鏡</button><button data-slot="hand">🪄 杖・剣</button><button data-slot="pet">🐱 ペット</button><button data-slot="costume">🐻 着ぐるみ</button>
       </div>
       <div class="shop-items" id="shop-items"></div>
-      <p class="muted">ポイントは自習室での自習時間でたまります。新しい年度になると、ポイントとアイテムは0にもどります。</p>
+      <p class="muted">ポイントは自習室での自習時間でたまります。新しい年度になると、ポイントとアイテムは0にもどります。着ぐるみを着ているあいだは、帽子と洋服は見えません。</p>
       <div class="dialog-actions"><button class="btn secondary" id="shop-close">とじる</button></div>
     </div>
   </dialog>

@@ -60,6 +60,11 @@ CREATE TABLE IF NOT EXISTS report_links (
 );
 `);
 if (!db.prepare('PRAGMA table_info(users)').all().some(c => c.name === 'grade')) db.exec('ALTER TABLE users ADD COLUMN grade TEXT');
+// 着せかえの場所を増やした（洋服・手に持つもの・着ぐるみ）
+for (const col of ['clothes', 'hand', 'costume']) {
+  if (!db.prepare('PRAGMA table_info(avatar_equip)').all().some(c => c.name === col)) db.exec(`ALTER TABLE avatar_equip ADD COLUMN ${col} TEXT`);
+}
+const SLOTS = ['head', 'clothes', 'face', 'hand', 'pet', 'costume'];
 
 // ───────── 日付（日本時間） ─────────
 function jst(d = new Date()) {
@@ -81,20 +86,51 @@ function defaults(today = jst()) {
     dailyCap: 300,         // 1日に数える上限（分）
     requireSeat: true,     // 席に座っているときだけ数える
     requireCamera: false,  // 見守り写真がオンのとき、カメラがオンのときだけ数える
-    streakMin: 20,         // 連続自習に数える1日の最低時間（分）
+    streakMin: 90,         // 連続自習に数える1日の最低時間（分）
     minutesPerPoint: 10,   // 何分で1ポイント
     yearStart: `${y}-04-01`,
     terms: [`${y}-04-01`, `${y}-09-01`, `${y + 1}-01-01`],
     trees: [{ name: '中1の木', grades: ['中1'] }, { name: '中2の木', grades: ['中2'] }, { name: '中3の木', grades: ['中3'] }],
     stages: [0, 5, 15, 30, 50, 80], // 木の段階（平均時間・時間単位）
+    dressup: { mode: 'always', periods: [] }, // 着せかえ期間：always＝いつでも / periods＝決めた期間だけ
+    events: Object.fromEntries(EVENTS.map(e => [e.id, true])), // 季節の飾り（オン/オフ）
   };
+}
+
+// ───────── 季節の飾り ─────────
+// from/to は「月-日」。to が from より前なら年をまたぐ
+const EVENTS = [
+  { id: 'newyear', name: '正月', from: '01-01', to: '01-15' },
+  { id: 'valentine', name: 'バレンタイン', from: '02-01', to: '02-14' },
+  { id: 'graduation', name: '卒業', from: '03-01', to: '03-25' },
+  { id: 'entrance', name: '入学', from: '04-01', to: '04-20' },
+  { id: 'kodomo', name: 'こどもの日', from: '04-21', to: '05-05' },
+  { id: 'tsukimi', name: 'お月見', from: '09-10', to: '09-30' },
+  { id: 'halloween', name: 'ハロウィン', from: '10-15', to: '10-31' },
+  { id: 'christmas', name: 'クリスマス', from: '12-01', to: '12-25' },
+];
+function currentEvent(date = new Date(), c = getConfig()) {
+  const md = jst(date).day.slice(5);
+  return EVENTS.find(e => c.events[e.id] !== false && (e.from <= e.to ? md >= e.from && md <= e.to : md >= e.from || md <= e.to)) || null;
 }
 function getConfig() {
   let saved = {};
   try { saved = JSON.parse(getSetting('ganbari', '{}')); } catch (e) { saved = {}; }
   const d = defaults();
-  return { ...d, ...saved, window: { ...d.window, ...(saved.window || {}) } };
+  return {
+    ...d, ...saved, window: { ...d.window, ...(saved.window || {}) },
+    dressup: { ...d.dressup, ...(saved.dressup || {}) }, events: { ...d.events, ...(saved.events || {}) },
+  };
 }
+// 連続自習の最低時間を 90分 に変更（以前の初期値20分のまま保存されている場合だけ、1回だけ直す）
+(function migrate() {
+  if (getSetting('ganbari_streak90') === '1') return;
+  try {
+    const saved = JSON.parse(getSetting('ganbari', '{}'));
+    if (saved.streakMin === 20) { saved.streakMin = 90; setSetting('ganbari', JSON.stringify(saved)); }
+  } catch (e) { /* 設定がまだない */ }
+  setSetting('ganbari_streak90', '1');
+})();
 // 入力のチェックをしてから保存する。エラーならメッセージを返す
 function setConfig(patch, actorId) {
   const c = getConfig();
@@ -131,9 +167,42 @@ function setConfig(patch, actorId) {
     if (!Array.isArray(s) || s.length !== 6 || s[0] !== 0 || !s.every((v, i) => typeof v === 'number' && v >= 0 && v <= 2000 && (i === 0 || v > s[i - 1]))) return '木の段階の時間は、0から始めて大きくなる順に6つ入れてください';
     c.stages = s;
   }
+  if (p.dressup !== undefined) {
+    const d = p.dressup || {};
+    if (!['always', 'periods'].includes(d.mode)) return '着せかえ期間の設定が正しくありません';
+    const periods = Array.isArray(d.periods) ? d.periods : [];
+    if (periods.length > 20) return '着せかえ期間は20個までです';
+    const clean = [];
+    for (const pr of periods) {
+      const name = String((pr && pr.name) || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 20);
+      if (!RE_DAY.test((pr && pr.start) || '') || !RE_DAY.test((pr && pr.end) || '') || pr.start > pr.end) return '着せかえ期間の日付を正しく入れてください（始まり ≦ 終わり）';
+      clean.push({ name, start: pr.start, end: pr.end });
+    }
+    if (d.mode === 'periods' && !clean.length) return '着せかえ期間を1つ以上入れてください';
+    c.dressup = { mode: d.mode, periods: clean };
+  }
+  if (p.events !== undefined) {
+    const ev = {};
+    for (const e of EVENTS) ev[e.id] = !(p.events && p.events[e.id] === false);
+    c.events = ev;
+  }
   setSetting('ganbari', JSON.stringify(c));
   if (actorId) audit(actorId, 'ganbari.config', null, null);
   return null;
+}
+
+// 着せかえできる（見える）期間か
+function dressupOpen(date = new Date(), c = getConfig()) {
+  if (c.dressup.mode !== 'periods') return true;
+  const day = jst(date).day;
+  return c.dressup.periods.some(p => day >= p.start && day <= p.end);
+}
+function dressupInfo(date = new Date(), c = getConfig()) {
+  const day = jst(date).day;
+  const open = dressupOpen(date, c);
+  const now = c.dressup.mode === 'periods' ? c.dressup.periods.find(p => day >= p.start && day <= p.end) || null : null;
+  const next = c.dressup.mode === 'periods' ? c.dressup.periods.filter(p => p.start > day).sort((a, b) => a.start.localeCompare(b.start))[0] || null : null;
+  return { open, mode: c.dressup.mode, now, next };
 }
 
 // ───────── 学期・年度 ─────────
@@ -215,26 +284,55 @@ function streak(userId, date = new Date()) {
 // ───────── ポイントと着せかえ ─────────
 // months: 買える月（期間限定）。なければいつでも
 const SHOP = [
+  // 帽子・かざり（絵文字で表示）
   { id: 'cap', slot: 'head', emoji: '🧢', name: 'キャップ', price: 20 },
   { id: 'ribbon', slot: 'head', emoji: '🎀', name: 'リボン', price: 20 },
-  { id: 'tophat', slot: 'head', emoji: '🎩', name: 'シルクハット', price: 50 },
-  { id: 'gradcap', slot: 'head', emoji: '🎓', name: '博士の帽子', price: 80 },
-  { id: 'crown', slot: 'head', emoji: '👑', name: '王冠', price: 150 },
+  { id: 'strawhat', slot: 'head', emoji: '👒', name: 'むぎわら帽子', price: 40 },
+  { id: 'tophat', slot: 'head', emoji: '🎩', name: 'シルクハット', price: 60 },
+  { id: 'helmet', slot: 'head', emoji: '⛑️', name: 'ヘルメット', price: 60 },
+  { id: 'gradcap', slot: 'head', emoji: '🎓', name: '博士の帽子', price: 100 },
+  { id: 'crown', slot: 'head', emoji: '👑', name: '王冠', price: 200 },
   { id: 'sakura', slot: 'head', emoji: '🌸', name: '桜の髪かざり', price: 30, months: [3, 4, 5] },
   { id: 'sunflower', slot: 'head', emoji: '🌻', name: 'ひまわり', price: 30, months: [7, 8] },
   { id: 'maple', slot: 'head', emoji: '🍁', name: 'もみじ', price: 30, months: [10, 11] },
   { id: 'santa', slot: 'head', emoji: '🎅', name: 'サンタ', price: 40, months: [12] },
+  // 洋服（形と色で表示）
+  { id: 'uniform', slot: 'clothes', style: 'uniform', emoji: '👔', name: '制服', price: 30 },
+  { id: 'parka', slot: 'clothes', style: 'parka', emoji: '🧥', name: 'パーカー', price: 30 },
+  { id: 'jersey', slot: 'clothes', style: 'jersey', emoji: '🏃', name: 'ジャージ', price: 40 },
+  { id: 'kimono', slot: 'clothes', style: 'kimono', emoji: '👘', name: '着物', price: 80 },
+  { id: 'dress', slot: 'clothes', style: 'dress', emoji: '👗', name: 'ドレス', price: 100 },
+  { id: 'tuxedo', slot: 'clothes', style: 'tuxedo', emoji: '🤵', name: 'タキシード', price: 100 },
+  { id: 'armor', slot: 'clothes', style: 'armor', emoji: '🛡️', name: 'よろい', price: 150 },
+  { id: 'hero', slot: 'clothes', style: 'hero', emoji: '🦸', name: 'ヒーロースーツ', price: 200 },
+  // 眼鏡
   { id: 'glasses', slot: 'face', emoji: '👓', name: 'メガネ', price: 30 },
   { id: 'sunglasses', slot: 'face', emoji: '🕶️', name: 'サングラス', price: 40 },
   { id: 'goggles', slot: 'face', emoji: '🥽', name: 'ゴーグル', price: 60 },
+  // 手に持つもの（杖・剣など）
+  { id: 'wand', slot: 'hand', emoji: '🪄', name: '魔法の杖', price: 60 },
+  { id: 'sword', slot: 'hand', emoji: '🗡️', name: '剣', price: 80 },
+  { id: 'shield', slot: 'hand', emoji: '🛡️', name: '盾', price: 90 },
+  { id: 'bow', slot: 'hand', emoji: '🏹', name: '弓矢', price: 100 },
+  { id: 'swords', slot: 'hand', emoji: '⚔️', name: '二刀流', price: 150 },
+  { id: 'trident', slot: 'hand', emoji: '🔱', name: '伝説の槍', price: 250 },
+  // ペット
   { id: 'chick', slot: 'pet', emoji: '🐤', name: 'ひよこ', price: 40 },
   { id: 'cat', slot: 'pet', emoji: '🐱', name: 'ねこ', price: 60 },
   { id: 'dog', slot: 'pet', emoji: '🐶', name: 'いぬ', price: 60 },
   { id: 'rabbit', slot: 'pet', emoji: '🐰', name: 'うさぎ', price: 60 },
   { id: 'panda', slot: 'pet', emoji: '🐼', name: 'パンダ', price: 100 },
-  { id: 'dragon', slot: 'pet', emoji: '🐲', name: 'ドラゴン', price: 200 },
+  { id: 'unicorn', slot: 'pet', emoji: '🦄', name: 'ユニコーン', price: 180 },
+  { id: 'dragon', slot: 'pet', emoji: '🐲', name: 'ドラゴン', price: 250 },
   { id: 'pumpkin', slot: 'pet', emoji: '🎃', name: 'かぼちゃ', price: 50, months: [10] },
   { id: 'snowman', slot: 'pet', emoji: '⛄', name: '雪だるま', price: 50, months: [12, 1, 2] },
+  // 着ぐるみ（体と頭をすっぽり。着ているあいだは帽子・洋服は表示しない）
+  { id: 'k_bear', slot: 'costume', style: 'bear', emoji: '🐻', name: 'くまの着ぐるみ', price: 150 },
+  { id: 'k_cat', slot: 'costume', style: 'cat', emoji: '😺', name: 'ねこの着ぐるみ', price: 150 },
+  { id: 'k_rabbit', slot: 'costume', style: 'rabbit', emoji: '🐇', name: 'うさぎの着ぐるみ', price: 150 },
+  { id: 'k_penguin', slot: 'costume', style: 'penguin', emoji: '🐧', name: 'ペンギンの着ぐるみ', price: 180 },
+  { id: 'k_panda', slot: 'costume', style: 'panda', emoji: '🐼', name: 'パンダの着ぐるみ', price: 200 },
+  { id: 'k_dino', slot: 'costume', style: 'dino', emoji: '🦖', name: 'きょうりゅうの着ぐるみ', price: 300 },
 ];
 const itemById = (id) => SHOP.find(i => i.id === id);
 
@@ -250,16 +348,27 @@ function owned(userId) {
   const c = getConfig();
   return db.prepare('SELECT item FROM shop_owned WHERE user_id = ? AND year_start = ?').all(userId, c.yearStart).map(r => r.item);
 }
-function getEquip(userId) {
+const EMPTY_EQUIP = () => Object.fromEntries(SLOTS.map(sl => [sl, null]));
+// 表示用：絵文字（帽子・眼鏡・手・ペット）と、形の名前（洋服・着ぐるみ）
+// opts.ignorePeriod: 期間外でも、持ち主の確認用に中身を返す
+function getEquip(userId, opts = {}) {
   const c = getConfig();
   const r = db.prepare('SELECT * FROM avatar_equip WHERE user_id = ?').get(userId);
-  if (!r || r.year_start !== c.yearStart) return { head: null, face: null, pet: null }; // 新年度になったら何もつけていない状態に
-  const emoji = (id) => (id && itemById(id) ? itemById(id).emoji : null);
-  return { head: emoji(r.head), face: emoji(r.face), pet: emoji(r.pet), ids: { head: r.head, face: r.face, pet: r.pet } };
+  const ids = r && r.year_start === c.yearStart ? Object.fromEntries(SLOTS.map(sl => [sl, r[sl] || null])) : EMPTY_EQUIP(); // 新年度になったら何もつけていない
+  const visible = opts.ignorePeriod || dressupOpen(opts.date, c);
+  const out = EMPTY_EQUIP();
+  if (visible) {
+    for (const sl of SLOTS) {
+      const it = ids[sl] && itemById(ids[sl]);
+      if (it) out[sl] = it.style || it.emoji;
+    }
+  }
+  return { ...out, ids, hidden: !visible };
 }
 function buy(userId, itemId, date = new Date()) {
   const item = itemById(itemId);
   if (!item) return 'そのアイテムはありません';
+  if (!dressupOpen(date)) return '今は着せかえ期間ではありません';
   if (item.months && !item.months.includes(jst(date).month)) return 'このアイテムは今は買えません（期間限定）';
   if (owned(userId).includes(itemId)) return 'もう持っています';
   const pt = points(userId, date);
@@ -268,8 +377,9 @@ function buy(userId, itemId, date = new Date()) {
     .run(userId, itemId, getConfig().yearStart, item.price, now());
   return null;
 }
-function equip(userId, slot, itemId) {
-  if (!['head', 'face', 'pet'].includes(slot)) return 'つける場所が正しくありません';
+function equip(userId, slot, itemId, date = new Date()) {
+  if (!SLOTS.includes(slot)) return 'つける場所が正しくありません';
+  if (!dressupOpen(date)) return '今は着せかえ期間ではありません';
   if (itemId !== null) {
     const item = itemById(itemId);
     if (!item || item.slot !== slot) return 'そのアイテムはここにはつけられません';
@@ -277,11 +387,11 @@ function equip(userId, slot, itemId) {
   }
   const c = getConfig();
   const cur = db.prepare('SELECT * FROM avatar_equip WHERE user_id = ?').get(userId);
-  const base = cur && cur.year_start === c.yearStart ? cur : { head: null, face: null, pet: null };
-  const next = { ...base, [slot]: itemId };
-  db.prepare(`INSERT INTO avatar_equip (user_id, year_start, head, face, pet) VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT(user_id) DO UPDATE SET year_start = excluded.year_start, head = excluded.head, face = excluded.face, pet = excluded.pet`)
-    .run(userId, c.yearStart, next.head, next.face, next.pet);
+  const base = cur && cur.year_start === c.yearStart ? cur : EMPTY_EQUIP();
+  const next = { ...EMPTY_EQUIP(), ...Object.fromEntries(SLOTS.map(sl => [sl, base[sl] || null])), [slot]: itemId };
+  db.prepare(`INSERT INTO avatar_equip (user_id, year_start, ${SLOTS.join(', ')}) VALUES (?, ?, ${SLOTS.map(() => '?').join(', ')})
+    ON CONFLICT(user_id) DO UPDATE SET year_start = excluded.year_start, ${SLOTS.map(sl => `${sl} = excluded.${sl}`).join(', ')}`)
+    .run(userId, c.yearStart, ...SLOTS.map(sl => next[sl]));
   return null;
 }
 function shopFor(userId, date = new Date()) {
@@ -333,6 +443,7 @@ function stageOf(avgMinutes, c = getConfig()) {
   return s;
 }
 function forest(date = new Date(), termOverride = null) {
+  const ev = currentEvent(date);
   const c = getConfig();
   const term = termOverride || termOf(jst(date).day, c);
   const trees = c.trees.map((t, i) => {
@@ -349,7 +460,7 @@ function forest(date = new Date(), termOverride = null) {
       goals: goals.map(g => ({ name: g.name, text: g.text, achieved: !!g.achieved })),
     };
   });
-  return { term, trees };
+  return { term, trees, event: ev ? { id: ev.id, name: ev.name } : null };
 }
 function treeOfGrade(grade, date = new Date(), term = null) {
   const f = forest(date, term);
@@ -422,6 +533,7 @@ function reportData(token) {
 }
 
 module.exports = {
+  SLOTS, EVENTS, currentEvent, dressupOpen, dressupInfo,
   GRADES, STAGE_NAMES, SHOP, jst, addDays, getConfig, setConfig, termOf, allTerms, dayTotal, minutesBetween, daysBetween, setManual, tick,
   streak, points, owned, getEquip, buy, equip, shopFor, setGoal, goalOf, listGoals, reviewGoal, forest, studentSummary, newYear,
   createReport, reportData,

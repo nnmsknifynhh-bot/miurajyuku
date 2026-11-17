@@ -28,9 +28,44 @@
     state.zoom = autoZoom();
     if (matchMedia('(pointer: coarse)').matches) $('#joystick').hidden = false;
     resize();
+    // 生徒は、入室の前に漢字の読みテスト（必要なときだけ）
+    if (u.role === 'student') {
+      try { if ((await api('GET', '/api/quiz/status')).required) await runQuiz(); } catch (e) { /* テストなしで入室 */ }
+    }
     connect();
     requestAnimationFrame(loop);
   })();
+
+  // ───────── 入室前の漢字テスト（4択） ─────────
+  async function runQuiz() {
+    let q;
+    try { q = await api('POST', '/api/quiz/question'); } catch (e) { return; }
+    const box = $('#quiz');
+    $('#quiz-level').textContent = `漢検 ${q.level}`;
+    $('#quiz-word').textContent = q.word;
+    const choices = $('#quiz-choices'); choices.textContent = '';
+    $('#quiz-result').hidden = true; $('#quiz-enter').hidden = true;
+    box.hidden = false;
+    return new Promise((resolve) => {
+      q.choices.forEach((c, i) => {
+        const b = el('button', null, c);
+        b.onclick = async () => {
+          choices.querySelectorAll('button').forEach(x => { x.disabled = true; });
+          let r;
+          try { r = await api('POST', '/api/quiz/answer', { choice: i }); } catch (e) { box.hidden = true; resolve(); return; }
+          choices.children[r.answerIndex].classList.add('ok');
+          if (!r.correct) b.classList.add('ng');
+          const res = $('#quiz-result');
+          res.textContent = r.correct ? '🎉 正解！' : `ざんねん！ 正しい読みは「${r.answer}」`;
+          res.style.color = r.correct ? 'var(--success)' : 'var(--danger)';
+          res.hidden = false;
+          const enter = $('#quiz-enter'); enter.hidden = false; enter.focus();
+          enter.onclick = () => { box.hidden = true; resolve(); };
+        };
+        choices.append(b);
+      });
+    });
+  }
 
   async function loadMe() {
     const data = await api('GET', '/api/me');
@@ -69,6 +104,11 @@
     socket.on('disconnect', (reason) => {
       state.ready = false;
       if (reason !== 'io server disconnect') { $('#conn').textContent = '接続が切れました。つなぎなおしています…'; $('#conn').hidden = false; }
+    });
+    // テストに答えていない（サーバーが入室を止めた）とき
+    socket.on('quiz-required', async () => {
+      await runQuiz();
+      socket.connect();
     });
     socket.on('connect_error', (err) => {
       if (err && err.message === 'unauthorized') { location.replace('/'); return; }
@@ -901,12 +941,12 @@
     SM.FOREST.forEach((f, i) => { const p = treePos(i); list.push({ tree: forest ? forest.trees[i] : null, x: p.x, y: p.y }); });
     list.sort((a, b) => a.y - b.y);
     const season = window.Render.seasonOf();
+    if (forest && forest.event) window.Render.drawDecorations(ctx, forest.event.id, time);
     for (const it of list) {
       if ('tree' in it) window.Render.drawTree(ctx, it.x, it.y, it.tree, { time: time / 1000, season, highlight: it.tree && state.user && it.tree.grades.includes(state.user.grade) });
       else window.Render.drawAvatar(ctx, it.u, it.x, it.y, { isMe: it.isMe, time: time / 1000, now: time, speaking: state.call && state.call.isSpeaking(it.u.id) });
     }
     ctx.restore();
-    window.Render.drawSeasonParticles(ctx, innerWidth, innerHeight, time, season);
   }
 
   let last = performance.now();

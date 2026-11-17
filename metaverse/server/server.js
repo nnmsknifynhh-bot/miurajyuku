@@ -9,6 +9,7 @@ const realtime = require('./realtime');
 const livekit = require('./livekit');
 const notify = require('./notify');
 const ganbari = require('./ganbari');
+const kanken = require('./kanken');
 
 const PORT = Number(process.env.PORT || 3000);
 const app = express();
@@ -138,6 +139,23 @@ app.get('/api/me', auth.requireAuth, (req, res) => {
   });
 });
 
+// ═════════ 入室前の漢字テスト ═════════
+app.get('/api/quiz/status', auth.requireAuth, (req, res) => {
+  res.json({ required: kanken.required(req.user, { quickRejoin: realtime.isQuickRejoin(req.user.id) }) });
+});
+app.post('/api/quiz/question', auth.requireAuth, (req, res) => {
+  if (req.user.role !== 'student') return bad(res, '生徒の機能です', 403);
+  const q = kanken.newQuestion(req.user);
+  if (!q) return bad(res, '問題がありません', 404);
+  res.json(q);
+});
+app.post('/api/quiz/answer', auth.requireAuth, (req, res) => {
+  if (req.user.role !== 'student') return bad(res, '生徒の機能です', 403);
+  const r = kanken.answer(req.user, Number(req.body.choice));
+  if (r.error) return bad(res, r.error);
+  res.json(r);
+});
+
 // ═════════ がんばり（生徒） ═════════
 app.get('/api/me/ganbari', auth.requireAuth, (req, res) => {
   const c = ganbari.getConfig();
@@ -149,6 +167,7 @@ app.get('/api/me/ganbari', auth.requireAuth, (req, res) => {
     termMinutes: term ? ganbari.minutesBetween(u.id, term.start, term.end) : 0, term,
     points: ganbari.points(u.id), streak: ganbari.streak(u.id), equip: ganbari.getEquip(u.id),
     shop: ganbari.shopFor(u.id), goal: term ? ganbari.goalOf(u.id, term.key) : null,
+    dressup: ganbari.dressupInfo(), myItems: ganbari.getEquip(u.id, { ignorePeriod: true }).ids,
     rules: { minutesPerPoint: c.minutesPerPoint, streakMin: c.streakMin, window: c.window, requireSeat: c.requireSeat },
   });
 });
@@ -427,7 +446,7 @@ admin.post('/presence/:id/disconnect', requireOwner, (req, res) => {
 // ── がんばり（オーナー） ──
 admin.get('/ganbari/config', requireOwner, (req, res) => {
   const c = ganbari.getConfig();
-  res.json({ config: c, terms: ganbari.allTerms(c), current: ganbari.termOf(ganbari.jst().day, c), grades: ganbari.GRADES, stageNames: ganbari.STAGE_NAMES });
+  res.json({ config: c, terms: ganbari.allTerms(c), current: ganbari.termOf(ganbari.jst().day, c), grades: ganbari.GRADES, stageNames: ganbari.STAGE_NAMES, events: ganbari.EVENTS });
 });
 admin.patch('/ganbari/config', requireOwner, (req, res) => {
   const err = ganbari.setConfig(req.body, req.user.id);
@@ -486,6 +505,31 @@ admin.post('/ganbari/reports', requireOwner, (req, res) => {
   }
   if (!out.length) return bad(res, '生徒が見つかりません', 404);
   res.json({ reports: out, term });
+});
+
+// ── 漢字テスト（オーナー） ──
+admin.get('/kanken', requireOwner, (req, res) => {
+  res.json({ config: kanken.getConfig(), levels: kanken.LEVELS, grades: ganbari.GRADES, questions: kanken.listQuestions(), stats: kanken.stats() });
+});
+admin.patch('/kanken/config', requireOwner, (req, res) => {
+  const err = kanken.setConfig(req.body, req.user.id);
+  if (err) return bad(res, err);
+  res.json({ config: kanken.getConfig() });
+});
+admin.post('/kanken/questions', requireOwner, (req, res) => {
+  const err = kanken.addQuestion(req.body, req.user.id);
+  if (err) return bad(res, err);
+  res.status(201).json({ ok: true });
+});
+admin.patch('/kanken/questions/:id', requireOwner, (req, res) => {
+  const err = kanken.updateQuestion(Number(req.params.id), req.body, req.user.id);
+  if (err) return bad(res, err);
+  res.json({ ok: true });
+});
+admin.delete('/kanken/questions/:id', requireOwner, (req, res) => {
+  const err = kanken.deleteQuestion(Number(req.params.id), req.user.id);
+  if (err) return bad(res, err, 404);
+  res.json({ ok: true });
 });
 
 // 塾全体の設定（オーナーのみ）

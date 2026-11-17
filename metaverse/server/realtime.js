@@ -11,6 +11,7 @@ const { db, now, audit, getSetting } = require('./db');
 const livekit = require('./livekit');
 const notify = require('./notify');
 const ganbari = require('./ganbari');
+const kanken = require('./kanken');
 const { can, canEnterRoom } = require('./permissions');
 
 const T = SM.TILE;
@@ -33,12 +34,15 @@ const isStaff = (p) => p.user.role === 'owner' || p.user.role === 'teacher';
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : NaN);
 const DIRS = new Set(['up', 'down', 'left', 'right']);
 
+// 見た目に必要な分だけ（期間外は全部 null）
+const equipView = (e) => (e ? Object.fromEntries(ganbari.SLOTS.map(sl => [sl, e[sl] || null])) : null);
+
 function pub(p) {
   return {
     id: p.id, name: p.user.display_name, role: p.user.role, color: p.user.avatar_color,
     x: p.x, y: p.y, dir: p.dir, moving: p.moving, room: p.room, seat: p.seat, hand: p.hand, handAt: p.handAt,
     inPrivate: inActiveCall(p), away: p.away || null, studyCam: !!p.studyCam, topic: p.topic || null,
-    equip: p.equip ? { head: p.equip.head, face: p.equip.face, pet: p.equip.pet } : null, streak: p.streak || 0,
+    equip: equipView(p.equip), streak: p.streak || 0,
   };
 }
 
@@ -247,6 +251,13 @@ function attach(httpServer) {
 
   io.on('connection', (socket) => {
     const user = socket.data.user;
+
+    // 入室前の漢字テスト：まだ答えていない生徒は入れない（すぐの入り直しは除く）
+    if (kanken.required(user, { quickRejoin: isQuickRejoin(user.id) })) {
+      socket.emit('quiz-required');
+      socket.disconnect(true);
+      return;
+    }
 
     // 送りすぎ対策：移動以外のイベントは1人あたり平均10回/秒（瞬間的には20回）まで。超えた分は無視する
     const bucket = { tokens: 20, at: Date.now() };
@@ -598,8 +609,12 @@ function attach(httpServer) {
   setInterval(flushMoves, 100).unref();
 
   // 自習時間を1分ごとに数える（条件は ganbari.js・管理画面で設定）
+  let dressupWasOpen = ganbari.dressupOpen();
   setInterval(() => {
     try {
+      // 着せかえ期間が始まった・終わったら、全員の見た目を更新
+      const open = ganbari.dressupOpen();
+      if (open !== dressupWasOpen) { dressupWasOpen = open; refreshAllGanbari(); }
       const added = ganbari.tick(online, { photosOn: studyPhotosEnabled() });
       for (const id of added) {
         const p = online.get(id);
@@ -672,13 +687,20 @@ function refreshUser(userId) {
 
 function refreshRooms() { broadcastRooms(); }
 
+// 少し前まで入室していた（通信が一瞬切れただけ）か
+function isQuickRejoin(userId) {
+  if (online.has(userId)) return true;
+  const off = lastOffline.get(userId);
+  return !!(off && Date.now() - off < REJOIN_QUIET_MS);
+}
+
 // 着せかえ・自習時間の修正などのあとに、表示を更新する
 function refreshGanbari(userId) {
   const p = online.get(Number(userId));
   if (!p) return;
   p.equip = ganbari.getEquip(p.id);
   p.streak = p.user.role === 'student' ? ganbari.streak(p.id) : 0;
-  io.emit('user-updated', { id: p.id, equip: { head: p.equip.head, face: p.equip.face, pet: p.equip.pet }, streak: p.streak });
+  io.emit('user-updated', { id: p.id, equip: equipView(p.equip), streak: p.streak });
 }
 function refreshAllGanbari() { for (const id of online.keys()) refreshGanbari(id); }
 
@@ -753,6 +775,6 @@ function presence() {
 function _reset() { online.clear(); lastPos.clear(); lastOffline.clear(); calls.clear(); studyPhotos.clear(); }
 
 module.exports = {
-  refreshGanbari, refreshAllGanbari, _online: online,
+  isQuickRejoin, refreshGanbari, refreshAllGanbari, _online: online,
   storeStudyPhoto, getStudyPhoto, studyPhotoTimes, canViewStudyPhotos, setStudyPhotosFeature, studyPhotosEnabled,
   attach, kick, refreshUser, refreshRooms, presence, roomCounts, classState, endClass, endCallOf, REACTIONS, _reset };

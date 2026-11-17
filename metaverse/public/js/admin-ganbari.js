@@ -128,6 +128,44 @@
     }, '木の設定を保存しました');
     treeSec.append(saveTree);
 
+    // ═════ 着せかえ期間 ═════
+    const dsSec = section('👕 着せかえ期間', '着せかえ（帽子・洋服・眼鏡・杖や剣・ペット・着ぐるみ）を買ったり着たりできる期間です。期間の外では、着せかえは誰にも見えません（持っているアイテムとポイントは消えません）。');
+    const modeWrap = el('div', 'gb-row');
+    const mkRadio = (val, label) => { const l = el('label', 'gb-check'); const r = el('input'); r.type = 'radio'; r.name = 'ds-mode'; r.value = val; r.checked = c.dressup.mode === val; l.append(r, document.createTextNode(label)); modeWrap.append(l); return r; };
+    const rAlways = mkRadio('always', 'いつでも'); mkRadio('periods', '期間を決める');
+    const plist = el('div', 'gb-periods');
+    const addPeriodRow = (pr = { name: '', start: '', end: '' }) => {
+      const row = el('div', 'gb-row gb-period');
+      const nm = el('input'); nm.placeholder = '名前（例：冬休み）'; nm.value = pr.name || ''; nm.maxLength = 20;
+      const st = dateInput(pr.start), en = dateInput(pr.end);
+      const del = el('button', 'btn small secondary', '削除'); del.onclick = () => row.remove();
+      row.append(nm, st, el('span', null, '〜'), en, del);
+      plist.append(row);
+    };
+    c.dressup.periods.forEach(addPeriodRow);
+    const addP = el('button', 'btn small secondary', '＋ 期間を追加'); addP.onclick = () => addPeriodRow();
+    const syncMode = () => { plist.hidden = addP.hidden = rAlways.checked; };
+    modeWrap.querySelectorAll('input').forEach(r => r.onchange = syncMode); syncMode();
+    const saveDs = el('button', 'btn', '着せかえ期間を保存する');
+    saveDs.onclick = () => save({
+      dressup: {
+        mode: rAlways.checked ? 'always' : 'periods',
+        periods: [...plist.querySelectorAll('.gb-period')].map(r => { const [nm, st, en] = r.querySelectorAll('input'); return { name: nm.value, start: st.value, end: en.value }; }),
+      },
+    }, '着せかえ期間を保存しました');
+    dsSec.append(modeWrap, plist, addP, saveDs);
+
+    // ═════ 季節の飾り ═════
+    const evSec = section('🎍 季節の飾り', 'その時期になると、ロビー・ろうか・自習室に飾りが出ます（画面に舞う演出はありません）。');
+    const evWrap = el('div', 'gb-grades');
+    const evBoxes = cfg.events.map(e => {
+      const [l, inp] = check(`${e.name}（${e.from.replace('-', '/')}〜${e.to.replace('-', '/')}）`, c.events[e.id] !== false);
+      inp.value = e.id; evWrap.append(l); return inp;
+    });
+    const saveEv = el('button', 'btn', '季節の飾りを保存する');
+    saveEv.onclick = () => save({ events: Object.fromEntries(evBoxes.map(b => [b.value, b.checked])) }, '季節の飾りを保存しました');
+    evSec.append(evWrap, saveEv);
+
     // ═════ 生徒の自習時間 ═════
     const stSec = section('👦 生徒の自習時間', '「修正」で、日ごとの自習時間を直せます（直した値が優先されます）。');
     const stBox = el('div', 'table-wrap'); stSec.append(stBox);

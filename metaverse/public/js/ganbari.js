@@ -3,7 +3,7 @@
   const $ = (s) => document.querySelector(s);
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   const hm = (min) => { const h = Math.floor(min / 60), m = min % 60; return h ? `${h}時間${m ? m + '分' : ''}` : `${m}分`; };
-  const SLOT_NAMES = { head: '帽子・かざり', face: 'メガネ', pet: 'ペット' };
+  const fmt = (d) => `${Number(d.slice(5, 7))}/${Number(d.slice(8))}`;
 
   function create({ api, toast, getState }) {
     const g = { forest: null, me: null, shopSlot: 'head' };
@@ -24,8 +24,14 @@
       $('#shop-points').textContent = me.points.balance;
       $('#shop-sub').textContent = `今日 ${hm(me.todayMinutes)}・今学期 ${hm(me.termMinutes)}・${me.rules.minutesPerPoint}分で1ポイント` + (me.streak >= 1 ? `・🔥${me.streak}日連続` : '');
       document.querySelectorAll('#shop-tabs button').forEach(b => b.classList.toggle('on', b.dataset.slot === g.shopSlot));
+      // 着せかえ期間の外は、見る・買う・着ることができない
+      const open = me.dressup.open;
+      const closed = $('#shop-closed');
+      closed.hidden = open;
+      if (!open) closed.textContent = '🔒 今は着せかえ期間ではありません。' + (me.dressup.next ? `次は ${fmt(me.dressup.next.start)}〜${fmt(me.dressup.next.end)}${me.dressup.next.name ? '（' + me.dressup.next.name + '）' : ''} です。` : 'ポイントはそのままたまります。');
+      else if (me.dressup.now) { closed.hidden = false; closed.textContent = `✨ 着せかえ期間中（〜${fmt(me.dressup.now.end)}まで）`; }
       const box = $('#shop-items'); box.textContent = '';
-      const equippedId = me.equip.ids ? me.equip.ids[g.shopSlot] : null;
+      const equippedId = me.myItems ? me.myItems[g.shopSlot] : null;
       for (const it of me.shop.filter(i => i.slot === g.shopSlot && (i.available || i.owned))) {
         const card = el('div', 'shop-item' + (it.id === equippedId ? ' on' : ''));
         card.append(el('div', 'emoji', it.emoji), el('div', 'nm', it.name));
@@ -33,10 +39,11 @@
         let b;
         if (it.owned) {
           b = el('button', 'btn small' + (it.id === equippedId ? ' secondary' : ''), it.id === equippedId ? 'はずす' : 'つける');
+          b.disabled = !open;
           b.onclick = () => doEquip(it.id === equippedId ? null : it.id);
         } else {
           b = el('button', 'btn small' + (me.points.balance < it.price ? ' secondary' : ''), `${it.price}pt`);
-          b.disabled = me.points.balance < it.price;
+          b.disabled = !open || me.points.balance < it.price;
           b.onclick = () => doBuy(it);
         }
         card.append(b);

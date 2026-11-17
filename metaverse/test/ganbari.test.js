@@ -119,6 +119,7 @@ test('着せかえ：持っているものだけつけられる', async () => {
   assert.equal(G.equip(U.a1.id, 'head', 'cat'), 'そのアイテムはここにはつけられません');
   assert.equal(G.equip(U.a1.id, 'pet', 'cat'), null);
   assert.equal(G.getEquip(U.a1.id).pet, '🐱');
+  assert.equal(G.getEquip(U.a1.id).ids.pet, 'cat');
   // API からも：先生は買えない
   assert.equal((await http('POST', '/api/me/shop/buy', { item: 'cap' }, U.tch.cookie)).status, 403);
   const me = (await http('GET', '/api/me/ganbari', null, U.a1.cookie)).data;
@@ -126,13 +127,65 @@ test('着せかえ：持っているものだけつけられる', async () => {
   assert.ok(me.shop.find(i => i.id === 'cat').owned);
 });
 
-test('連続自習の🔥：1日の最低時間（初期20分）を続けた日数', () => {
+test('連続自習の🔥：1日の最低時間（初期90分）を続けた日数', () => {
+  assert.equal(C().streakMin, 90);
   const d0 = C().terms[2]; // 3学期の初日を「今日」とする
-  for (let i = 1; i <= 3; i++) G.setManual(U.a2.id, G.addDays(d0, -i), 30, null);
-  G.setManual(U.a2.id, G.addDays(d0, -4), 10, null); // 足りない日で途切れる
+  for (let i = 1; i <= 3; i++) G.setManual(U.a2.id, G.addDays(d0, -i), 95, null);
+  G.setManual(U.a2.id, G.addDays(d0, -4), 60, null); // 90分に足りない日で途切れる
   assert.equal(G.streak(U.a2.id, at(d0)), 3, '今日はまだでも、昨日まで3日続いている');
-  G.setManual(U.a2.id, d0, 25, null);
+  G.setManual(U.a2.id, d0, 89, null);
+  assert.equal(G.streak(U.a2.id, at(d0)), 3, '今日は89分なのでまだ数えない');
+  G.setManual(U.a2.id, d0, 90, null);
   assert.equal(G.streak(U.a2.id, at(d0)), 4);
+});
+
+test('着せかえ：6種類（帽子・洋服・眼鏡・杖や剣・ペット・着ぐるみ）があり、値段に差がある', () => {
+  const slots = new Set(G.SHOP.map(i => i.slot));
+  for (const sl of ['head', 'clothes', 'face', 'hand', 'pet', 'costume']) assert.ok(slots.has(sl), sl);
+  const prices = G.SHOP.map(i => i.price);
+  assert.ok(Math.min(...prices) <= 30 && Math.max(...prices) >= 250);
+  const now = at(G.addDays(C().terms[1], 3));
+  G.setManual(U.b1.id, G.addDays(C().terms[1], 1), 1440, null); // ポイントを増やす（合計 600+1440×2 分 → 348pt）
+  G.setManual(U.b1.id, G.addDays(C().terms[1], 2), 1440, null);
+  assert.equal(G.buy(U.b1.id, 'k_bear', now), null);
+  assert.equal(G.buy(U.b1.id, 'wand', now), null);
+  assert.equal(G.buy(U.b1.id, 'tuxedo', now), null);
+  assert.equal(G.equip(U.b1.id, 'costume', 'k_bear', now), null);
+  assert.equal(G.equip(U.b1.id, 'hand', 'wand', now), null);
+  assert.equal(G.equip(U.b1.id, 'clothes', 'tuxedo', now), null);
+  const e = G.getEquip(U.b1.id, { date: now });
+  assert.equal(e.costume, 'bear'); assert.equal(e.hand, '🪄'); assert.equal(e.clothes, 'tuxedo');
+});
+
+test('着せかえ期間：管理画面で決めた期間だけ、買える・着られる・見える', async () => {
+  const t2 = C().terms[1];
+  const start = G.addDays(t2, 10), end = G.addDays(t2, 20);
+  assert.match(G.setConfig({ dressup: { mode: 'periods', periods: [] } }), /1つ以上/);
+  assert.match(G.setConfig({ dressup: { mode: 'periods', periods: [{ name: 'x', start: end, end: start }] } }), /日付/);
+  assert.equal((await http('PATCH', '/api/admin/ganbari/config', { dressup: { mode: 'periods', periods: [{ name: '冬休み', start, end }] } }, owner)).status, 200);
+  const before = at(G.addDays(start, -1)), during = at(G.addDays(start, 1)), after = at(G.addDays(end, 1));
+  assert.equal(G.dressupOpen(before), false);
+  assert.equal(G.dressupOpen(during), true);
+  assert.equal(G.dressupOpen(after), false);
+  assert.equal(G.getEquip(U.b1.id, { date: before }).costume, null, '期間外は見えない');
+  assert.equal(G.getEquip(U.b1.id, { date: before }).hidden, true);
+  assert.equal(G.getEquip(U.b1.id, { date: during }).costume, 'bear', '期間中は見える');
+  assert.equal(G.getEquip(U.b1.id, { date: before, ignorePeriod: true }).ids.costume, 'k_bear', '持っているものは消えない');
+  assert.match(G.buy(U.b1.id, 'cap', after), /着せかえ期間ではありません/);
+  assert.match(G.equip(U.b1.id, 'head', null, after), /着せかえ期間ではありません/);
+  G.setConfig({ dressup: { mode: 'always', periods: [] } });
+});
+
+test('季節の飾り：正月〜クリスマスの8つ。オン/オフできる', () => {
+  const y = Number(C().yearStart.slice(0, 4));
+  const ev = (md) => (G.currentEvent(at(`${y}-${md}`)) || {}).name || null;
+  assert.equal(ev('01-03'), '正月'); assert.equal(ev('02-10'), 'バレンタイン'); assert.equal(ev('03-15'), '卒業');
+  assert.equal(ev('04-05'), '入学'); assert.equal(ev('05-05'), 'こどもの日'); assert.equal(ev('09-20'), 'お月見');
+  assert.equal(ev('10-31'), 'ハロウィン'); assert.equal(ev('12-24'), 'クリスマス'); assert.equal(ev('06-15'), null);
+  G.setConfig({ events: { christmas: false } });
+  assert.equal(ev('12-24'), null);
+  G.setConfig({ events: {} });
+  assert.equal(ev('12-24'), 'クリスマス');
 });
 
 test('目標の短冊：先生が確認してから木に飾られ、達成すると⭐になる', async () => {
