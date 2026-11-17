@@ -475,8 +475,20 @@ class _GradingDetailPageState extends State<_GradingDetailPage> {
             Text('${_s.workbook}  p.${_s.pages}',
                 style: const TextStyle(color: AppColors.silver, fontSize: 14, fontWeight: FontWeight.w600)),
             const SizedBox(height: 10),
-            PhotoStrip(photos: _photos, error: _photoError),
-            const SizedBox(height: 16),
+            if (_items.isNotEmpty) ...[
+              ScoreHeader(score: score, total: _items.length),
+              const SizedBox(height: 6),
+              const Text('写真の ○ / ✓ をタップで切り替え（AIの間違いを直せます）',
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+              const SizedBox(height: 10),
+            ],
+            MarkedPhotoList(
+              photos: _photos,
+              error: _photoError,
+              items: _items,
+              onToggleItem: _busy ? null : (it) => setState(() => it.correct = !it.correct),
+            ),
+            const SizedBox(height: 4),
             if (_s.isError) ...[
               CommentBox(
                   title: '採点エラー', text: _s.error, icon: Icons.error_outline, color: AppColors.danger),
@@ -489,11 +501,6 @@ class _GradingDetailPageState extends State<_GradingDetailPage> {
               const SizedBox(height: 16),
             ],
             if (_items.isNotEmpty) ...[
-              ScoreHeader(score: score, total: _items.length),
-              const SizedBox(height: 6),
-              const Text('○×をタップすると切り替えられます（AIの間違いを直せます）',
-                  style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
-              const SizedBox(height: 10),
               if (_s.overallComment.isNotEmpty) ...[
                 CommentBox(
                     title: 'AIからのひとこと（生徒にも表示）',
@@ -502,6 +509,9 @@ class _GradingDetailPageState extends State<_GradingDetailPage> {
                     color: AppColors.info),
                 const SizedBox(height: 10),
               ],
+              const Text('問題ごとの答え',
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+              const SizedBox(height: 6),
               for (var i = 0; i < _items.length; i++)
                 GradeItemTile(
                   item: _items[i],

@@ -208,6 +208,8 @@ function gradeAndSave_(id) {
       correctAnswer: String(it.correctAnswer || ''),
       correct: !!it.correct,
       comment: String(it.comment || ''),
+      photo: Number(it.photo) || 1,
+      box: normalizeBox_(it.box),
     }));
     const score = items.filter((it) => it.correct).length;
     writeCells_(found.rowIndex, {
@@ -247,6 +249,9 @@ function gradeWithGemini_(workbook, pages, photoBlobs) {
     '- 記入がない問題は studentAnswer を "（無回答）" にして不正解とする\n' +
     '- 手書きが読めない場合は studentAnswer を "（判読不可）" にし、comment にその旨を書く\n' +
     '- comment は不正解の場合に、どこを間違えたか生徒向けに短く書く（正解なら空でよい）\n' +
+    '- photo は、その問題の答えが写っている【生徒の答案】の写真が何枚目か（1から数える）\n' +
+    '- box は、その写真の中で「生徒が書いた答え」がある範囲を [ymin, xmin, ymax, xmax] で表す。' +
+    '写真の左上を0、右下を1000とした整数（答案に丸やチェックをつける位置になるので、答えの文字をちょうど囲むように）\n' +
     '- overallComment は生徒への短い励ましと、次に気をつける点（2文程度）';
 
   const parts = [{ text: prompt }, { text: '【解答】' }];
@@ -267,8 +272,10 @@ function gradeWithGemini_(workbook, pages, photoBlobs) {
             correctAnswer: { type: 'STRING' },
             correct: { type: 'BOOLEAN' },
             comment: { type: 'STRING' },
+            photo: { type: 'INTEGER' },
+            box: { type: 'ARRAY', items: { type: 'INTEGER' } },
           },
-          required: ['number', 'studentAnswer', 'correctAnswer', 'correct'],
+          required: ['number', 'studentAnswer', 'correctAnswer', 'correct', 'photo', 'box'],
         },
       },
       overallComment: { type: 'STRING' },
@@ -322,6 +329,14 @@ function callGemini_(parts, schema) {
     }
   }
   throw new Error(lastError);
+}
+
+/** [ymin, xmin, ymax, xmax]（0〜1000）に整える。おかしな値なら null */
+function normalizeBox_(box) {
+  if (!Array.isArray(box) || box.length !== 4) return null;
+  const b = box.map((v) => Math.max(0, Math.min(1000, Math.round(Number(v)))));
+  if (b.some(isNaN) || b[2] <= b[0] || b[3] <= b[1]) return null;
+  return b;
 }
 
 function inline_(blob) {

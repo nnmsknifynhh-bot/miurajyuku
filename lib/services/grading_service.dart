@@ -17,12 +17,20 @@ class GradeItem {
   bool correct;
   String comment;
 
+  /// 答えが写っている写真の番号（1始まり）
+  int photo;
+
+  /// 写真上の答えの位置 [ymin, xmin, ymax, xmax]（0〜1000）。不明なら null
+  List<int>? box;
+
   GradeItem({
     required this.number,
     required this.studentAnswer,
     required this.correctAnswer,
     required this.correct,
     required this.comment,
+    this.photo = 1,
+    this.box,
   });
 
   factory GradeItem.fromJson(Map<String, dynamic> j) => GradeItem(
@@ -31,6 +39,10 @@ class GradeItem {
         correctAnswer: '${j['correctAnswer'] ?? ''}',
         correct: j['correct'] == true,
         comment: '${j['comment'] ?? ''}',
+        photo: (j['photo'] as num?)?.toInt() ?? 1,
+        box: (j['box'] is List && (j['box'] as List).length == 4)
+            ? (j['box'] as List).map((v) => (v as num).toInt()).toList()
+            : null,
       );
 
   Map<String, dynamic> toJson() => {
@@ -39,6 +51,8 @@ class GradeItem {
         'correctAnswer': correctAnswer,
         'correct': correct,
         'comment': comment,
+        'photo': photo,
+        'box': box,
       };
 }
 
