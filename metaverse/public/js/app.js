@@ -313,7 +313,21 @@
   // 生徒：教科を選んで続けて書く／先生・オーナー：よく使う文をそのまま使う
   const SUBJECTS = ['国語', '数学', '算数', '英語', '理科', '社会', '宿題', 'テスト勉強'];
   const STAFF_PRESETS = ['質問受付中', '授業準備中', '面談中', '休憩中', 'すぐ戻ります'];
+  // 生徒が1時間に2回以上、吹き出しやスタンプを開いたら忠告する（この端末の記録で数える）
+  const CHAT_LIMIT = 2, CHAT_WINDOW = 60 * 60 * 1000;
+  function chatWarning() {
+    if (!state.user || state.user.role !== 'student') return null;
+    const key = 'juku-chat-opens-' + state.user.id, now = Date.now();
+    let list = [];
+    try { list = JSON.parse(localStorage.getItem(key) || '[]').filter(t => typeof t === 'number' && now - t < CHAT_WINDOW); } catch (e) { list = []; }
+    list.push(now);
+    try { localStorage.setItem(key, JSON.stringify(list)); } catch (e) { /* 保存できない環境 */ }
+    if (list.length < CHAT_LIMIT) return null;
+    return `⚠️ この1時間で${list.length}回目だよ。吹き出しやスタンプはほどほどにして、勉強に集中しよう！`;
+  }
   function openTopic() {
+    const warn = chatWarning();
+    $('#topic-warn').textContent = warn || ''; $('#topic-warn').hidden = !warn;
     const chips = $('#topic-chips'); chips.textContent = '';
     const student = state.user.role === 'student';
     $('#topic-title').textContent = student && state.me.room === 'study' ? '✏️ なにを勉強する？' : '💬 吹き出しに書く';
@@ -420,7 +434,11 @@
       pop.append(b);
     }
   }
-  $('#btn-react').onclick = () => { $('#react-pop').hidden = !$('#react-pop').hidden; };
+  $('#btn-react').onclick = () => {
+    const opening = $('#react-pop').hidden;
+    $('#react-pop').hidden = !opening;
+    if (opening) { const warn = chatWarning(); if (warn) toast(warn, 6000); }
+  };
 
   // ───────── 先生用パネル（挙手一覧・入室者一覧） ─────────
   function openPanel(tab) {
