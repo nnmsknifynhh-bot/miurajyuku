@@ -90,7 +90,7 @@
       toast(`🔔 ${name}さんが入室しました（${time}）`, 6000);
       chime();
     });
-    socket.on('topic-cleared', ({ by }) => { state.me.topic = null; updateButtons(); toast(`${by}先生が吹き出しを消しました`); });
+    socket.on('topic-cleared', ({ by }) => { state.me.topic = null; updateButtons(); toast(by ? `${by}が吹き出しを消しました` : '先生がはなれたので、吹き出しを消しました'); });
     socket.on('study-photo', ({ id, at }) => { refreshPhotoMeta(); void id; void at; });
     socket.on('study-photo-result', ({ id, name, ok, reason }) => {
       clearTimeout(photoWait[id]);
@@ -383,7 +383,19 @@
     if (list.length < CHAT_LIMIT) return null;
     return `⚠️ この1時間で${list.length}回目だよ。吹き出しやスタンプはほどほどにして、勉強に集中しよう！`;
   }
+  // 生徒が先生・オーナーと話している（近くにいる・個別通話中）か。サーバーでも同じようにたしかめる
+  function talkingWithStaff() {
+    const me = state.me;
+    if (state.pc && state.pc.active()) return true;
+    for (const u of state.others.values()) {
+      if (u.role !== 'student' && u.room === me.room && Math.hypot(u.x - me.x, u.y - me.y) <= T * 3.5) return true;
+    }
+    return false;
+  }
   function openTopic() {
+    if (state.user.role === 'student' && !state.me.topic && !talkingWithStaff()) {
+      return toast('💬 吹き出しは、先生と話すときだけ使えます。先生に近くに来てもらってね', 5000);
+    }
     const warn = chatWarning();
     $('#topic-warn').textContent = warn || ''; $('#topic-warn').hidden = !warn;
     const chips = $('#topic-chips'); chips.textContent = '';
@@ -466,11 +478,6 @@
     const inStudy = !!(me && me.room === 'study');
     $('#btn-hand').hidden = inStudy;
     $('#btn-topic').classList.toggle('on', !!(me && me.topic));
-    if (inStudy && !me.topic && !state.topicHinted && state.user && state.user.role === 'student') {
-      state.topicHinted = true;
-      setTimeout(() => toast('「💬 吹き出し」で、なにを勉強するか書けます', 5000), 1500);
-    }
-    if (!inStudy) state.topicHinted = false;
     $('#btn-hand').classList.toggle('hand-on', !!(me && me.hand));
   }
 
@@ -545,7 +552,7 @@
       } else thumb = el('div', 'noimg', u.studyCam ? '撮影待ち' : '写真なし');
       const info = el('div');
       info.append(el('b', null, u.name));
-      if (u.topic) info.append(el('div', 'topic', '📝 ' + u.topic));
+      if (u.topic) info.append(el('div', 'topic', '💬 ' + u.topic));
       const st = el('div', 'st');
       const warn = [];
       if (u.away === 'hidden') warn.push('💤 アプリを閉じています');
@@ -662,7 +669,7 @@
     pop.append(title);
     const room = u.room && roomInfo(u.room);
     pop.append(el('div', 'sub', (room ? room.name : 'ろうか・ロビー') + (u.seat ? '・着席中' : '') + (u.hand ? '・✋挙手中' : '') + (u.inPrivate ? '・🎧個別通話中' : '')));
-    if (u.topic) pop.append(el('div', 'sub', '📝 ' + u.topic));
+    if (u.topic) pop.append(el('div', 'sub', '💬 ' + u.topic));
     if (u.topic && isStaff() && state.user.permissions.handle_students) {
       const c = el('button', 'btn small secondary', '吹き出しを消す');
       c.onclick = () => state.socket.emit('study-topic-clear', u.id, (r) => { hideUserPop(); if (!r || !r.ok) toast((r && r.error) || 'できませんでした'); });

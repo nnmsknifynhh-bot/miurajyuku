@@ -374,10 +374,21 @@
       ctx.beginPath(); ctx.arc(x, hy, 14, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       ctx.font = '18px sans-serif'; ctx.fillText('✋', x, hy + 1);
     }
-    // 勉強内容の吹き出し（自習室）
+    // 今日の自習時間（自習室の生徒・10分単位）
     let topicH = 0;
+    if (u.role === 'student' && u.room === 'study' && typeof u.today === 'number' && !u.topic) {
+      const h = Math.floor(u.today / 60), m = u.today % 60;
+      const text = '📚 今日 ' + (h ? `${h}時間${m ? m + '分' : ''}` : `${m}分`);
+      ctx.font = 'bold 11px sans-serif';
+      const bw = ctx.measureText(text).width + 14, bh = 19, top = byTag - 66;
+      ctx.fillStyle = 'rgba(232,245,233,.96)'; ctx.strokeStyle = '#7cb987'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.roundRect(x - bw / 2, top, bw, bh, 9); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#1f5a2b'; ctx.fillText(text, x, top + bh / 2 + 1);
+      topicH = 26;
+    }
+    // 吹き出し（先生・オーナー。生徒は先生と話すときだけ）
     if (u.topic) {
-      const text = (u.role === 'student' ? '📝 ' : '💬 ') + u.topic;
+      const text = '💬 ' + u.topic;
       ctx.font = 'bold 12px sans-serif';
       const bw = Math.min(200, ctx.measureText(text).width + 16), bh = 22, top = byTag - 70;
       ctx.fillStyle = '#fffbea'; ctx.strokeStyle = '#e8c766'; ctx.lineWidth = 1.5;

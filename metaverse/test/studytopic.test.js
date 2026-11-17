@@ -1,5 +1,6 @@
-// 吹き出しテスト（全員・どの部屋でも）
+// 吹き出しテスト：先生・オーナーはどこでも。生徒は先生と話すとき（近く・個別通話中）だけ。自習室の生徒は今日の自習時間を表示
 process.env.DB_PATH = ':memory:';
+process.env.TOPIC_CHECK_MS = '200';
 const test = require('node:test');
 const assert = require('node:assert');
 const { io: ioc } = require('socket.io-client');
@@ -49,15 +50,15 @@ test('準備', async () => {
   for (const k of Object.keys(U)) U[k].c = await connect(U[k].cookie);
 });
 
-test('ロビー（自習室の外）でも書ける', async () => {
+test('生徒は、先生が近くにいないと吹き出しを書けない', async () => {
+  await walk(U.stu1.c, 10, 23);
   const r = await ask(U.stu1.c, 'study-topic', { text: '数学' });
-  assert.equal(r.ok, true);
-  await sleep(80);
-  assert.equal(lastTopic(U.stu2.c, U.stu1.id), '数学');
+  assert.equal(r.ok, false);
+  assert.match(r.error, /先生と話すときだけ/);
 });
 
-test('自習室で書くと全員に吹き出しが届く（HTMLの記号は取り除き、24文字まで）', async () => {
-  await walk(U.stu1.c, 10, 23);
+test('先生が近くに来ると書ける。全員に届く（HTMLの記号は取り除き、24文字まで）', async () => {
+  await walk(U.tch1.c, 11, 22);
   const r = await ask(U.stu1.c, 'study-topic', { text: '数学：<b>連立方程式</b>の文章題をがんばる！ここまでで二十四文字以上' });
   assert.equal(r.ok, true);
   assert.ok(!/[<>]/.test(r.topic)); assert.ok(r.topic.length <= 24);
@@ -66,14 +67,17 @@ test('自習室で書くと全員に吹き出しが届く（HTMLの記号は取�
   assert.equal(lastTopic(U.tch1.c, U.stu1.id), r.topic);
 });
 
-test('あとから入った人にも見える', async () => {
+test('あとから入った人にも見える。自習室の生徒には今日の自習時間（10分単位）がつく', async () => {
   const late = await connect(U.stu2.cookie);
   const init = late.events.find(e => e.ev === 'init').d;
-  assert.ok(init.users.find(u => u.id === U.stu1.id).topic.startsWith('数学'));
+  const s1 = init.users.find(u => u.id === U.stu1.id);
+  assert.ok(s1.topic.startsWith('数学'));
+  assert.equal(s1.today, 0);
+  assert.equal(init.users.find(u => u.id === U.tch1.id).today, null, '先生にはつかない');
   U.stu2.c = late;
 });
 
-test('先生・オーナーも書ける', async () => {
+test('先生・オーナーはどこでも書ける', async () => {
   const r = await ask(U.tch1.c, 'study-topic', { text: '質問受付中' });
   assert.equal(r.ok, true);
   await sleep(80);
@@ -91,12 +95,12 @@ test('生徒はほかの人の吹き出しを消せない。先生は消せる',
   assert.ok(U.stu1.c.events.some(e => e.ev === 'topic-cleared'));
 });
 
-test('部屋を移動しても吹き出しは残る。自分で消すと消える', async () => {
-  await ask(U.stu1.c, 'study-topic', { text: '英語の単語' });
-  await walk(U.stu1.c, 16, 17);
+test('先生がはなれると、生徒の吹き出しは自動で消える', async () => {
+  assert.equal((await ask(U.stu1.c, 'study-topic', { text: '英語の単語' })).ok, true);
   await sleep(80);
   assert.equal(lastTopic(U.stu2.c, U.stu1.id), '英語の単語');
-  assert.equal((await ask(U.stu1.c, 'study-topic', { text: '' })).topic, null);
-  await sleep(80);
+  await walk(U.tch1.c, 16, 17);
+  await sleep(500);
   assert.equal(lastTopic(U.stu2.c, U.stu1.id), null);
+  assert.ok(U.stu1.c.events.filter(e => e.ev === 'topic-cleared').some(e => e.d.by === null));
 });

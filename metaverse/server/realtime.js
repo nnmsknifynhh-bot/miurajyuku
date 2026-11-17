@@ -44,7 +44,7 @@ function pub(p) {
   return {
     id: p.id, name: p.user.display_name, role: p.user.role, color: p.user.avatar_color,
     x: p.x, y: p.y, dir: p.dir, moving: p.moving, room: p.room, seat: p.seat, hand: p.hand, handAt: p.handAt,
-    inPrivate: inActiveCall(p), away: p.away || null, studyCam: !!p.studyCam, topic: p.topic || null,
+    inPrivate: inActiveCall(p), away: p.away || null, studyCam: !!p.studyCam, topic: p.topic || null, today: p.today10 ?? null,
     equip: equipView(p.equip), streak: p.streak || 0,
   };
 }
@@ -291,6 +291,7 @@ function attach(httpServer) {
     Object.assign(p, spawnPos(p));
     p.equip = ganbari.getEquip(p.id);
     p.streak = user.role === 'student' ? ganbari.streak(p.id) : 0;
+    p.today10 = user.role === 'student' ? Math.floor(ganbari.dayTotal(p.id, ganbari.jst().day) / 10) * 10 : null;
     p.room = roomIdAt(p.x, p.y);
     // 自習中に通信が切れていた生徒：すぐもどってきたら、元の席にすわらせ、切れていた間も数える
     let gapMinutes = 0;
@@ -303,7 +304,7 @@ function attach(httpServer) {
         if (Math.hypot(c.x - p.x, c.y - p.y) <= 8) { p.seat = gap.seat; p.x = c.x; p.y = c.y; p.dir = SM.seatFacing(sx, sy); }
       }
       try { gapMinutes = ganbari.creditGap(p.id, gap.at, Date.now(), Math.floor(STUDY_GAP_MS / 60_000)); } catch (e) { console.error('切れていた間の自習時間を足せませんでした:', e.message); }
-      if (gapMinutes) p.streak = ganbari.streak(p.id);
+      if (gapMinutes) { p.streak = ganbari.streak(p.id); p.today10 = Math.floor(ganbari.dayTotal(p.id, ganbari.jst().day) / 10) * 10; }
     }
     // 授業中の先生が再接続したら、授業の自動終了を取り消す
     const myClass = p.room && classes.get(p.room);
@@ -557,6 +558,8 @@ function attach(httpServer) {
     socket.on('study-topic', (d, ack) => {
       if (typeof ack !== 'function') ack = () => {};
       const text = String((d && d.text) || '').replace(/[\u0000-\u001f\u007f<>]/g, '').trim().slice(0, 24);
+      // 生徒の吹き出しは、先生・オーナーと話すとき（近くにいる・個別通話中）だけ
+      if (text && p.user.role === 'student' && !talkingWithStaff(p)) return ack({ ok: false, error: '吹き出しは、先生と話すときだけ使えます。先生に近くに来てもらってね' });
       p.topic = text || null;
       io.emit('user-updated', { id: p.id, topic: p.topic });
       ack({ ok: true, topic: p.topic });
@@ -569,7 +572,7 @@ function attach(httpServer) {
       if (!t || !t.topic) return ack({ ok: false, error: '吹き出しはありません' });
       t.topic = null;
       io.emit('user-updated', { id: t.id, topic: null });
-      t.socket.emit('topic-cleared', { by: p.user.display_name });
+      t.socket.emit('topic-cleared', { by: `${p.user.display_name}先生` });
       ack({ ok: true });
     });
 
@@ -630,6 +633,16 @@ function attach(httpServer) {
 
   setInterval(flushMoves, 100).unref();
 
+  // 先生・オーナーがはなれたら、生徒の吹き出しを消す（10秒ごと）
+  setInterval(() => {
+    for (const p of online.values()) {
+      if (p.user.role !== 'student' || !p.topic || talkingWithStaff(p)) continue;
+      p.topic = null;
+      io.emit('user-updated', { id: p.id, topic: null });
+      p.socket.emit('topic-cleared', { by: null });
+    }
+  }, Number(process.env.TOPIC_CHECK_MS || 10_000)).unref();
+
   // 自習時間を1分ごとに数える（条件は ganbari.js・管理画面で設定）
   let dressupWasOpen = ganbari.dressupOpen();
   setInterval(() => {
@@ -645,6 +658,7 @@ function attach(httpServer) {
         if (s !== p.streak) { p.streak = s; io.emit('user-updated', { id, streak: s }); }
         p.socket.emit('study-minute');
       }
+      for (const p of online.values()) updateToday(p); // 日付が変わったときも 0 にもどる
     } catch (e) { console.error('自習時間の記録に失敗:', e.message); }
   }, Number(process.env.STUDY_TICK_MS || 60_000)).unref();
 
@@ -709,6 +723,24 @@ function refreshUser(userId) {
 
 function refreshRooms() { broadcastRooms(); }
 
+// 生徒が先生・オーナーと話している（近くにいる・個別通話中）か
+const TALK_DIST = T * 3.5;
+function talkingWithStaff(p) {
+  if (inActiveCall(p)) return true;
+  for (const o of online.values()) {
+    if (o !== p && isStaff(o) && o.room === p.room && Math.hypot(o.x - p.x, o.y - p.y) <= TALK_DIST) return true;
+  }
+  return false;
+}
+// 今日の自習時間（10分単位）を更新して、変わったら全員に知らせる
+function updateToday(p) {
+  if (p.user.role !== 'student') return;
+  const v = Math.floor(ganbari.dayTotal(p.id, ganbari.jst().day) / 10) * 10;
+  if (v === p.today10) return;
+  p.today10 = v;
+  if (io) io.emit('user-updated', { id: p.id, today: v });
+}
+
 // 少し前まで入室していた（通信が一瞬切れただけ）か
 function isQuickRejoin(userId) {
   if (online.has(userId)) return true;
@@ -723,6 +755,7 @@ function refreshGanbari(userId) {
   p.equip = ganbari.getEquip(p.id);
   p.streak = p.user.role === 'student' ? ganbari.streak(p.id) : 0;
   io.emit('user-updated', { id: p.id, equip: equipView(p.equip), streak: p.streak });
+  updateToday(p);
 }
 function refreshAllGanbari() { for (const id of online.keys()) refreshGanbari(id); }
 
