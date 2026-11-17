@@ -22,6 +22,9 @@ let io = null;
 const online = new Map();  // userId -> presence
 const lastPos = new Map(); // userId -> { x, y }（再接続時に元の場所へ）
 const lastOffline = new Map(); // userId -> 切断した時刻（すぐ入り直したときは入室の通知をしない）
+// 自習中に通信が切れた生徒：{ at, seat }。STUDY_GAP_MS 以内につながり直したら、元の席にもどし、切れていた間も自習時間に数える
+const studyGaps = new Map();
+const STUDY_GAP_MS = Number(process.env.STUDY_GAP_MS || 5 * 60_000);
 const REJOIN_QUIET_MS = Number(process.env.REJOIN_QUIET_MS || 10 * 60_000);
 
 const getRooms = () => db.prepare('SELECT id, name, type, capacity FROM rooms ORDER BY sort_order').all();
@@ -273,7 +276,11 @@ function attach(httpServer) {
 
     // 同じユーザーの古い接続は切る（1人1接続）
     const old = online.get(user.id);
-    if (old) kickPresence(old, '別の端末（またはタブ）で入室したため、こちらは切断しました');
+    if (old) {
+      // 前の接続がまだ残っていた（スマホの通信が切れたのに、サーバーが気づく前につながり直した）ときも、元の席にもどす
+      if (old.user.role === 'student' && old.room === 'study' && !old.away) studyGaps.set(old.id, { at: Date.now(), seat: old.seat });
+      kickPresence(old, '別の端末（またはタブ）で入室したため、こちらは切断しました');
+    }
 
     const p = {
       id: user.id, user, socket, tokenHash: user.sessionTokenHash,
@@ -285,6 +292,19 @@ function attach(httpServer) {
     p.equip = ganbari.getEquip(p.id);
     p.streak = user.role === 'student' ? ganbari.streak(p.id) : 0;
     p.room = roomIdAt(p.x, p.y);
+    // 自習中に通信が切れていた生徒：すぐもどってきたら、元の席にすわらせ、切れていた間も数える
+    let gapMinutes = 0;
+    const gap = studyGaps.get(p.id);
+    studyGaps.delete(p.id);
+    if (gap && user.role === 'student' && Date.now() - gap.at <= STUDY_GAP_MS && p.room === 'study') {
+      if (gap.seat && ![...online.values()].some(o => o.id !== p.id && o.seat === gap.seat)) {
+        const [sx, sy] = gap.seat.split(',').map(Number);
+        const c = SM.tileCenter(sx, sy);
+        if (Math.hypot(c.x - p.x, c.y - p.y) <= 8) { p.seat = gap.seat; p.x = c.x; p.y = c.y; p.dir = SM.seatFacing(sx, sy); }
+      }
+      try { gapMinutes = ganbari.creditGap(p.id, gap.at, Date.now(), Math.floor(STUDY_GAP_MS / 60_000)); } catch (e) { console.error('切れていた間の自習時間を足せませんでした:', e.message); }
+      if (gapMinutes) p.streak = ganbari.streak(p.id);
+    }
     // 授業中の先生が再接続したら、授業の自動終了を取り消す
     const myClass = p.room && classes.get(p.room);
     if (myClass && myClass.teacherId === p.id) { clearTimeout(myClass.graceTimer); myClass.graceTimer = null; }
@@ -302,6 +322,7 @@ function attach(httpServer) {
       me: pub(p), users: [...online.values()].filter(o => o !== p).map(pub), rooms: roomCounts(), reactions: REACTIONS,
       classes: classState(), classCall: livekit.enabled,
     });
+    if (gap && p.room === 'study' && Date.now() - gap.at <= STUDY_GAP_MS) socket.emit('study-resumed', { minutes: gapMinutes, seat: p.seat });
     socket.broadcast.emit('user-joined', pub(p));
     broadcastRooms();
 
@@ -599,6 +620,7 @@ function attach(httpServer) {
       if (p.room) leaveClassRoom(p, p.room, 'disconnected');
       lastPos.set(p.id, { x: p.x, y: p.y });
       lastOffline.set(p.id, Date.now());
+      if (p.user.role === 'student' && p.room === 'study' && !p.away) studyGaps.set(p.id, { at: Date.now(), seat: p.seat });
       online.delete(p.id);
       pendingMoves.delete(p.id);
       io.emit('user-left', { id: p.id });

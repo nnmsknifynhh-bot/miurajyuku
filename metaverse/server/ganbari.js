@@ -353,13 +353,36 @@ function tick(online, opt = {}) {
   return added;
 }
 
-// 連続自習の日数（今日まだ達していなくても、昨日まで続いていれば数える）
+/**
+ * 通信が切れていた間の自習時間を足す（すぐにつながり直したときだけ realtime から呼ぶ）
+ * 切れていた時間の1分ごとに、数える時間帯・1日の上限をたしかめて足す
+ * @returns {number} 足した分
+ */
+function creditGap(userId, fromMs, toMs, maxMin = 5) {
+  const c = getConfig();
+  const n = Math.min(maxMin, Math.floor((toMs - fromMs) / 60_000));
+  if (n <= 0) return 0;
+  const up = db.prepare(`INSERT INTO study_days (user_id, day, auto_min) VALUES (?, ?, 1)
+    ON CONFLICT(user_id, day) DO UPDATE SET auto_min = auto_min + 1`);
+  let added = 0;
+  for (let i = 1; i <= n; i++) {
+    const t = jst(new Date(fromMs + i * 60_000));
+    const r = ruleFor(t.day, c);
+    if (!r.on || !r.windows.some(w => t.hm >= w.start && t.hm < w.end)) continue;
+    if (dayTotal(userId, t.day) >= r.cap) continue;
+    up.run(userId, t.day);
+    added++;
+  }
+  return added;
+}
+
 // その生徒の連続自習🔥の最低時間（学年別の設定があればそれ）
 function streakMinFor(userId, c = getConfig()) {
   const u = db.prepare('SELECT grade FROM users WHERE id = ?').get(userId);
   const g = u && u.grade;
   return (g && c.streakByGrade && Number.isInteger(c.streakByGrade[g])) ? c.streakByGrade[g] : c.streakMin;
 }
+// 連続自習の日数（今日まだ達していなくても、昨日まで続いていれば数える）
 function streak(userId, date = new Date()) {
   const c = getConfig();
   const min = streakMinFor(userId, c);
@@ -648,6 +671,7 @@ function reportData(token) {
 }
 
 module.exports = {
+  creditGap,
   streakMinFor,
   ruleFor, WEEKDAYS,
   SLOTS, EVENTS, currentEvent, dressupOpen, dressupInfo,

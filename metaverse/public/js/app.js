@@ -76,7 +76,7 @@
 
   // ───────── サーバーとの接続 ─────────
   function connect() {
-    const socket = io({ transports: ['websocket', 'polling'] });
+    const socket = io({ transports: ['websocket', 'polling'], reconnectionDelay: 500, reconnectionDelayMax: 3000 });
     state.socket = socket;
     state.call = window.ClassCall.create({ socket, getState: () => state, toast });
     state.pc = window.PrivateCall.create({ socket, getState: () => state, toast });
@@ -101,6 +101,14 @@
     $('#conn').hidden = false;
 
     socket.on('connect', () => { $('#conn').hidden = true; });
+    // 自習中に通信が切れて、すぐもどってきたとき
+    socket.on('study-resumed', (d) => {
+      const m = (d && d.minutes) || 0;
+      toast((d && d.seat ? '🔌 つながり直して、元の席にもどりました。' : '🔌 つながり直しました。') + (m ? `切れていた${m}分も自習時間に入れたよ。` : '') + 'このまま続けよう！', 5000);
+    });
+    // アプリにもどったら、すぐつなぎ直す（待たずに）
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && !socket.connected) socket.connect(); });
+    window.addEventListener('online', () => { if (!socket.connected) socket.connect(); });
     socket.on('disconnect', (reason) => {
       state.ready = false;
       if (reason !== 'io server disconnect') { $('#conn').textContent = '接続が切れました。つなぎなおしています…'; $('#conn').hidden = false; }
@@ -887,10 +895,12 @@
     toast('「ピンポン」と聞こえたらOK。聞こえないときは、音量とマナーモード（iPhone の横のスイッチ）を確認してね', 6000);
   };
 
-  // 画面が自動で消えないようにする（授業・個別通話の間だけ。消えると音が止まる端末があるため）
+  // 画面が自動で消えないようにする（授業・個別通話の間と、生徒が自習室にいる間。
+  // 画面が消えると音が止まったり、通信が切れて自習時間が数えられなくなる端末があるため）
   let wakeLock = null;
   async function updateWakeLock() {
-    const need = document.visibilityState === 'visible' && ((state.call && state.call.connected()) || (state.pc && state.pc.active()));
+    const studying = state.user && state.user.role === 'student' && state.me && state.me.room === 'study';
+    const need = document.visibilityState === 'visible' && (studying || (state.call && state.call.connected()) || (state.pc && state.pc.active()));
     try {
       if (need && !wakeLock && navigator.wakeLock) {
         wakeLock = await navigator.wakeLock.request('screen');
