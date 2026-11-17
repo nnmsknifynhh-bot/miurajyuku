@@ -11,6 +11,7 @@
    *  .  床          _  出入口       p  教壇(歩ける)  r  ラグ(歩ける)         m  玄関マット(歩ける)
    *  T  教卓        D  生徒の机     c  椅子(座れる)  b  学習ブースの机        L  ロッカー
    *  P  観葉植物    B  本棚/下駄箱  k  受付カウンター  F  ウォーターサーバー   S  ベンチ(座れる)
+ *  Y  がんばりの木の根元（描画は動的）
    */
   const grid = [];
   for (let y = 0; y < H; y++) grid.push(new Array(W).fill('.'));
@@ -58,6 +59,9 @@
     set(x, 24, 'c'); set(x, 27, 'c');
   }
   fill(15, 22, 18, 31, 'r');                 // 中央のラグ
+  // がんばりの木（学年ごとに3本）。根元の2マスは通れない。左右（x=15, 18）は通路
+  const FOREST = [{ x: 16, y: 24 }, { x: 16, y: 27 }, { x: 16, y: 30 }];
+  for (const f of FOREST) { set(f.x, f.y, 'Y'); set(f.x + 1, f.y, 'Y'); }
   fill(2, 32, 7, 32, 'B');
   fill(26, 32, 31, 32, 'B');
   [[1, 32], [13, 32], [20, 32], [33, 32], [33, 20], [1, 20]].forEach(([x, y]) => set(x, y, 'P'));
@@ -147,7 +151,7 @@
   for (let y = 28; y <= 31; y++) for (let x = 40; x <= 45; x++) SPAWN.push({ x, y });
 
   return {
-    W, H, TILE, grid, ZONES, ENTRY, EXIT, PODIUM, SPAWN, classroomSeats,
+    W, H, TILE, grid, ZONES, ENTRY, EXIT, PODIUM, SPAWN, classroomSeats, FOREST,
     tileAt, isWalkable, isSeat, zoneAt, zoneAtPx, seatId, tileCenter, seatFacing, findPath, seatCount,
   };
 });

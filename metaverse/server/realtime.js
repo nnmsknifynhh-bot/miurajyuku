@@ -10,6 +10,7 @@ const auth = require('./auth');
 const { db, now, audit, getSetting } = require('./db');
 const livekit = require('./livekit');
 const notify = require('./notify');
+const ganbari = require('./ganbari');
 const { can, canEnterRoom } = require('./permissions');
 
 const T = SM.TILE;
@@ -37,6 +38,7 @@ function pub(p) {
     id: p.id, name: p.user.display_name, role: p.user.role, color: p.user.avatar_color,
     x: p.x, y: p.y, dir: p.dir, moving: p.moving, room: p.room, seat: p.seat, hand: p.hand, handAt: p.handAt,
     inPrivate: inActiveCall(p), away: p.away || null, studyCam: !!p.studyCam, topic: p.topic || null,
+    equip: p.equip ? { head: p.equip.head, face: p.equip.face, pet: p.equip.pet } : null, streak: p.streak || 0,
   };
 }
 
@@ -269,6 +271,8 @@ function attach(httpServer) {
       lastMoveAt: 0, lastReactionAt: 0,
     };
     Object.assign(p, spawnPos(p));
+    p.equip = ganbari.getEquip(p.id);
+    p.streak = user.role === 'student' ? ganbari.streak(p.id) : 0;
     p.room = roomIdAt(p.x, p.y);
     // 授業中の先生が再接続したら、授業の自動終了を取り消す
     const myClass = p.room && classes.get(p.room);
@@ -593,6 +597,20 @@ function attach(httpServer) {
 
   setInterval(flushMoves, 100).unref();
 
+  // 自習時間を1分ごとに数える（条件は ganbari.js・管理画面で設定）
+  setInterval(() => {
+    try {
+      const added = ganbari.tick(online, { photosOn: studyPhotosEnabled() });
+      for (const id of added) {
+        const p = online.get(id);
+        if (!p) continue;
+        const s = ganbari.streak(id);
+        if (s !== p.streak) { p.streak = s; io.emit('user-updated', { id, streak: s }); }
+        p.socket.emit('study-minute');
+      }
+    } catch (e) { console.error('自習時間の記録に失敗:', e.message); }
+  }, Number(process.env.STUDY_TICK_MS || 60_000)).unref();
+
   // ログインが無効になった接続を定期的に切る（強制ログアウト・期限切れの取りこぼし防止）
   setInterval(() => {
     for (const p of online.values()) {
@@ -653,6 +671,16 @@ function refreshUser(userId) {
 }
 
 function refreshRooms() { broadcastRooms(); }
+
+// 着せかえ・自習時間の修正などのあとに、表示を更新する
+function refreshGanbari(userId) {
+  const p = online.get(Number(userId));
+  if (!p) return;
+  p.equip = ganbari.getEquip(p.id);
+  p.streak = p.user.role === 'student' ? ganbari.streak(p.id) : 0;
+  io.emit('user-updated', { id: p.id, equip: { head: p.equip.head, face: p.equip.face, pet: p.equip.pet }, streak: p.streak });
+}
+function refreshAllGanbari() { for (const id of online.keys()) refreshGanbari(id); }
 
 // 見守り写真を受け取る（生徒・自習室にいる・機能がオンのときだけ）。エラーならメッセージを返す
 // meta: { brightness: 0〜255, fp: 64ビットの「写真の特徴」(16進), reason: 'auto'|'request' }
@@ -725,5 +753,6 @@ function presence() {
 function _reset() { online.clear(); lastPos.clear(); lastOffline.clear(); calls.clear(); studyPhotos.clear(); }
 
 module.exports = {
+  refreshGanbari, refreshAllGanbari, _online: online,
   storeStudyPhoto, getStudyPhoto, studyPhotoTimes, canViewStudyPhotos, setStudyPhotosFeature, studyPhotosEnabled,
-  attach, kick, refreshUser, refreshRooms, presence, roomCounts, classState, endClass, endCallOf, REACTIONS, _reset, _online: online };
+  attach, kick, refreshUser, refreshRooms, presence, roomCounts, classState, endClass, endCallOf, REACTIONS, _reset };

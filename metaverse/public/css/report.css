@@ -1,0 +1,5 @@
+body { min-height: 100dvh; background: #f4ede2; }
+.rp-wrap { max-width: 560px; margin: 0 auto; padding: 16px; display: grid; gap: 12px; }
+#rp-card { width: 100%; height: auto; border-radius: 18px; box-shadow: var(--shadow); background: #fff; }
+.rp-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.rp-note { text-align: center; color: var(--muted); font-size: 12px; margin: 0; }

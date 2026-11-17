@@ -8,14 +8,15 @@
   (async function init() {
     try { me = (await api('GET', '/api/me')).user; } catch (e) { location.replace('/'); return; }
     try { meta = await api('GET', '/api/admin/meta'); } catch (e) { return denied(); }
-    if (!meta.canManageUsers && !meta.canManageRooms) return denied();
+    if (!meta.canManageUsers && !meta.canManageRooms && !meta.canReviewGoals) return denied();
+    $('#tab-ganbari-btn').hidden = !(meta.canManageUsers || meta.canReviewGoals);
     $('#who').textContent = `${me.displayName}（${ROLE_LABEL[me.role]}）`;
     $('#tab-users-btn').hidden = !meta.canManageUsers;
     $('#tab-logs-btn').hidden = !meta.canManageUsers;
     $('#tab-rooms-btn').hidden = !meta.canManageRooms;
     $('#tab-status-btn').hidden = !meta.canManageRooms;
     document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => showTab(b.dataset.tab));
-    showTab(meta.canManageUsers ? 'users' : 'rooms');
+    showTab(meta.canManageUsers ? 'users' : meta.canManageRooms ? 'rooms' : 'ganbari');
   })();
 
   function denied() {
@@ -33,6 +34,7 @@
     if (tab === 'users') loadUsers();
     if (tab === 'rooms') loadRooms();
     if (tab === 'logs') loadLogs();
+    if (tab === 'ganbari') window.AdminGanbari.load($('#tab-ganbari'), { me, meta, api, toast });
   }
 
   // ═════════ ユーザー ═════════
@@ -56,7 +58,7 @@
       const name = el('div', 'name', u.displayName);
       name.append(el('span', 'badge ' + u.role, ROLE_LABEL[u.role]));
       if (!u.isActive) name.append(el('span', 'badge off', '無効'));
-      const sub = [`ID: ${u.loginId}`, `ログイン中の端末: ${u.activeSessions}`];
+      const sub = [`ID: ${u.loginId}`, ...(u.role === "student" ? [`学年: ${u.grade || "未設定"}`] : []), `ログイン中の端末: ${u.activeSessions}`];
       if (u.role === 'teacher') sub.push('担当: ' + (u.rooms.length ? u.rooms.map(roomName).join('・') : 'なし'));
       info.append(name, el('div', 'sub', sub.join('　')));
       const actions = el('div', 'actions');
@@ -111,10 +113,14 @@
     $('#f-pw-label').textContent = u ? '新しいパスワード（変更するときだけ入力）' : 'パスワード';
     $('#f-color').value = u ? u.avatarColor : randomColor();
     renderPermFields(currentRole(), u);
+    const gsel = $('#f-grade'); gsel.textContent = '';
+    for (const gname of ['', ...meta.grades, '卒業']) { const o = el('option', null, gname || '（未設定）'); o.value = gname; gsel.append(o); }
+    gsel.value = u && u.grade ? u.grade : '';
     $('#user-dialog').showModal();
   }
 
   function renderPermFields(role, u) {
+    $('#grade-field').hidden = role !== 'student';
     const isOwner = role === 'owner';
     $('#rooms-field').hidden = role !== 'teacher';
     const rbox = $('#f-rooms'); rbox.textContent = '';
@@ -152,6 +158,7 @@
     document.querySelectorAll('#f-perms input').forEach(cb => { permissions[cb.value] = cb.checked; });
     const rooms = [...document.querySelectorAll('#f-rooms input:checked')].map(cb => cb.value);
     const body = { displayName: $('#f-name').value, avatarColor: $('#f-color').value };
+    if (role === 'student') body.grade = $('#f-grade').value || null;
     const pw = $('#f-pw').value;
     if (role !== 'owner') { body.permissions = permissions; if (role === 'teacher') body.rooms = rooms; }
     $('#user-save').disabled = true;

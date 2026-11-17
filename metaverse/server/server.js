@@ -8,6 +8,7 @@ const { PERMISSIONS, KEYS, STUDENT_FORBIDDEN, defaultPermissions, can, canEnterR
 const realtime = require('./realtime');
 const livekit = require('./livekit');
 const notify = require('./notify');
+const ganbari = require('./ganbari');
 
 const PORT = Number(process.env.PORT || 3000);
 const app = express();
@@ -62,7 +63,7 @@ const bad = (res, msg, code = 400) => res.status(code).json({ error: msg });
 function publicUser(u) {
   return {
     id: u.id, loginId: u.login_id, displayName: u.display_name, role: u.role, avatarColor: u.avatar_color,
-    isActive: u.is_active, permissions: u.permissions, rooms: u.rooms,
+    isActive: u.is_active, permissions: u.permissions, rooms: u.rooms, grade: u.grade || null,
   };
 }
 function listRooms(user) {
@@ -137,6 +138,50 @@ app.get('/api/me', auth.requireAuth, (req, res) => {
   });
 });
 
+// ═════════ がんばり（生徒） ═════════
+app.get('/api/me/ganbari', auth.requireAuth, (req, res) => {
+  const c = ganbari.getConfig();
+  const today = ganbari.jst().day;
+  const term = ganbari.termOf(today, c);
+  const u = req.user;
+  res.json({
+    grade: u.grade || null, todayMinutes: ganbari.dayTotal(u.id, today),
+    termMinutes: term ? ganbari.minutesBetween(u.id, term.start, term.end) : 0, term,
+    points: ganbari.points(u.id), streak: ganbari.streak(u.id), equip: ganbari.getEquip(u.id),
+    shop: ganbari.shopFor(u.id), goal: term ? ganbari.goalOf(u.id, term.key) : null,
+    rules: { minutesPerPoint: c.minutesPerPoint, streakMin: c.streakMin, window: c.window, requireSeat: c.requireSeat },
+  });
+});
+app.post('/api/me/shop/buy', auth.requireAuth, (req, res) => {
+  if (req.user.role !== 'student') return bad(res, 'ポイントは生徒の機能です', 403);
+  const err = ganbari.buy(req.user.id, String(req.body.item || ''));
+  if (err) return bad(res, err);
+  res.json({ ok: true, points: ganbari.points(req.user.id) });
+});
+app.post('/api/me/equip', auth.requireAuth, (req, res) => {
+  if (req.user.role !== 'student') return bad(res, '着せかえは生徒の機能です', 403);
+  const err = ganbari.equip(req.user.id, String(req.body.slot || ''), req.body.item === null ? null : String(req.body.item || ''));
+  if (err) return bad(res, err);
+  realtime.refreshGanbari(req.user.id);
+  res.json({ ok: true, equip: ganbari.getEquip(req.user.id) });
+});
+app.post('/api/me/goal', auth.requireAuth, (req, res) => {
+  if (req.user.role !== 'student') return bad(res, '目標は生徒の機能です', 403);
+  const err = ganbari.setGoal(req.user.id, req.body.text);
+  if (err) return bad(res, err);
+  const term = ganbari.termOf(ganbari.jst().day);
+  res.json({ ok: true, goal: ganbari.goalOf(req.user.id, term.key) });
+});
+// 学年の木（ログインしている人なら誰でも見られる）
+app.get('/api/forest', auth.requireAuth, (req, res) => res.json(ganbari.forest()));
+
+// 保護者レポート（ログイン不要。リンクに含まれる合いことばで1人分だけ見られる）
+app.post('/api/report-data', (req, res) => {
+  const data = ganbari.reportData(String(req.body.token || ''));
+  if (!data) return bad(res, 'このレポートは見られません（期限切れか、リンクがまちがっています）', 404);
+  res.json(data);
+});
+
 // ═════════ 入室の通知（オーナー・先生） ═════════
 const requireStaff = (req, res, next) => (notify.isStaffRole(req.user.role) ? next() : bad(res, 'この機能は先生とオーナー用です', 403));
 app.get('/api/notify', auth.requireAuth, requireStaff, (req, res) => {
@@ -209,6 +254,8 @@ const requireRoomManager = (req, res, next) => can(req.user, 'manage_classroom')
 
 admin.get('/meta', (req, res) => {
   res.json({
+    canReviewGoals: req.user.role === 'owner' || (req.user.role === 'teacher' && can(req.user, 'handle_students')),
+    grades: ganbari.GRADES,
     permissions: PERMISSIONS.map(p => ({ key: p.key, label: p.label })),
     studentForbidden: STUDENT_FORBIDDEN,
     rooms: db.prepare('SELECT id, name, type FROM rooms ORDER BY sort_order').all(),
@@ -254,10 +301,12 @@ admin.post('/users', requireOwner, (req, res) => {
   if (e) return bad(res, e);
   if (db.prepare('SELECT 1 FROM users WHERE login_id = ?').get(loginId)) return bad(res, 'このログインIDはすでに使われています', 409);
   const color = RE_COLOR.test(b.avatarColor || '') ? b.avatarColor : '#64b5f6';
+  const grade = role === 'student' && ganbari.GRADES.includes(b.grade) ? b.grade : null;
   const id = transaction(() => {
     const r = db.prepare('INSERT INTO users (login_id, display_name, role, password_hash, avatar_color, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(loginId, displayName, role, auth.hashPassword(b.password), color, now(), now());
     const id = Number(r.lastInsertRowid);
+    if (grade) db.prepare('UPDATE users SET grade = ? WHERE id = ?').run(grade, id);
     applyPermissionsAndRooms(id, role, b.permissions, b.rooms);
     return id;
   });
@@ -279,6 +328,11 @@ admin.patch('/users/:id', requireOwner, (req, res) => {
       const name = cleanName(b.displayName);
       const e = validateName(name); if (e) return e;
       db.prepare('UPDATE users SET display_name = ? WHERE id = ?').run(name, id); changes.push('displayName');
+    }
+    if (b.grade !== undefined) {
+      if (target.role !== 'student') return '学年は生徒だけに設定できます';
+      if (b.grade !== null && b.grade !== '卒業' && !ganbari.GRADES.includes(b.grade)) return '学年が正しくありません';
+      db.prepare('UPDATE users SET grade = ? WHERE id = ?').run(b.grade, id); changes.push('grade');
     }
     if (b.avatarColor !== undefined) {
       if (!RE_COLOR.test(b.avatarColor)) return '色の指定が正しくありません';
@@ -368,6 +422,70 @@ admin.post('/presence/:id/disconnect', requireOwner, (req, res) => {
   const was = realtime.kick(target.id, revoke ? '管理者によってログアウトされました' : '管理者によって接続が切断されました');
   audit(req.user.id, revoke ? 'presence.disconnected_and_revoked' : 'presence.disconnected', target.login_id, null, req.ip);
   res.json({ disconnected: was });
+});
+
+// ── がんばり（オーナー） ──
+admin.get('/ganbari/config', requireOwner, (req, res) => {
+  const c = ganbari.getConfig();
+  res.json({ config: c, terms: ganbari.allTerms(c), current: ganbari.termOf(ganbari.jst().day, c), grades: ganbari.GRADES, stageNames: ganbari.STAGE_NAMES });
+});
+admin.patch('/ganbari/config', requireOwner, (req, res) => {
+  const err = ganbari.setConfig(req.body, req.user.id);
+  if (err) return bad(res, err);
+  realtime.refreshAllGanbari();
+  res.json({ config: ganbari.getConfig() });
+});
+admin.get('/ganbari/students', requireOwner, (req, res) => res.json({ students: ganbari.studentSummary() }));
+admin.get('/ganbari/students/:id/days', requireOwner, (req, res) => {
+  const from = String(req.query.from || ''), to = String(req.query.to || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) return bad(res, '期間が正しくありません');
+  res.json({ days: ganbari.daysBetween(Number(req.params.id), from, to) });
+});
+admin.put('/ganbari/students/:id/days/:day', requireOwner, (req, res) => {
+  const target = auth.loadUser(Number(req.params.id));
+  if (!target || target.role !== 'student') return bad(res, '生徒が見つかりません', 404);
+  const m = req.body.minutes === null ? null : Number(req.body.minutes);
+  const err = ganbari.setManual(target.id, req.params.day, m, req.user.id);
+  if (err) return bad(res, err);
+  realtime.refreshGanbari(target.id);
+  res.json({ ok: true });
+});
+admin.post('/ganbari/new-year', requireOwner, (req, res) => {
+  const err = ganbari.newYear(req.body.terms, !!req.body.promote, req.user.id);
+  if (err) return bad(res, err);
+  realtime.refreshAllGanbari();
+  res.json({ ok: true, config: ganbari.getConfig() });
+});
+// 目標の確認（オーナーと、生徒への個別対応の権限がある先生）
+const requireGoalReviewer = (req, res, next) =>
+  (req.user.role === 'owner' || (req.user.role === 'teacher' && can(req.user, 'handle_students')) ? next() : bad(res, 'この操作は許可されていません', 403));
+admin.get('/ganbari/goals', requireGoalReviewer, (req, res) => {
+  const term = ganbari.termOf(ganbari.jst().day);
+  res.json({ term, goals: term ? ganbari.listGoals(term.key) : [] });
+});
+admin.post('/ganbari/goals/:id/review', requireGoalReviewer, (req, res) => {
+  const err = ganbari.reviewGoal(Number(req.params.id), String(req.body.action || ''), req.user.id);
+  if (err) return bad(res, err);
+  res.json({ ok: true });
+});
+// 保護者レポートのリンクを作る（オーナー）
+function reportTerm(key) {
+  return ganbari.allTerms().find(t => t.key === key) || null;
+}
+admin.post('/ganbari/reports', requireOwner, (req, res) => {
+  const term = reportTerm(req.body.termKey);
+  if (!term) return bad(res, '学期を選んでください');
+  const ids = req.body.all ? db.prepare("SELECT id FROM users WHERE role = 'student' AND is_active = 1 ORDER BY grade, display_name").all().map(r => r.id)
+    : [Number(req.body.userId)];
+  const out = [];
+  for (const id of ids) {
+    const u = auth.loadUser(id);
+    if (!u || u.role !== 'student') continue;
+    const token = ganbari.createReport(id, term, req.body.comment, req.user.id);
+    out.push({ userId: id, name: u.display_name, grade: u.grade, path: '/report#' + token });
+  }
+  if (!out.length) return bad(res, '生徒が見つかりません', 404);
+  res.json({ reports: out, term });
 });
 
 // 塾全体の設定（オーナーのみ）

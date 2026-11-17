@@ -21,6 +21,7 @@
     <button data-tab="users" id="tab-users-btn">👥 ユーザー</button>
     <button data-tab="rooms" id="tab-rooms-btn">🏫 教室の設定</button>
     <button data-tab="status" id="tab-status-btn">📊 入室状況</button>
+    <button data-tab="ganbari" id="tab-ganbari-btn">🏆 がんばり</button>
     <button data-tab="logs" id="tab-logs-btn">📝 操作ログ</button>
   </nav>
 
@@ -53,6 +54,9 @@
       <div class="table-wrap"><table class="logs"><thead><tr><th>名前</th><th>役割</th><th>場所</th><th>状態</th><th>端末</th><th>接続時刻</th><th id="ip-col">IP</th><th></th></tr></thead><tbody id="status-body"></tbody></table></div>
     </section>
 
+    <!-- がんばり -->
+    <section id="tab-ganbari" class="tab" hidden></section>
+
     <!-- 操作ログ -->
     <section id="tab-logs" class="tab" hidden>
       <p class="lead">ログインと管理操作の記録（新しい順・最大200件）</p>
@@ -75,6 +79,7 @@
         <small id="f-pw-help">8文字以上</small>
       </label>
       <label class="field color-field">アバターの色<input id="f-color" type="color" value="#64b5f6"></label>
+      <label class="field" id="grade-field">学年（学年の木に使います）<select id="f-grade"></select></label>
 
       <fieldset id="rooms-field">
         <legend>担当する教室</legend>
@@ -108,6 +113,9 @@
   </dialog>
 
   <script src="/js/api.js"></script>
+  <script src="/shared/map.js"></script>
+  <script src="/js/render.js"></script>
+  <script src="/js/admin-ganbari.js"></script>
   <script src="/js/admin.js"></script>
 </body>
 </html>

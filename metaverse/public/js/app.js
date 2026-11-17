@@ -46,6 +46,10 @@
     state.call = window.ClassCall.create({ socket, getState: () => state, toast });
     state.pc = window.PrivateCall.create({ socket, getState: () => state, toast });
     state.sc = window.StudyCam.create({ socket, getState: () => state, toast });
+    state.gb = window.GanbariUI.create({ api, toast, getState: () => state });
+    state.gb.refreshForest();
+    let lastForest = 0;
+    socket.on('study-minute', () => { if (Date.now() - lastForest > 120000) { lastForest = Date.now(); state.gb.refreshForest(); } });
     socket.on('features', (f) => { state.studyPhotos = !!f.studyPhotos; updateAll(); });
     socket.on('student-arrived', ({ name, time }) => {
       toast(`🔔 ${name}さんが入室しました（${time}）`, 6000);
@@ -678,6 +682,11 @@
       if (d < hd) { hd = d; hit = u; }
     }
     if (hit) return showUserPop(hit, sx, sy);
+    // 学年の木
+    for (let i = 0; i < SM.FOREST.length; i++) {
+      const p = treePos(i);
+      if (Math.abs(w.x - p.x) < 42 && w.y > p.y - 100 && w.y < p.y + 24) return state.gb.openForest(i);
+    }
     const tx = Math.floor(w.x / T), ty = Math.floor(w.y / T);
     if (SM.isSeat(tx, ty)) { walkTo(tx, ty, true); return; }
     if (SM.isWalkable(tx, ty)) { walkTo(tx, ty, false); return; }
@@ -723,6 +732,13 @@
       $('#pw-dialog').close(); toast('パスワードを変更しました');
     } catch (err) { $('#pw-error').textContent = err.message; }
   });
+
+  // ───────── がんばり（ポイント・目標・学年の木） ─────────
+  $('#menu-shop').onclick = () => { $('#me-menu').hidden = true; state.gb.openShop(); };
+  $('#menu-goal').onclick = () => { $('#me-menu').hidden = true; state.gb.openGoal(); };
+  $('#menu-forest').onclick = () => { $('#me-menu').hidden = true; state.gb.openForest(null); };
+  setInterval(() => { if (state.gb && document.visibilityState === 'visible') state.gb.refreshForest(); }, 60000);
+  const treePos = (i) => { const f = SM.FOREST[i]; return { x: (f.x + 1) * T, y: (f.y + 1) * T - 6 }; };
 
   // ───────── 入室の通知の設定（先生・オーナー） ─────────
   const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
@@ -881,9 +897,16 @@
     }
     const list = [...state.others.values()].map(u => ({ u, x: u.rx, y: u.ry, isMe: false }));
     list.push({ u: me, x: me.x, y: me.y, isMe: true });
+    const forest = state.gb && state.gb.forest;
+    SM.FOREST.forEach((f, i) => { const p = treePos(i); list.push({ tree: forest ? forest.trees[i] : null, x: p.x, y: p.y }); });
     list.sort((a, b) => a.y - b.y);
-    for (const it of list) window.Render.drawAvatar(ctx, it.u, it.x, it.y, { isMe: it.isMe, time: time / 1000, now: time, speaking: state.call && state.call.isSpeaking(it.u.id) });
+    const season = window.Render.seasonOf();
+    for (const it of list) {
+      if ('tree' in it) window.Render.drawTree(ctx, it.x, it.y, it.tree, { time: time / 1000, season, highlight: it.tree && state.user && it.tree.grades.includes(state.user.grade) });
+      else window.Render.drawAvatar(ctx, it.u, it.x, it.y, { isMe: it.isMe, time: time / 1000, now: time, speaking: state.call && state.call.isSpeaking(it.u.id) });
+    }
     ctx.restore();
+    window.Render.drawSeasonParticles(ctx, innerWidth, innerHeight, time, season);
   }
 
   let last = performance.now();

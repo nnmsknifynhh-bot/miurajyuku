@@ -28,6 +28,44 @@
   </section>
   <div id="lk-audio" hidden></div>
 
+  <!-- がんばり：ポイントと着せかえ -->
+  <dialog id="shop-dialog">
+    <div class="dialog-body">
+      <h2>🎁 ポイントと着せかえ</h2>
+      <div class="shop-pt"><span>いまのポイント</span><b id="shop-points">0</b><span>pt</span></div>
+      <p class="muted" id="shop-sub"></p>
+      <div class="shop-tabs" id="shop-tabs">
+        <button data-slot="head">🎩 帽子・かざり</button><button data-slot="face">👓 メガネ</button><button data-slot="pet">🐱 ペット</button>
+      </div>
+      <div class="shop-items" id="shop-items"></div>
+      <p class="muted">ポイントは自習室での自習時間でたまります。新しい年度になると、ポイントとアイテムは0にもどります。</p>
+      <div class="dialog-actions"><button class="btn secondary" id="shop-close">とじる</button></div>
+    </div>
+  </dialog>
+
+  <!-- がんばり：今学期の目標 -->
+  <dialog id="goal-dialog">
+    <form class="dialog-body" id="goal-form">
+      <h2>🎯 今学期の目標 <small id="goal-term"></small></h2>
+      <label class="field">目標（30文字まで）<input id="goal-input" maxlength="30" placeholder="例：英単語を毎日20個おぼえる" autocomplete="off"></label>
+      <p class="muted" id="goal-status"></p>
+      <div class="dialog-actions">
+        <button type="button" class="btn secondary" id="goal-cancel">とじる</button>
+        <button type="submit" class="btn" id="goal-save">先生に出す</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- がんばり：学年の木 -->
+  <dialog id="forest-dialog">
+    <div class="dialog-body">
+      <h2>🌳 学年の木</h2>
+      <p class="muted" id="forest-term"></p>
+      <div class="forest-body" id="forest-body"></div>
+      <div class="dialog-actions"><button class="btn secondary" id="forest-close">とじる</button></div>
+    </div>
+  </dialog>
+
   <!-- 入室の通知の設定（先生・オーナー） -->
   <dialog id="notify-dialog">
     <div class="dialog-body">
@@ -113,6 +151,9 @@
 
   <nav class="me-menu" id="me-menu" hidden>
     <a href="/admin" id="menu-admin" hidden>⚙️ 管理画面</a>
+    <button id="menu-shop" class="student-only">🎁 ポイントと着せかえ</button>
+    <button id="menu-goal" class="student-only">🎯 今学期の目標</button>
+    <button id="menu-forest">🌳 学年の木</button>
     <button id="menu-notify" class="staff-only">🔔 入室の通知</button>
     <button id="menu-sound">🔈 音のテスト</button>
     <button id="menu-password">🔑 パスワードを変える</button>
@@ -183,6 +224,7 @@
   <script src="/js/classcall.js"></script>
   <script src="/js/privatecall.js"></script>
   <script src="/js/studycam.js"></script>
+  <script src="/js/ganbari.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>

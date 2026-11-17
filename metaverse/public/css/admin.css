@@ -64,3 +64,27 @@ h3.sec { margin: 22px 0 8px; font-size: 17px; }
 .room-box .big.full { color: var(--danger); }
 .room-box ul { margin: 0; padding-left: 18px; font-size: 14px; }
 .room-box .live { color: var(--danger); font-weight: 800; font-size: 14px; }
+
+/* がんばり */
+.gb-sec { border-top: 2px solid var(--line); padding-top: 6px; margin-top: 14px; display: grid; gap: 10px; }
+.gb-sec:first-child { border-top: 0; margin-top: 0; }
+.gb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.gb-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.gb-row input { min-height: 44px; border: 2px solid var(--line); border-radius: 10px; padding: 0 8px; font-size: 16px; }
+.gb-check { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.gb-check input { width: 22px; height: 22px; }
+.gb-box { border: 2px solid var(--line); border-radius: 14px; padding: 12px; display: grid; gap: 8px; }
+.gb-box.warn { border-color: #f3b3b3; background: #fff7f7; }
+.gb-grades { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.gb-goals { display: grid; gap: 8px; }
+.gb-goal { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; border: 2px solid var(--line); border-radius: 12px; padding: 10px; }
+.gb-goal.pending { border-color: #ffd98a; background: #fffaf0; }
+.gb-goal .actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.gb-day { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.gb-day input { width: 90px; min-height: 40px; border: 2px solid var(--line); border-radius: 8px; text-align: center; font-size: 16px; }
+.gb-days { max-height: 50dvh; overflow-y: auto; }
+.gb-out, .gb-sec textarea { width: 100%; border: 2px solid var(--line); border-radius: 10px; padding: 8px; font-size: 14px; font-family: inherit; }
+.gb-reports { display: grid; gap: 6px; }
+.gb-report { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.gb-sec .field input[type=number], .gb-sec .field input[type=time], .gb-sec .field input[type=date] { max-width: 220px; }
+@media (max-width: 640px) { .gb-goal { grid-template-columns: 1fr; } }

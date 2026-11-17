@@ -82,14 +82,16 @@
           if (SM.tileAt(x, y + 1) !== 'p' && SM.tileAt(x, y + 1) !== 'T') { g.fillStyle = '#946638'; g.fillRect(px, py + T - 6, T, 6); }
           break;
         }
-        case 'r':
+        case 'r': case 'Y': {
+          const isR = (c) => c === 'r' || c === 'Y';
           g.fillStyle = '#a9c4a2'; g.fillRect(px, py, T, T);
           g.fillStyle = '#93b18c';
-          if (SM.tileAt(x - 1, y) !== 'r') g.fillRect(px + 3, py, 3, T);
-          if (SM.tileAt(x + 1, y) !== 'r') g.fillRect(px + T - 6, py, 3, T);
-          if (SM.tileAt(x, y - 1) !== 'r') g.fillRect(px, py + 3, T, 3);
-          if (SM.tileAt(x, y + 1) !== 'r') g.fillRect(px, py + T - 6, T, 3);
+          if (!isR(SM.tileAt(x - 1, y))) g.fillRect(px + 3, py, 3, T);
+          if (!isR(SM.tileAt(x + 1, y))) g.fillRect(px + T - 6, py, 3, T);
+          if (!isR(SM.tileAt(x, y - 1))) g.fillRect(px, py + 3, T, 3);
+          if (!isR(SM.tileAt(x, y + 1))) g.fillRect(px, py + T - 6, T, 3);
           break;
+        }
         case 'm': g.fillStyle = '#8e6f5a'; g.fillRect(px, py, T, T); g.fillStyle = '#a2826b'; g.fillRect(px + 3, py + 3, T - 6, T - 6); break;
         case 'T':
           g.fillStyle = '#c4935c'; g.fillRect(px, py, T, T);
@@ -220,35 +222,48 @@
       ctx.fillStyle = 'rgba(255,120,120,.35)';
       if (u.dir === 'down') { ctx.fillRect(x - 8, by - 8, 3, 2); ctx.fillRect(x + 5, by - 8, 3, 2); }
     }
-    // 名札
+    // 着せかえ（メガネ・帽子・ペット）
+    if (u.equip) {
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      if (u.equip.face && u.dir !== 'up') { ctx.font = '12px sans-serif'; ctx.fillText(u.equip.face, x, by - 11); }
+      if (u.equip.head) { ctx.font = '16px sans-serif'; ctx.fillText(u.equip.head, x, by - 24); }
+      if (u.equip.pet) {
+        const hop = u.moving ? Math.abs(Math.sin(t * 10)) * -4 : Math.sin(t * 2) * 1;
+        ctx.font = '16px sans-serif'; ctx.fillText(u.equip.pet, x + 19, y + 4 + hop);
+      }
+      ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
+    }
+    // 帽子・かざりをつけているときは、名札を少し上へ（アイテムがかくれないように）
+    const byTag = by - (u.equip && u.equip.head ? 12 : 0);
+    // 名札（連続自習の日数🔥つき）
     const tag = ROLE_TAG[u.role];
-    const label = (tag ? tag + ' ' : '') + u.name;
+    const label = (tag ? tag + ' ' : '') + u.name + (u.streak >= 2 ? ` 🔥${u.streak}` : '');
     ctx.font = 'bold 12px sans-serif';
     const tw = Math.min(160, ctx.measureText(label).width + 12);
     ctx.fillStyle = opts.isMe ? 'rgba(47,125,225,.95)' : TAG_BG[u.role];
-    ctx.beginPath(); ctx.roundRect(x - tw / 2, by - 42, tw, 17, 8.5); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(x - tw / 2, byTag - 42, tw, 17, 8.5); ctx.fill();
     ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(label, x, by - 33, 150);
+    ctx.fillText(label, x, byTag - 33, 150);
     if (opts.isMe && !u.hand) { // 自分の目印
       ctx.fillStyle = '#ffcf3d';
-      const ay = by - 50 + Math.sin(t * 4) * 2;
+      const ay = byTag - 50 + Math.sin(t * 4) * 2;
       ctx.beginPath(); ctx.moveTo(x - 6, ay - 6); ctx.lineTo(x + 6, ay - 6); ctx.lineTo(x, ay); ctx.fill();
     }
     // 離席中（アプリを閉じている・別の画面を操作中）
     if (u.away) {
       ctx.font = '18px sans-serif';
-      ctx.fillText('💤', x - tw / 2 - 12, by - 33);
+      ctx.fillText('💤', x - tw / 2 - 12, byTag - 33);
     }
     // 個別通話中
     if (u.inPrivate) {
       ctx.font = '16px sans-serif';
       ctx.fillStyle = 'rgba(139,92,246,.95)';
-      ctx.beginPath(); ctx.roundRect(x + tw / 2 - 2, by - 43, 24, 19, 9); ctx.fill();
-      ctx.fillStyle = '#fff'; ctx.fillText('🎧', x + tw / 2 + 10, by - 33);
+      ctx.beginPath(); ctx.roundRect(x + tw / 2 - 2, byTag - 43, 24, 19, 9); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.fillText('🎧', x + tw / 2 + 10, byTag - 33);
     }
     // 挙手
     if (u.hand) {
-      const hy = by - 60 + Math.sin(t * 6) * 3;
+      const hy = byTag - 60 + Math.sin(t * 6) * 3;
       ctx.fillStyle = '#ffcf3d'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.arc(x, hy, 14, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       ctx.font = '18px sans-serif'; ctx.fillText('✋', x, hy + 1);
@@ -258,7 +273,7 @@
     if (u.topic) {
       const text = (u.role === 'student' ? '📝 ' : '💬 ') + u.topic;
       ctx.font = 'bold 12px sans-serif';
-      const bw = Math.min(200, ctx.measureText(text).width + 16), bh = 22, top = by - 70;
+      const bw = Math.min(200, ctx.measureText(text).width + 16), bh = 22, top = byTag - 70;
       ctx.fillStyle = '#fffbea'; ctx.strokeStyle = '#e8c766'; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.roundRect(x - bw / 2, top, bw, bh, 9); ctx.fill(); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(x - 6, top + bh - 0.5); ctx.lineTo(x + 6, top + bh - 0.5); ctx.lineTo(x, top + bh + 6); ctx.closePath();
@@ -272,11 +287,118 @@
       const k = 1 - (u.reaction.until - opts.now) / 2500;
       ctx.globalAlpha = Math.min(1, (1 - k) * 2.5);
       ctx.font = '26px sans-serif';
-      ctx.fillText(u.reaction.kind, x + (u.hand ? 24 : 0), by - 62 - topicH - k * 30);
+      ctx.fillText(u.reaction.kind, x + (u.hand ? 24 : 0), byTag - 62 - topicH - k * 30);
       ctx.globalAlpha = 1;
     }
     ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
   }
 
-  window.Render = { buildMap, drawAvatar };
+  // ───────── 季節 ─────────
+  function seasonOf(date = new Date()) {
+    const m = date.getMonth() + 1;
+    return m >= 3 && m <= 5 ? 'spring' : m >= 6 && m <= 8 ? 'summer' : m >= 9 && m <= 11 ? 'autumn' : 'winter';
+  }
+  const FOLIAGE = {
+    spring: ['#8fd27c', '#6fbf5f'], summer: ['#3f9a4f', '#2f8240'], autumn: ['#f0a03a', '#d9692b'], winter: ['#6d9a78', '#557f62'],
+  };
+
+  // 学年の木。stage: 0 芽 / 1 若葉 / 2 若木 / 3 大きな木 / 4 花 / 5 実り
+  function drawTree(ctx, cx, baseY, tree, opts = {}) {
+    const t = opts.time || 0, season = opts.season || seasonOf();
+    const stage = tree ? tree.stage : 0;
+    const [c1, c2] = FOLIAGE[season];
+    const sway = Math.sin(t * 1.3) * 1.5;
+    const circle = (x, y, r, color) => { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); };
+    ctx.save();
+    // 植木鉢の土
+    ctx.fillStyle = '#8a6a4f'; ctx.beginPath(); ctx.ellipse(cx, baseY, 22, 8, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#6e523c'; ctx.beginPath(); ctx.ellipse(cx, baseY - 1, 17, 5, 0, 0, Math.PI * 2); ctx.fill();
+    let canopy = null; // { x, y, r }
+    if (stage === 0) { // 芽
+      ctx.strokeStyle = '#5aa04a'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(cx, baseY - 2); ctx.lineTo(cx, baseY - 14); ctx.stroke();
+      ctx.fillStyle = '#7cc46a';
+      ctx.beginPath(); ctx.ellipse(cx - 6 + sway, baseY - 16, 7, 4, -0.5, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(cx + 6 + sway, baseY - 17, 7, 4, 0.5, 0, Math.PI * 2); ctx.fill();
+      canopy = { x: cx, y: baseY - 16, r: 10 };
+    } else if (stage === 1) { // 若葉
+      ctx.strokeStyle = '#6b4a2e'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(cx, baseY - 2); ctx.lineTo(cx, baseY - 26); ctx.stroke();
+      circle(cx - 8 + sway, baseY - 26, 10, c2); circle(cx + 8 + sway, baseY - 28, 10, c2); circle(cx + sway, baseY - 36, 11, c1);
+      canopy = { x: cx + sway, y: baseY - 30, r: 18 };
+    } else {
+      const h = stage === 2 ? 40 : 56, r = stage === 2 ? 22 : 34;
+      ctx.fillStyle = '#7a5434';
+      ctx.beginPath(); ctx.moveTo(cx - (stage === 2 ? 5 : 8), baseY); ctx.lineTo(cx - 3, baseY - h); ctx.lineTo(cx + 3, baseY - h); ctx.lineTo(cx + (stage === 2 ? 5 : 8), baseY); ctx.fill();
+      const cy = baseY - h - r * 0.55;
+      const blobs = [[-0.6, 0.25, 0.65], [0.6, 0.25, 0.65], [0, -0.35, 0.75], [-0.35, -0.05, 0.6], [0.35, -0.05, 0.6]];
+      for (const [dx, dy, rr] of blobs) circle(cx + dx * r + sway, cy + dy * r, rr * r, c2);
+      for (const [dx, dy, rr] of blobs.slice(2)) circle(cx + dx * r * 0.8 + sway, cy + dy * r * 0.8 - 3, rr * r * 0.75, c1);
+      if (season === 'winter') { // 雪が少しつもる
+        ctx.fillStyle = 'rgba(255,255,255,.9)';
+        ctx.beginPath(); ctx.ellipse(cx + sway, cy - r * 0.75, r * 0.45, r * 0.13, 0, 0, Math.PI * 2); ctx.fill();
+      }
+      canopy = { x: cx + sway, y: cy, r };
+      // 花・実（決まった位置に）
+      if (stage >= 4) {
+        for (let i = 0; i < 14; i++) {
+          const a = i * 2.39996, d = (0.25 + ((i * 37) % 70) / 100) * r * 0.85;
+          const px = canopy.x + Math.cos(a) * d, py = canopy.y + Math.sin(a) * d * 0.8;
+          if (stage === 4) { circle(px, py, 3.2, '#ffc2d6'); circle(px, py, 1.3, '#ff7fa8'); }
+          else { circle(px, py, 4, i % 3 ? '#e8452e' : '#f39a2b'); circle(px - 1.2, py - 1.2, 1.2, 'rgba(255,255,255,.7)'); }
+        }
+      }
+    }
+    // 目標の短冊（達成したものは⭐）
+    const goals = (tree && tree.goals) || [];
+    const colors = ['#ff8a80', '#ffd54f', '#81d4fa', '#a5d6a7', '#ce93d8', '#ffab91'];
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    goals.slice(0, 30).forEach((g, i) => {
+      const a = i * 2.39996 + 0.8, d = (0.35 + ((i * 53) % 55) / 100) * canopy.r;
+      const gx = canopy.x + Math.cos(a) * d, gy = canopy.y + Math.sin(a) * d * 0.7 + 4;
+      if (g.achieved) { ctx.font = '13px sans-serif'; ctx.fillText('⭐', gx, gy + Math.sin(t * 3 + i) * 1.5); }
+      else {
+        const swing = Math.sin(t * 2 + i) * 0.12;
+        ctx.save(); ctx.translate(gx, gy - 3); ctx.rotate(swing);
+        ctx.strokeStyle = 'rgba(80,60,40,.6)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, 3); ctx.stroke();
+        ctx.fillStyle = colors[i % colors.length]; ctx.fillRect(-2.5, 3, 5, 10);
+        ctx.restore();
+      }
+    });
+    // 名札
+    if (tree && opts.label !== false) {
+      const label = `${tree.name}・${tree.stageName}`;
+      ctx.font = 'bold 11px sans-serif';
+      const w = ctx.measureText(label).width + 14;
+      ctx.fillStyle = opts.highlight ? 'rgba(47,125,225,.95)' : 'rgba(110,85,60,.9)';
+      ctx.beginPath(); ctx.roundRect(cx - w / 2, baseY + 6, w, 16, 8); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.fillText(label, cx, baseY + 14.5);
+    }
+    ctx.restore();
+  }
+
+  // 季節の舞うもの（桜の花びら・紅葉・雪）。画面全体に重ねる
+  function drawSeasonParticles(ctx, w, h, time, season) {
+    if (season === 'summer') return;
+    const n = 26, t = time / 1000;
+    ctx.save();
+    for (let i = 0; i < n; i++) {
+      const seed = (i * 9301 + 49297) % 233280 / 233280;
+      const speed = 18 + seed * 22;
+      const x = ((seed * w * 1.3 + t * (season === 'winter' ? 8 : 22) + Math.sin(t * 0.8 + i) * 25) % (w + 40)) - 20;
+      const y = ((seed * 977 + t * speed) % (h + 40)) - 20;
+      ctx.globalAlpha = 0.75;
+      if (season === 'winter') { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y, 1.6 + seed * 2.2, 0, Math.PI * 2); ctx.fill(); }
+      else {
+        ctx.save();
+        ctx.translate(x, y); ctx.rotate(t * (1 + seed) + i);
+        ctx.fillStyle = season === 'spring' ? '#ffc7da' : (i % 2 ? '#e8742c' : '#c94a2a');
+        ctx.beginPath(); ctx.ellipse(0, 0, 4 + seed * 2, 2.3, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+    }
+    ctx.restore();
+  }
+
+  window.Render = { buildMap, drawAvatar, drawTree, drawSeasonParticles, seasonOf };
 })();
