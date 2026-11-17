@@ -129,6 +129,7 @@ test('着せかえ：持っているものだけつけられる', async () => {
 
 test('連続自習の🔥：1日の最低時間（初期90分）を続けた日数', () => {
   assert.equal(C().streakMin, 90);
+  G.setConfig({ streakByGrade: {} }); // 学年別をなしにして、ふつうの最低時間（90分）でたしかめる
   const d0 = C().terms[2]; // 3学期の初日を「今日」とする
   for (let i = 1; i <= 3; i++) G.setManual(U.a2.id, G.addDays(d0, -i), 95, null);
   G.setManual(U.a2.id, G.addDays(d0, -4), 60, null); // 90分に足りない日で途切れる
@@ -137,6 +138,22 @@ test('連続自習の🔥：1日の最低時間（初期90分）を続けた日�
   assert.equal(G.streak(U.a2.id, at(d0)), 3, '今日は89分なのでまだ数えない');
   G.setManual(U.a2.id, d0, 90, null);
   assert.equal(G.streak(U.a2.id, at(d0)), 4);
+  G.setConfig({ streakByGrade: { '中1': 45, '中2': 60, '中3': 90 } });
+});
+
+test('連続自習🔥の最低時間は学年別（中1:45分・中2:60分・中3:90分）', () => {
+  const c = C();
+  assert.deepEqual(c.streakByGrade, { '中1': 45, '中2': 60, '中3': 90 });
+  const d0 = G.addDays(c.terms[2], 20);
+  // a1 は中1、b1 は中2
+  for (let i = 1; i <= 2; i++) { G.setManual(U.a1.id, G.addDays(d0, -i), 50, null); G.setManual(U.b1.id, G.addDays(d0, -i), 50, null); }
+  assert.equal(G.streak(U.a1.id, at(d0)), 2, '中1は45分でよい');
+  assert.equal(G.streak(U.b1.id, at(d0)), 0, '中2は60分いる');
+  assert.equal(G.setConfig({ streakByGrade: { '中1': 45, '中2': 50, '中3': 90 } }), null);
+  assert.equal(G.streak(U.b1.id, at(d0)), 2, 'オーナーが変えられる');
+  assert.match(G.setConfig({ streakByGrade: { '中2': 0 } }), /1〜600分/);
+  assert.match(G.setConfig({ streakByGrade: { '大1': 30 } }), /学年/);
+  G.setConfig({ streakByGrade: { '中1': 45, '中2': 60, '中3': 90 } });
 });
 
 test('曜日ごとの数え方：数える曜日・時間帯・上限を曜日で変えられる。お休みの曜日は🔥が途切れない', () => {

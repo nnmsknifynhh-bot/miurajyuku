@@ -90,7 +90,8 @@ function defaults(today = jst()) {
     weekly: null,          // 曜日ごとの数え方（null＝毎日同じ）。[日,月,…,土] の7つ：{ on, start, end, start2, end2, cap }（夜を使わないときは start2/end2 が null）
     requireSeat: true,     // 席に座っているときだけ数える
     requireCamera: false,  // 見守り写真がオンのとき、カメラがオンのときだけ数える
-    streakMin: 90,         // 連続自習に数える1日の最低時間（分）
+    streakMin: 90,         // 連続自習に数える1日の最低時間（分）。下の学年別にない学年はこれ
+    streakByGrade: { '中1': 45, '中2': 60, '中3': 90 }, // 学年別の最低時間（分）
     minutesPerPoint: 10,   // 何分で1ポイント
     yearStart: `${y}-04-01`,
     pointsFrom: `${y}-04-01`, // ポイントを数え始めた日（新年度になっても変えない＝ポイントは引きつぐ）
@@ -212,6 +213,17 @@ function setConfig(patch, actorId) {
       if (!w.some(x => x.on)) return '数える曜日を1つ以上えらんでください';
       c.weekly = w;
     }
+  }
+  if (p.streakByGrade !== undefined) {
+    const g = p.streakByGrade;
+    if (!g || typeof g !== 'object' || Array.isArray(g)) return '学年別の最低時間が正しくありません';
+    const out = {};
+    for (const [k, v] of Object.entries(g)) {
+      if (!GRADES.includes(k)) return '学年が正しくありません';
+      if (!int(v, 1, 600)) return `${k}の連続自習の最低時間は1〜600分にしてください`;
+      out[k] = v;
+    }
+    c.streakByGrade = out;
   }
   if (p.streakMin !== undefined) { if (!int(p.streakMin, 1, 600)) return '連続自習の最低時間は1〜600分にしてください'; c.streakMin = p.streakMin; }
   if (p.minutesPerPoint !== undefined) { if (!int(p.minutesPerPoint, 1, 120)) return 'ポイントの設定は1〜120分にしてください'; c.minutesPerPoint = p.minutesPerPoint; }
@@ -342,12 +354,19 @@ function tick(online, opt = {}) {
 }
 
 // 連続自習の日数（今日まだ達していなくても、昨日まで続いていれば数える）
+// その生徒の連続自習🔥の最低時間（学年別の設定があればそれ）
+function streakMinFor(userId, c = getConfig()) {
+  const u = db.prepare('SELECT grade FROM users WHERE id = ?').get(userId);
+  const g = u && u.grade;
+  return (g && c.streakByGrade && Number.isInteger(c.streakByGrade[g])) ? c.streakByGrade[g] : c.streakMin;
+}
 function streak(userId, date = new Date()) {
   const c = getConfig();
+  const min = streakMinFor(userId, c);
   const today = jst(date).day;
   const rows = db.prepare(`SELECT day, ${totalExpr} AS m FROM study_days WHERE user_id = ? AND day <= ? AND day >= ? ORDER BY day DESC`)
     .all(userId, today, addDays(today, -400));
-  const ok = new Set(rows.filter(r => r.m >= c.streakMin).map(r => r.day));
+  const ok = new Set(rows.filter(r => r.m >= min).map(r => r.day));
   // 数えない曜日（お休みの曜日）は、とばしてつなげる。その日に自習していれば1日に数える
   const off = (d) => !ruleFor(d, c).on;
   let day = today;
@@ -629,6 +648,7 @@ function reportData(token) {
 }
 
 module.exports = {
+  streakMinFor,
   ruleFor, WEEKDAYS,
   SLOTS, EVENTS, currentEvent, dressupOpen, dressupInfo,
   GRADES, STAGE_NAMES, SHOP, jst, addDays, getConfig, setConfig, termOf, allTerms, dayTotal, minutesBetween, daysBetween, setManual, tick,

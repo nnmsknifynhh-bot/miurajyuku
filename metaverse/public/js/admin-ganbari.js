@@ -94,7 +94,14 @@
     const seat = check('席に座っているときだけ数える', c.requireSeat), cam = check('見守り写真がオンのときは、カメラがオンのときだけ数える', c.requireCamera);
     const grid = el('div', 'gb-grid');
     const winRow = el('div', 'gb-slots'); winRow.append(allDay[0], common.am, common.pm);
-    grid.append((() => { const d = el('div', 'field'); d.append(el('span', null, '数える時間帯'), winRow, el('small', null, '朝だけ・夜だけのときは「朝」の欄だけ使ってください')); return d; })(), field('1日に数える上限（分）', cap, '例：300 = 5時間（朝と夜の合計）'), field('連続自習🔥に数える1日の最低時間（分）', streakMin), field('何分で1ポイント', mpp));
+    grid.append((() => { const d = el('div', 'field'); d.append(el('span', null, '数える時間帯'), winRow, el('small', null, '朝だけ・夜だけのときは「朝」の欄だけ使ってください')); return d; })(), field('1日に数える上限（分）', cap, '例：300 = 5時間（朝と夜の合計）'), field('連続自習🔥の最低時間（分）：下の学年以外', streakMin, '例：小学生・高校生'), field('何分で1ポイント', mpp));
+    // 連続自習🔥の最低時間（学年別）
+    const SG = ['中1', '中2', '中3'];
+    const sgInputs = SG.map(g => [g, numInput((c.streakByGrade || {})[g] || c.streakMin, 1, 600)]);
+    const sgBox = el('div', 'field');
+    const sgRow = el('div', 'gb-row');
+    sgInputs.forEach(([g, i]) => { i.style.width = '72px'; const one = el('span', 'gb-row'); one.style.flexWrap = 'nowrap'; one.append(el('span', null, g), i, el('span', 'muted', '分')); sgRow.append(one); });
+    sgBox.append(el('span', null, '連続自習🔥の1日の最低時間（学年別）'), sgRow, el('small', null, 'この時間より多く自習した日が続くと🔥がふえます'));
     const saveRule = el('button', 'btn', '保存する');
     // 曜日ごとの数え方
     const WD = ['日', '月', '火', '水', '木', '金', '土'];
@@ -124,11 +131,12 @@
       return save({
         window: { start: v.start, end: v.end }, window2: v.start2 ? { start: v.start2, end: v.end2 } : null,
         dailyCap: Number(cap.value), streakMin: Number(streakMin.value), minutesPerPoint: Number(mpp.value),
+        streakByGrade: { ...(c.streakByGrade || {}), ...Object.fromEntries(sgInputs.map(([g, i]) => [g, Number(i.value)])) },
         requireSeat: seat[1].checked, requireCamera: cam[1].checked,
         weekly: byDay[1].checked ? wkRows.map(f => f()) : null,
       }, '数え方を保存しました').then(ok => { if (ok) load(root, ctx).then(() => window.scrollTo(0, y)); });
     };
-    rule.append(byDay[0], wkBox, wkNote, grid, seat[0], cam[0], saveRule);
+    rule.append(byDay[0], wkBox, wkNote, grid, sgBox, seat[0], cam[0], saveRule);
 
     // ═════ 学期と年度 ═════
     const termSec = section('📅 学期と年度', `今は ${cfg.current ? cfg.current.name : '学期の期間外'}です。保護者レポートは学期ごとに作れます。`);
