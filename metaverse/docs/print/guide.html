@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>三浦塾 オンライン教室 つかいかたガイド</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap">
+<style>
+  @page { size: A4; margin: 0; }
+  :root {
+    --ink: #3a2f28; --muted: #7a6a5c; --cream: #fbf6ee; --line: #ecdcc6;
+    --orange: #e07b10; --blue: #2f7de1; --green: #2fa36b; --pink: #e05a8a; --purple: #8b5cf6; --yellow: #ffcf3d;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: 'Zen Maru Gothic', 'IPAPGothic', sans-serif; color: var(--ink); font-weight: 500; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .page { width: 210mm; height: 297mm; padding: 10mm 12mm 9mm; position: relative; overflow: hidden; background: #fff; page-break-after: always; display: flex; flex-direction: column; gap: 3.6mm; }
+  .page:last-child { page-break-after: auto; }
+  .page::before { content: ''; position: absolute; inset: 0; background:
+      radial-gradient(circle at 92% 6%, #fff1d6 0 26mm, transparent 26.2mm),
+      radial-gradient(circle at 4% 98%, #e8f3ff 0 30mm, transparent 30.2mm); z-index: 0; }
+  .page > * { position: relative; z-index: 1; }
+
+  header.hero { display: flex; align-items: center; gap: 5mm; padding: 5mm 6mm; border-radius: 6mm; background: linear-gradient(120deg, #ffb347, #ff8c5a 55%, #f4729a); color: #fff; }
+  .hero .logo { font-size: 17mm; line-height: 1; filter: drop-shadow(0 1mm 1mm rgba(0,0,0,.15)); }
+  .hero h1 { margin: 0; font-size: 9.2mm; font-weight: 900; letter-spacing: .3mm; line-height: 1.2; }
+  .hero p { margin: 1.2mm 0 0; font-size: 3.9mm; font-weight: 700; opacity: .95; }
+  .hero .who { margin-left: auto; text-align: center; background: rgba(255,255,255,.22); border-radius: 4mm; padding: 2mm 3.5mm; font-size: 3.3mm; font-weight: 700; line-height: 1.5; }
+
+  .sub-hero { display: flex; align-items: center; gap: 3mm; padding: 3mm 6mm; border-radius: 5mm; background: linear-gradient(120deg, #5aa7ff, #7c6cf2); color: #fff; }
+  .sub-hero h1 { margin: 0; font-size: 7mm; font-weight: 900; }
+  .sub-hero span { font-size: 3.6mm; font-weight: 700; opacity: .95; }
+
+  .card { border: .6mm solid var(--line); border-radius: 5mm; background: rgba(255,255,255,.96); padding: 3.6mm 4.5mm 3.8mm; }
+  .card h2 { margin: 0 0 2.4mm; display: flex; align-items: center; gap: 2mm; font-size: 5.2mm; font-weight: 900; }
+  .card h2 .num { display: inline-grid; place-items: center; width: 7mm; height: 7mm; border-radius: 50%; color: #fff; font-size: 4mm; flex: none; }
+  .c-orange h2 .num { background: var(--orange); } .c-orange { border-color: #f6d2a6; }
+  .c-blue h2 .num { background: var(--blue); } .c-blue { border-color: #c4dbfa; }
+  .c-green h2 .num { background: var(--green); } .c-green { border-color: #bfe6d1; }
+  .c-pink h2 .num { background: var(--pink); } .c-pink { border-color: #f6c6d7; }
+  .c-purple h2 .num { background: var(--purple); } .c-purple { border-color: #d9cdfb; }
+
+  .row { display: grid; gap: 4mm; }
+  .row.two { grid-template-columns: 1fr 1fr; }
+  p, li { font-size: 3.4mm; line-height: 1.55; }
+  p { margin: 0; }
+  ul { margin: 0; padding-left: 4.6mm; }
+  li { margin: .5mm 0; }
+  b, strong { font-weight: 900; }
+  .em { color: var(--orange); font-weight: 900; }
+  .em-b { color: var(--blue); font-weight: 900; }
+  .small { font-size: 3mm; color: var(--muted); line-height: 1.5; }
+
+  /* はじめかた */
+  .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2.6mm; }
+  .step { background: var(--cream); border-radius: 4mm; padding: 2.8mm 2.6mm; text-align: center; position: relative; }
+  .step .ic { font-size: 8mm; line-height: 1.1; }
+  .step > b { display: block; font-size: 3.7mm; margin: 1mm 0 .6mm; }
+  .step p { font-size: 3.05mm; line-height: 1.45; }
+  .step:not(:last-child)::after { content: '▶'; position: absolute; right: -2.6mm; top: 42%; color: #e7b56a; font-size: 3mm; }
+
+  .write { display: grid; grid-template-columns: auto 1fr; gap: 2mm 3mm; align-items: center; margin-top: 3mm; }
+  .write label { font-size: 3.4mm; font-weight: 900; }
+  .write .box { height: 8.5mm; border: .5mm dashed #d9bf98; border-radius: 2.5mm; background: #fffdf8; }
+  .warn { margin-top: 2.6mm; background: #fff4e0; border-left: 1.4mm solid var(--orange); border-radius: 2mm; padding: 2mm 3mm; font-size: 3.3mm; line-height: 1.55; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 1.6mm; margin-top: 1.6mm; }
+  .chip { display: inline-flex; align-items: center; gap: 1mm; background: var(--cream); border: .4mm solid var(--line); border-radius: 99mm; padding: .7mm 2.6mm; font-size: 3.15mm; font-weight: 700; }
+
+  table.t { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 3.3mm; margin-top: 1.6mm; }
+  table.t th, table.t td { padding: 1.2mm 2mm; text-align: left; border-bottom: .3mm solid var(--line); line-height: 1.45; vertical-align: top; }
+  table.t th { width: 27%; font-weight: 900; white-space: nowrap; }
+  table.t tr:last-child th, table.t tr:last-child td { border-bottom: 0; }
+
+  .grade { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2mm; margin-top: 1.8mm; }
+  .grade div { text-align: center; border-radius: 3mm; padding: 1.6mm 1mm; background: #fff3e6; font-size: 3.2mm; font-weight: 700; }
+  .grade div b { display: block; font-size: 5mm; color: var(--orange); }
+
+  .promise { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2.6mm; }
+  .promise div { background: #f3efff; border-radius: 4mm; padding: 2mm 2.6mm; display: flex; align-items: center; gap: 2mm; font-size: 3.15mm; line-height: 1.4; font-weight: 700; }
+  .promise div span { font-size: 6.5mm; line-height: 1; }
+
+  footer { margin-top: auto; display: flex; justify-content: space-between; align-items: center; font-size: 3mm; color: var(--muted); border-top: .4mm dashed var(--line); padding-top: 2mm; }
+  footer b { color: var(--ink); }
+</style>
+</head>
+<body>
+
+<!-- ───────── おもて ───────── -->
+<section class="page">
+  <header class="hero">
+    <div class="logo">🏫</div>
+    <div>
+      <h1>三浦塾 オンライン教室<br>つかいかたガイド</h1>
+      <p>スマホ・パソコンから、家にいながら自習室や授業に参加できます</p>
+    </div>
+    <div class="who">生徒の<br>みなさん・<br>保護者の<br>みなさまへ</div>
+  </header>
+
+  <div class="card c-orange">
+    <h2><span class="num">1</span>はじめかた</h2>
+    <div class="steps">
+      <div class="step"><div class="ic">🌐</div><b>ブラウザで開く</b><p>iPhoneは<b>Safari</b>、<br>Androidは<b>Chrome</b>で<br>下のアドレスを開く</p></div>
+      <div class="step"><div class="ic">🔑</div><b>ログイン</b><p>先生からもらった<br><b>ID</b>と<b>パスワード</b>を<br>入れる</p></div>
+      <div class="step"><div class="ic">✏️</div><b>漢字テスト</b><p>中1〜中3は、<br>読み方を4つから<br>1つえらんでから入室</p></div>
+      <div class="step"><div class="ic">🏫</div><b>入室！</b><p>ロビーに着いたら<br>「🏫 へや」で<br>行きたい部屋へ</p></div>
+    </div>
+    <div class="write">
+      <label>アドレス</label><div class="box"></div>
+      <label>ID</label><div class="box"></div>
+    </div>
+    <div class="warn">⚠️ <b>LINEのトークから開かないでください。</b>LINEの中で開くとカメラが使えないことがあります。開いてしまったら、右上の「︙」→<b>「デフォルトのブラウザで開く」</b>を押してください。<br>📱 開けたら「共有」または「︙」→<b>「ホーム画面に追加」</b>をしておくと、次からワンタップで入れます。</div>
+  </div>
+
+  <div class="card c-blue">
+    <h2><span class="num">2</span>自習室のつかいかた 📚</h2>
+    <div class="row two">
+      <ul>
+        <li>自習室に入ったら、<b>空いている席にすわって</b>勉強します。<span class="em">すわっている間</span>の時間が「自習時間」になります。</li>
+        <li>立ち歩きが<b>10秒</b>をこえると、席をえらぶ画面が出ます。</li>
+        <li>頭の上に<b>「📚 今日 1時間20分」</b>のように、今日の自習時間が出ます（10分ごと）。</li>
+      </ul>
+      <ul>
+        <li><b>📷 見守りカメラ</b>：カメラをオンにすると、ときどき写真が先生に届きます。ちゃんと勉強しているかの見守りのためで、ほかの生徒には見えません。</li>
+        <li>ほかのアプリを開いている間（離席中）は、自習時間に数えません。</li>
+        <li>自習時間を数える時間帯・曜日は、塾で決めています。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card c-green">
+    <h2><span class="num">3</span>集中するためのルール 🤫</h2>
+    <div class="row two">
+      <p>自習室も授業も、<b>みんなが集中できる場所</b>です。<br>そのため、<b>「💬 吹き出し」と「😊 スタンプ」</b>は、いつでも使えるわけではありません。</p>
+      <div>
+        <div class="chips"><span class="chip">👋 先生が近くに来て話しかけたとき</span><span class="chip">🎧 先生と個別通話しているとき</span><span class="chip">😊 授業中に先生がOKを出したとき</span></div>
+        <p class="small" style="margin-top:1.4mm">このときだけボタンが出ます。1時間に何回も開くと注意が出ます。</p>
+      </div>
+    </div>
+  </div>
+
+  <footer><span>三浦塾 オンライン教室</span><span>うらめんに続きます ▶</span></footer>
+</section>
+
+<!-- ───────── うら ───────── -->
+<section class="page">
+  <div class="sub-hero"><h1>🌳 がんばるともっと楽しい！</h1><span>自習するほど、いいことがあります</span></div>
+
+  <div class="row two">
+    <div class="card c-orange">
+      <h2><span class="num">4</span>ポイントと着せかえ 👑</h2>
+      <ul>
+        <li>自習 <b>10分で1ポイント</b>たまります。</li>
+        <li>ポイントで<b>帽子・洋服・眼鏡・杖や剣・ペット・着ぐるみ</b>が買えます。高いアイテムほどレアです。</li>
+        <li>着せかえできるのは、塾が決めた<b>着せかえ期間</b>だけです。</li>
+        <li>ポイントとアイテムは、学年が上がっても<b>なくなりません</b>。</li>
+      </ul>
+    </div>
+    <div class="card c-pink">
+      <h2><span class="num">5</span>連続自習 🔥</h2>
+      <p>1日にこの時間より多く自習した日が続くと、名前の横の<b>🔥の数</b>がふえます。</p>
+      <div class="grade"><div>中1<b>45分</b></div><div>中2<b>60分</b></div><div>中3<b>90分</b></div></div>
+      <p class="small" style="margin-top:1.6mm">塾がお休みの曜日は、🔥は途切れません。</p>
+    </div>
+  </div>
+
+  <div class="row two">
+    <div class="card c-green">
+      <h2><span class="num">6</span>学年の木と目標 🌱</h2>
+      <ul>
+        <li>中1・中2・中3の<b>3本の木</b>が、学年の<b>平均</b>自習時間で育ちます。みんなで協力して大きくしよう！</li>
+        <li>学期ごとの<b>目標</b>を書くと、先生が確認してから木に<b>短冊</b>で飾られます。達成すると⭐に！</li>
+      </ul>
+    </div>
+    <div class="card c-purple">
+      <h2><span class="num">7</span>お楽しみ 🎂</h2>
+      <ul>
+        <li><b>誕生日</b>に入室すると、お祝いカードと特別なプレゼントがもらえます。</li>
+        <li>お正月・七夕・ハロウィンなど、<b>季節の飾り</b>が1年中かわります。</li>
+        <li>保護者のみなさまには、学期ごとに<b>自習時間のレポート</b>をお届けします。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card c-blue">
+    <h2><span class="num">8</span>授業・先生との通話 🎙</h2>
+    <div class="row two">
+      <ul>
+        <li>授業中の教室に入ると、<b>先生の声</b>や<b>画面</b>が届きます。音が出ないときは「🔊 タップして音声をきく」を押してね。</li>
+        <li>質問は<b>「✋ 手をあげる」</b>で先生に知らせます。</li>
+      </ul>
+      <ul>
+        <li>先生から<b>個別通話</b>が来たら、「出る」を押すと先生と1対1で話せます。</li>
+        <li>イヤホンを使うと、声が聞きやすくなります。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card c-orange">
+    <h2><span class="num">9</span>こまったときは 🆘</h2>
+    <table class="t">
+      <tr><th>📷 カメラが使えない</th><td>アドレスの左の🔒マーク →「権限」→ カメラを<b>「許可」</b>。LINEから開いた場合は「デフォルトのブラウザで開く」。</td></tr>
+      <tr><th>🔒「15分待って」と出た</th><td>パスワードを5回まちがえるとロックされます。<b>先生に連絡</b>すれば、すぐ解除できます。</td></tr>
+      <tr><th>📶 接続が切れた</th><td>アプリを開き直せば、自動でつながります。<b>5分以内</b>なら元の席にもどり、切れていた時間も自習時間に入ります。</td></tr>
+      <tr><th>🔇 声が聞こえない</th><td>音量とマナーモード（iPhoneは横のスイッチ）を確認してください。</td></tr>
+    </table>
+  </div>
+
+  <div class="promise">
+    <div><span>🙅</span>IDとパスワードは<br>だれにも教えない</div>
+    <div><span>📱</span>1つのIDは<br>1台で使う</div>
+    <div><span>😊</span>みんなが気持ちよく<br>使えるように</div>
+  </div>
+
+  <footer><span>こまったときは、先生に相談してください。</span><b>三浦塾</b></footer>
+</section>
+
+</body>
+</html>
