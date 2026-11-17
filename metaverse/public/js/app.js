@@ -92,7 +92,13 @@
     });
     // 高校生が決めた曜日に来ていないとき（先生・オーナーへ）
     socket.on('student-late', ({ name, weekday, time }) => { toast(`⏰ ${name}さんがまだ来ていません（${weekday}曜 ${time}〜の予定）`, 9000); chime(); });
-    socket.on('study-minute', () => { if (state.user && state.user.role === 'student') refreshWeek(); });
+    socket.on('study-minute', () => { if (state.user && state.user.role === 'student') { refreshWeek(); refreshFun(); } });
+    // 季節のお楽しみ
+    socket.on('fun-event', (d) => {
+      if (d.kind === 'asa') toast(`🌅 早起きスタンプ！（ぜんぶで${d.stamps}こ）` + (d.badge ? '　🎉「早起きバッジ」をもらいました！' : ''), 6000);
+      if (d.kind === 'newyear') { $('#newyear-title').textContent = `あけましておめでとう！ ${d.year}年`; showWhenFree($('#newyear-dialog')); }
+      refreshFun(true);
+    });
     // 誕生日のお祝いカード（その日にはじめて入ったとき）
     socket.on('birthday', ({ name, message, gift }) => {
       $('#bday-title').textContent = `${name}さん、お誕生日おめでとう！`;
@@ -143,7 +149,7 @@
       state.counts = d.rooms; state.reactions = d.reactions;
       state.classes = d.classes || {}; state.classCall = !!d.classCall;
       state.path = []; state.pathSeat = null; state.ready = true;
-      buildReactions(); updateAll(); refreshWeek(true);
+      buildReactions(); updateAll(); refreshWeek(true); refreshFun(true);
     });
     socket.on('class-state', (c) => { state.classes = c; state.call.sync(); });
     socket.on('class-ended', ({ room, reason }) => {
@@ -369,6 +375,48 @@
   });
   // 自習室から出たら、書きかけの画面は閉じる
   setInterval(() => { if ($('#plan-dialog').open && state.me && state.me.room !== 'class3') $('#plan-dialog').close(); }, 1000);
+
+  // ───────── 季節のお楽しみ（がんばりサンタ・年越し・朝活） ─────────
+  // ほかの画面が開いていないときに出す
+  function showWhenFree(d) {
+    const show = () => { if (d.open) return; if (document.querySelector('dialog[open]')) return setTimeout(show, 1500); d.showModal(); };
+    setTimeout(show, 600);
+  }
+  let funBusy = false, lastFunAt = 0, santaAsked = false;
+  async function refreshFun(force) {
+    if (!state.user || state.user.role !== 'student') { $('#fun-chip').hidden = true; return; }
+    if (funBusy || (!force && Date.now() - lastFunAt < 50_000)) return;
+    funBusy = true; lastFunAt = Date.now();
+    try {
+      const g = await api('GET', '/api/me/ganbari');
+      const f = g.fun || {};
+      state.fun = f;
+      const chips = [];
+      if (f.santa && f.santa.phase === 'count') chips.push(f.santa.eligible ? `🎅 がんばりサンタ ✓ 25日をおたのしみに` : `🎅 がんばりサンタ ${f.santa.days}/${f.santa.need}日`);
+      const hm = new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Tokyo' });
+      if (f.morning && hm >= '06:00' && hm < '08:00') chips.push(f.morning.today >= f.morning.minutes ? `🌅 朝活 今日のスタンプ ✓（ぜんぶで${f.morning.stamps}こ）` : `🌅 朝活 ${f.morning.today}/${f.morning.minutes}分（スタンプ${f.morning.stamps}こ）`);
+      $('#fun-chip').textContent = chips.join('\n'); $('#fun-chip').style.whiteSpace = 'pre-line'; $('#fun-chip').hidden = !chips.length;
+      // 🎅 プレゼント（12/25〜1/7・がんばった人）
+      if (f.santa && f.santa.phase === 'gift' && f.santa.eligible && !f.santa.opened && !santaAsked) { santaAsked = true; showWhenFree($('#santa-dialog')); }
+    } catch (e) { /* 次の機会に */ } finally { funBusy = false; }
+  }
+  setInterval(() => refreshFun(), 60_000);
+  $('#santa-later').onclick = () => { $('#santa-dialog').close(); };
+  $('#santa-open').onclick = async () => {
+    const box = $('#santa-box'); box.classList.add('shake'); $('#santa-open').disabled = true;
+    try {
+      const r = await api('POST', '/api/me/santa/open');
+      setTimeout(() => {
+        box.classList.remove('shake');
+        box.textContent = r.item ? r.item.emoji : '💰';
+        $('#santa-title').textContent = r.item ? `「${r.item.name}」が入っていたよ！` : `${r.points}ポイントが入っていたよ！`;
+        $('#santa-msg').textContent = r.item ? '着せかえでつけられるよ（お店では買えない、がんばった人だけのアイテム）' : '';
+        $('#santa-open').hidden = true; $('#santa-later').textContent = 'とじる';
+        refreshFun(true);
+      }, 1500);
+    } catch (e) { box.classList.remove('shake'); $('#santa-open').disabled = false; toast(e.message); }
+  };
+  $('#newyear-close').onclick = () => $('#newyear-dialog').close();
 
   $('#bday-close').onclick = () => { $('#bday-dialog').close(); if (state.gb && state.gb.refreshForest) state.gb.refreshForest(); };
   $('#seat-close').onclick = () => { $('#seat-dialog').close(); standingSince = Date.now(); };

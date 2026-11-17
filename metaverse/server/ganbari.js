@@ -73,6 +73,8 @@ if (!db.prepare('PRAGMA table_info(users)').all().some(c => c.name === 'visit_da
 }
 db.exec(`CREATE TABLE IF NOT EXISTS study_plans (user_id INTEGER NOT NULL, day TEXT NOT NULL, items TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (user_id, day))`);
 db.exec(`CREATE TABLE IF NOT EXISTS late_alerts (user_id INTEGER NOT NULL, day TEXT NOT NULL, sent_at TEXT NOT NULL, PRIMARY KEY (user_id, day))`);
+// お楽しみ（朝活など）でもらったボーナスポイント。reason は同じものを二重にもらわないための印
+db.exec(`CREATE TABLE IF NOT EXISTS bonus_points (user_id INTEGER NOT NULL, reason TEXT NOT NULL, points INTEGER NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (user_id, reason))`);
 db.exec(`CREATE TABLE IF NOT EXISTS birthday_cards (user_id INTEGER NOT NULL, year INTEGER NOT NULL, shown_at TEXT NOT NULL, PRIMARY KEY (user_id, year))`);
 // 着せかえの場所を増やした（洋服・手に持つもの・着ぐるみ）
 for (const col of ['clothes', 'hand', 'costume']) {
@@ -122,6 +124,8 @@ function defaults(today = jst()) {
     dressup: { mode: 'always', periods: [] }, // 着せかえ期間：always＝いつでも / periods＝決めた期間だけ
     events: Object.fromEntries(EVENTS.map(e => [e.id, true])), // 季節の飾り（オン/オフ）
     birthdayMessage: 'いつもがんばっているね。すてきな1年になりますように！', // 誕生日カードのひとこと
+    // 季節のお楽しみ（オン/オフと条件）
+    fun: { santa: true, santaDays: 10, santaMinMinutes: 30, toshikoshi: true, asakatsu: true, asakatsuMinutes: 15, asakatsuPoints: 3, asakatsuBadge: 10 },
   };
 }
 
@@ -171,6 +175,7 @@ function getConfig() {
     ...d, ...saved, window: { ...d.window, ...(saved.window || {}) }, trees,
     dressup: { ...d.dressup, ...(saved.dressup || {}) }, events: { ...d.events, ...(saved.events || {}) },
     hs: { ...d.hs, ...shs, window: { ...d.hs.window, ...(shs.window || {}) } },
+    fun: { ...d.fun, ...(saved.fun || {}) },
   };
 }
 // その日の数え方（曜日ごとの設定があればそれ、なければ毎日同じ設定）
@@ -272,6 +277,18 @@ function setConfig(patch, actorId) {
       out[k] = v;
     }
     c.streakByGrade = out;
+  }
+  if (p.fun !== undefined) {
+    const f = p.fun || {}, out = { ...c.fun };
+    for (const k of ['santa', 'toshikoshi', 'asakatsu']) if (f[k] !== undefined) out[k] = !!f[k];
+    const lim = { santaDays: [1, 24, 'がんばりサンタの日数は1〜24日'], santaMinMinutes: [1, 600, 'がんばりサンタの1日の時間は1〜600分'],
+      asakatsuMinutes: [1, 120, '朝活の時間は1〜120分'], asakatsuPoints: [0, 100, '朝活のポイントは0〜100'], asakatsuBadge: [1, 100, '早起きバッジのスタンプ数は1〜100'] };
+    for (const [k, [mn, mx, msg]] of Object.entries(lim)) {
+      if (f[k] === undefined) continue;
+      if (!int(f[k], mn, mx)) return msg + 'にしてください';
+      out[k] = f[k];
+    }
+    c.fun = out;
   }
   if (p.birthdayMessage !== undefined) {
     const m = String(p.birthdayMessage || '').replace(/[\u0000-\u0009\u000b-\u001f<>]/g, '').trim();
@@ -482,6 +499,12 @@ const SHOP = [
   { id: 'diamond', slot: 'head', emoji: '💎', name: 'ダイヤのかざり', price: 1000 },
   // 誕生日のプレゼント（お店では買えない。誕生日に入室するともらえる）
   { id: 'bday_cake', slot: 'head', emoji: '🎂', name: 'バースデーケーキの帽子', price: 0, special: 'birthday' },
+  // がんばりサンタのプレゼント（12月にがんばった人だけ。お店では買えない）
+  { id: 'x_star', slot: 'head', emoji: '🌟', name: 'ツリーの星', price: 0, special: 'santa' },
+  { id: 'x_reindeer', slot: 'pet', emoji: '🦌', name: 'トナカイ', price: 0, special: 'santa' },
+  { id: 'x_snow', slot: 'pet', emoji: '☃️', name: 'ゆきだるまくん', price: 0, special: 'santa' },
+  { id: 'x_candy', slot: 'hand', emoji: '🍭', name: 'キャンディの杖', price: 0, special: 'santa' },
+  { id: 'x_bell', slot: 'hand', emoji: '🔔', name: 'クリスマスベル', price: 0, special: 'santa' },
   // 洋服（形と色で表示）
   { id: 'uniform', slot: 'clothes', style: 'uniform', emoji: '👔', name: '制服', price: 30 },
   { id: 'parka', slot: 'clothes', style: 'parka', emoji: '🧥', name: 'パーカー', price: 30 },
@@ -542,7 +565,8 @@ function points(userId, date = new Date()) {
   // ポイントは年度をまたいで引きつぐ（数え始めた日からの合計）
   const gu = db.prepare('SELECT grade FROM users WHERE id = ?').get(userId);
   const bonus = gu && isHS(gu.grade) ? hsWeeks(userId, date, c).achievedWeeks * c.hs.weekBonus : 0; // 高校生：週のノルマ達成ボーナス
-  const earned = Math.floor(minutesBetween(userId, c.pointsFrom, today) / c.minutesPerPoint) + bonus;
+  const extra = db.prepare('SELECT COALESCE(SUM(points), 0) AS s FROM bonus_points WHERE user_id = ?').get(userId).s; // 朝活など
+  const earned = Math.floor(minutesBetween(userId, c.pointsFrom, today) / c.minutesPerPoint) + bonus + extra;
   const spent = db.prepare('SELECT COALESCE(SUM(price), 0) AS s FROM shop_owned WHERE user_id = ?').get(userId).s;
   return { earned, spent, balance: earned - spent, yearMinutes: minutesBetween(userId, c.yearStart, today) };
 }
@@ -851,6 +875,7 @@ function celebrateBirthday(userId, date = new Date()) {
 }
 
 module.exports = {
+  itemById,
   setPlan, planOf, normVisit, lateStudents,
   HS_GRADES, isHS, hsWeeks, titleOf, TITLES, mondayOf,
   normBirthday, birthdayInfo, celebrateBirthday,

@@ -9,6 +9,7 @@ const realtime = require('./realtime');
 const livekit = require('./livekit');
 const notify = require('./notify');
 const ganbari = require('./ganbari');
+const fun = require('./fun');
 const kanken = require('./kanken');
 
 const PORT = Number(process.env.PORT || 3000);
@@ -176,6 +177,7 @@ app.get('/api/me/ganbari', auth.requireAuth, (req, res) => {
     shop: ganbari.shopFor(u.id), goal: term ? ganbari.goalOf(u.id, term.key) : null,
     dressup: ganbari.dressupInfo(), myItems: ganbari.getEquip(u.id, { ignorePeriod: true }).ids,
     hs: ganbari.isHS(u.grade) ? { ...ganbari.hsWeeks(u.id), title: ganbari.titleOf(u.id), plan: ganbari.planOf(u.id), visitDays: u.visit_days ? u.visit_days.split(',').map(Number) : [], visitTime: u.visit_time || null } : null,
+    fun: fun.statusFor(u.id),
     rules: { minutesPerPoint: c.minutesPerPoint, streakMin: ganbari.streakMinFor(u.id, c), window: c.window, window2: c.window2, requireSeat: c.requireSeat, today: ganbari.ruleFor(today, c, ganbari.isHS(u.grade) ? 'hs' : null) },
   });
 });
@@ -201,6 +203,16 @@ app.post('/api/me/goal', auth.requireAuth, (req, res) => {
 });
 // 学年の木（ログインしている人なら誰でも見られる）
 app.get('/api/forest', auth.requireAuth, (req, res) => res.json(ganbari.forest()));
+
+// ── 季節のお楽しみ ──
+app.post('/api/me/santa/open', auth.requireAuth, (req, res) => {
+  if (req.user.role !== 'student') return bad(res, '生徒の機能です', 403);
+  const r = fun.openSanta(req.user.id);
+  if (r.error) return bad(res, r.error);
+  realtime.refreshGanbari(req.user.id);
+  res.json({ ok: true, ...r });
+});
+
 
 // 保護者レポート（ログイン不要。リンクに含まれる合いことばで1人分だけ見られる）
 app.post('/api/report-data', (req, res) => {

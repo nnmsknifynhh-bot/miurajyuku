@@ -11,6 +11,7 @@ const { db, now, audit, getSetting } = require('./db');
 const livekit = require('./livekit');
 const notify = require('./notify');
 const ganbari = require('./ganbari');
+const fun = require('./fun');
 const kanken = require('./kanken');
 const { can, canEnterRoom } = require('./permissions');
 
@@ -700,6 +701,16 @@ function attach(httpServer) {
         const s = ganbari.streak(id);
         if (s !== p.streak) { p.streak = s; io.emit('user-updated', { id, streak: s }); }
         p.socket.emit('study-minute');
+      }
+      // 🌅 朝活チャレンジ：朝6〜8時に数えた時間で早起きスタンプ
+      for (const r of fun.morningTick(added)) {
+        const p = online.get(r.id);
+        if (p) p.socket.emit('fun-event', { kind: 'asa', stamps: r.stamps, badge: r.badge });
+      }
+      // 🎆 年越し自習：年が明けた瞬間（0:00〜0:10）に自習室にいた生徒にバッジ
+      const ny = fun.toshikoshiYear();
+      if (ny) for (const p of online.values()) {
+        if (p.user.role === 'student' && SM.isStudyRoom(p.room) && !p.away && fun.awardToshikoshi(p.id, ny)) p.socket.emit('fun-event', { kind: 'newyear', year: ny });
       }
       for (const p of online.values()) { updateToday(p); refreshBirthday(p); refreshHS(p); } // 日付が変わったときも 0 にもどる
       // 決めた曜日・時刻を過ぎても来ていない高校生を、先生に知らせる
