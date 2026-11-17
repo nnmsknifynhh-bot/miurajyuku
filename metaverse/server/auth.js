@@ -103,10 +103,19 @@ function recordFailure(key, max) {
   attempts.set(key, a);
 }
 function clearFailures(key) { attempts.delete(key); }
+// ロックを外す（オーナーが管理画面から）。loginId を渡すとその人、渡さないと全部（端末ごとのロックもふくむ）
+function unlock(loginId) {
+  if (loginId == null) { const n = [...attempts.values()].filter(a => a.until > Date.now()).length; attempts.clear(); return n; }
+  const had = isLocked('id:' + loginId);
+  attempts.delete('id:' + loginId);
+  return had ? 1 : 0;
+}
+// あと何回まちがえるとロックされるか（ID ごと）
+function failuresLeft(key, max) { const a = attempts.get(key); return a && !(a.until > Date.now()) ? max - a.count : max; }
 setInterval(() => { const t = Date.now(); for (const [k, a] of attempts) if (!a.until || a.until < t) if (!a.count) attempts.delete(k); }, 10 * 60e3).unref();
 setInterval(() => db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(now()), 60 * 60e3).unref();
 
 module.exports = {
   hashPassword, verifyPassword, DUMMY_HASH, createSession, setSessionCookie, clearSessionCookie, revokeUserSessions,
-  loadUser, userFromRequest, requireAuth, requireRole, isLocked, recordFailure, clearFailures, LOCK_MINUTES,
+  loadUser, userFromRequest, requireAuth, requireRole, isLocked, recordFailure, clearFailures, unlock, failuresLeft, LOCK_MINUTES,
 };

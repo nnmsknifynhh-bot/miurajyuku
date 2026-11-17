@@ -60,12 +60,14 @@
       const name = el('div', 'name', u.displayName);
       name.append(el('span', 'badge ' + u.role, ROLE_LABEL[u.role]));
       if (!u.isActive) name.append(el('span', 'badge off', '無効'));
+      if (u.locked) name.append(el('span', 'badge off', '🔒 ロック中'));
       const sub = [`ID: ${u.loginId}`, ...(u.role === "student" ? [`学年: ${u.grade || "未設定"}`] : []), ...(u.birthday ? [`🎂 ${Number(u.birthday.slice(0, 2))}月${Number(u.birthday.slice(3))}日${u.birthdayPublic ? '' : '（先生だけ）'}`] : []), `ログイン中の端末: ${u.activeSessions}`];
       if (u.role === 'teacher') sub.push('担当: ' + (u.rooms.length ? u.rooms.map(roomName).join('・') : 'なし'));
       info.append(name, el('div', 'sub', sub.join('　')));
       const actions = el('div', 'actions');
       const isSelf = u.id === me.id;
       const btn = (label, cls, fn) => { const b = el('button', 'btn small ' + cls, label); b.onclick = fn; actions.append(b); };
+      if (u.locked) btn('🔓 ロックを解除', '', () => unlock(u));
       btn('編集', 'secondary', () => openEditor(u));
       if (u.role !== 'owner') {
         btn(u.isActive ? '無効にする' : '有効にする', u.isActive ? 'danger' : '', () => toggleActive(u));
@@ -90,6 +92,10 @@
     try { await api('PATCH', `/api/admin/users/${u.id}`, { isActive: !u.isActive }); toast('更新しました'); loadUsers(); }
     catch (e) { toast(e.message); }
   }
+  async function unlock(u) {
+    try { await api('POST', `/api/admin/users/${u.id}/unlock`); toast(`${u.displayName} さんのロックを解除しました。すぐにログインできます`); loadUsers(); }
+    catch (e) { toast(e.message); }
+  }
   async function revoke(u) {
     if (!confirm(`${u.displayName} さんのすべての端末をログアウトさせますか？`)) return;
     try { const r = await api('POST', `/api/admin/users/${u.id}/revoke-sessions`); toast(`${r.revoked}台の端末をログアウトさせました`); loadUsers(); }
@@ -98,6 +104,11 @@
 
   // ── 追加・編集ダイアログ ──
   $('#add-user').onclick = () => openEditor(null);
+  $('#unlock-all').onclick = async () => {
+    if (!confirm('ログインのまちがいでロックされている人を、全員解除しますか？')) return;
+    try { const r = await api('POST', '/api/admin/unlock-all'); toast(r.count ? `${r.count}件のロックを解除しました` : 'ロックされている人はいませんでした'); loadUsers(); }
+    catch (e) { toast(e.message); }
+  };
   $('#user-cancel').onclick = () => $('#user-dialog').close();
   document.querySelectorAll('#role-pick input').forEach(r => r.addEventListener('change', () => renderPermFields(currentRole(), null)));
   const currentRole = () => editing ? editing.role : document.querySelector('#role-pick input:checked').value;

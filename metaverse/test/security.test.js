@@ -137,3 +137,21 @@ test('生徒の画面・API から、ほかの人の個人情報（ログインI
   assert.equal((await http('GET', '/api/admin/presence', null, stu)).status, 403);
   assert.equal((await http('GET', '/api/admin/users', null, stu)).status, 403);
 });
+
+test('ログインのロック：のこり回数を知らせる。オーナーはすぐ解除できる（先生はできない）', async () => {
+  await http('POST', '/api/admin/users', { role: 'student', displayName: 'ゆう', loginId: 'yuu1', password: 'password123' }, owner);
+  const bad = async () => { const r = await http('POST', '/api/login', { loginId: 'yuu1', password: 'wrongpass99' }); if (!r.data) throw new Error('status ' + r.status); return r; };
+  assert.doesNotMatch((await bad()).data.error, /あと/);
+  assert.match((await bad()).data.error, /あと3回/);
+  assert.match((await bad()).data.error, /あと2回/);
+  assert.match((await bad()).data.error, /あと1回/);
+  assert.match((await bad()).data.error, /15分ほど入れません/);
+  assert.equal((await http('POST', '/api/login', { loginId: 'yuu1', password: 'password123' })).status, 429, '正しいパスワードでも入れない');
+  const list = (await http('GET', '/api/admin/users', null, owner)).data.users;
+  const u = list.find(x => x.loginId === 'yuu1');
+  assert.equal(u.locked, true);
+  assert.equal((await http('POST', `/api/admin/users/${u.id}/unlock`, {}, tch)).status, 403);
+  assert.equal((await http('POST', `/api/admin/users/${u.id}/unlock`, {}, owner)).status, 200);
+  assert.equal((await http('POST', '/api/login', { loginId: 'yuu1', password: 'password123' })).status, 200, '解除するとすぐ入れる');
+  assert.equal((await http('POST', '/api/admin/unlock-all', {}, owner)).status, 200);
+});

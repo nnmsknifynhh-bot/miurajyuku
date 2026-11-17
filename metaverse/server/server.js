@@ -112,14 +112,17 @@ app.post('/api/login', (req, res) => {
   const password = String(req.body.password || '');
   const ipKey = 'ip:' + req.ip, idKey = 'id:' + loginId;
   if (auth.isLocked(ipKey) || auth.isLocked(idKey)) {
-    return bad(res, `ログインの失敗が続いたため、${auth.LOCK_MINUTES}分ほど待ってからもう一度ためしてください`, 429);
+    return bad(res, `ログインの失敗が続いたため、${auth.LOCK_MINUTES}分ほど待ってからもう一度ためしてください（先生にたのむと、すぐ解除できます）`, 429);
   }
   const row = db.prepare('SELECT id, password_hash, is_active FROM users WHERE login_id = ?').get(loginId);
   const ok = auth.verifyPassword(password, row ? row.password_hash : auth.DUMMY_HASH) && row;
   if (!ok || !row.is_active) {
     auth.recordFailure(ipKey, 20); auth.recordFailure(idKey, 5);
     audit(row ? row.id : null, 'login.failed', loginId, row && !row.is_active ? { reason: 'inactive' } : null, req.ip);
-    return bad(res, row && ok && !row.is_active ? 'このアカウントは使えません。先生に相談してください' : 'IDかパスワードがちがいます', 401);
+    if (row && ok && !row.is_active) return bad(res, 'このアカウントは使えません。先生に相談してください', 401);
+    const left = auth.failuresLeft(idKey, 5);
+    if (auth.isLocked(idKey)) return bad(res, `IDかパスワードがちがいます。まちがいが続いたため、${auth.LOCK_MINUTES}分ほど入れません（先生にたのむと、すぐ解除できます）`, 401);
+    return bad(res, 'IDかパスワードがちがいます' + (left <= 3 ? `（あと${left}回まちがえると、${auth.LOCK_MINUTES}分入れなくなります）` : ''), 401);
   }
   auth.clearFailures(idKey);
   const s = auth.createSession(row.id, req);
@@ -289,7 +292,20 @@ admin.get('/meta', (req, res) => {
 admin.get('/users', requireOwner, (req, res) => {
   const ids = db.prepare("SELECT id FROM users ORDER BY CASE role WHEN 'owner' THEN 0 WHEN 'teacher' THEN 1 ELSE 2 END, display_name").all();
   const sessionCounts = new Map(db.prepare('SELECT user_id, COUNT(*) AS n FROM sessions WHERE expires_at > ? GROUP BY user_id').all(now()).map(r => [r.user_id, r.n]));
-  res.json({ users: ids.map(({ id }) => ({ ...publicUser(auth.loadUser(id)), activeSessions: sessionCounts.get(id) || 0 })) });
+  res.json({ users: ids.map(({ id }) => { const u = auth.loadUser(id); return { ...publicUser(u), activeSessions: sessionCounts.get(id) || 0, locked: !!auth.isLocked('id:' + u.login_id) }; }) });
+});
+// ログインのロック（まちがいが続いたとき）を外す
+admin.post('/users/:id/unlock', requireOwner, (req, res) => {
+  const u = auth.loadUser(Number(req.params.id));
+  if (!u) return bad(res, 'ユーザーが見つかりません', 404);
+  auth.unlock(u.login_id);
+  audit(req.user.id, 'user.unlocked', u.login_id, null, req.ip);
+  res.json({ ok: true });
+});
+admin.post('/unlock-all', requireOwner, (req, res) => {
+  const n = auth.unlock();
+  audit(req.user.id, 'user.unlocked_all', null, { count: n }, req.ip);
+  res.json({ ok: true, count: n });
 });
 
 function applyPermissionsAndRooms(userId, role, permissions, rooms) {
