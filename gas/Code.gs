@@ -491,10 +491,10 @@ function callGemini_(parts, schema, opts) {
     body.generationConfig.responseSchema = schema;
   }
 
-  let lastError = '';
+  const errors = [];
   for (const model of CONFIG.GEMINI_MODELS) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 4; attempt++) {
       const res = UrlFetchApp.fetch(url, {
         method: 'post',
         contentType: 'application/json',
@@ -508,18 +508,27 @@ function callGemini_(parts, schema, opts) {
         const cand = data.candidates && data.candidates[0];
         const txt = cand && cand.content && cand.content.parts &&
           cand.content.parts.map((p) => p.text || '').join('');
-        if (!txt) throw new Error('Geminiから採点結果が返りませんでした');
+        if (!txt) throw new Error('Geminiから結果が返りませんでした');
         return txt;
       }
-      lastError = `Gemini エラー (${model}, ${code}): ${res.getContentText().slice(0, 300)}`;
-      if (code === 429 || code >= 500) {
-        Utilities.sleep(5000 * (attempt + 1)); // 混雑・無料枠の上限 → 少し待って再試行
-        continue;
+      let msg = res.getContentText();
+      try { msg = JSON.parse(msg).error.message || msg; } catch (e) {}
+      const line = `${model}: ${code} ${String(msg).slice(0, 150)}`;
+      Logger.log(line);
+      if (code === 401 || code === 403) {
+        throw new Error('APIキーが正しくありません（Code.gs の GEMINI_API_KEY を確認）: ' + line);
       }
-      break; // 404（モデル廃止など）→ 次のモデルへ
+      if (code === 429 || code >= 500) {
+        // 混雑・無料枠の上限 → 少しずつ間を空けて再試行（5秒・10秒・20秒）
+        if (attempt < 3) { Utilities.sleep(5000 * Math.pow(2, attempt)); continue; }
+      }
+      errors.push(line);
+      break; // 404（モデル終了など）や再試行切れ → 次のモデルへ
     }
   }
-  throw new Error(lastError);
+  const busy = errors.some((e) => / (429|5\d\d) /.test(e));
+  throw new Error((busy ? 'GoogleのAIが混雑しているか、無料枠の上限です。時間をおいて「AIで採点し直す」を押してください。\n' : '') +
+    errors.join('\n'));
 }
 
 /** [ymin, xmin, ymax, xmax]（0〜1000）に整える。おかしな値なら null */
