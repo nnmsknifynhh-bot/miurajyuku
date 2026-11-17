@@ -111,3 +111,17 @@ test('学年ごとの級はオーナーが変えられる。オフにすると�
   assert.equal((await http('GET', '/api/quiz/status', null, U.e5.cookie)).data.required, false);
   assert.equal((await http('PATCH', '/api/admin/kanken/config', { enabled: true }, U.tch.cookie)).status, 403);
 });
+
+test('まとめて登録：表計算ソフトから貼り付けた問題を一度に登録できる（同じ問題はとばす・まちがいは行ごとに知らせる）', async () => {
+  const rows = [];
+  for (let i = 0; i < 300; i++) rows.push({ line: i + 1, level: '4級', word: `試験${i}`, answer: 'しけん', wrong: ['しげん', 'じけん', 'しかん'] });
+  rows.push({ line: 301, level: '4級', word: '噴水', answer: 'ふんすい', wrong: ['ほんすい', 'ぶんすい', 'ふきみず'] }); // サンプルと同じ → とばす
+  rows.push({ line: 302, level: '9級', word: 'x', answer: 'a', wrong: ['b', 'c', 'd'] });                       // 級がおかしい
+  rows.push({ line: 303, level: '3級', word: '既存', answer: 'きぞん', wrong: ['きぞん', 'きそん', 'すでぞん'] });  // 同じ読みがある
+  const r = await http('POST', '/api/admin/kanken/questions/bulk', { rows }, owner);
+  assert.equal(r.status, 200);
+  assert.equal(r.data.added, 300);
+  assert.equal(r.data.skipped, 1);
+  assert.deepEqual(r.data.errors.map(e => e.line), [302, 303]);
+  assert.equal((await http('POST', '/api/admin/kanken/questions/bulk', { rows }, U.tch.cookie)).status, 403);
+});

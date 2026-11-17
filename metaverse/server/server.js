@@ -31,7 +31,9 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use('/api', express.json({ limit: '20kb' }));
+// 受け取るデータの大きさの上限（漢字テストのまとめて登録だけ大きめ）
+const jsonSmall = express.json({ limit: '20kb' }), jsonBulk = express.json({ limit: '400kb' });
+app.use('/api', (req, res, next) => (req.path === '/admin/kanken/questions/bulk' ? jsonBulk : jsonSmall)(req, res, next));
 app.use('/api', (req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
   // 他サイトからの書き込みリクエストを拒否（CSRF 対策）
@@ -520,6 +522,11 @@ admin.post('/kanken/questions', requireOwner, (req, res) => {
   const err = kanken.addQuestion(req.body, req.user.id);
   if (err) return bad(res, err);
   res.status(201).json({ ok: true });
+});
+admin.post('/kanken/questions/bulk', requireOwner, (req, res) => {
+  const r = kanken.addBulk(req.body.rows, req.user.id);
+  if (r.error) return bad(res, r.error);
+  res.json(r);
 });
 admin.patch('/kanken/questions/:id', requireOwner, (req, res) => {
   const err = kanken.updateQuestion(Number(req.params.id), req.body, req.user.id);

@@ -99,3 +99,6 @@ h3.sec { margin: 22px 0 8px; font-size: 17px; }
 .kq-word { font-size: 20px; }
 .kq-ans { color: var(--success); font-weight: 700; }
 .kq-acts { margin-left: auto; display: flex; gap: 6px; }
+.kq-preview { display: grid; gap: 6px; }
+tr.kq-bad td { background: #fdecec; }
+tr.kq-auto td { background: #fff8e1; }

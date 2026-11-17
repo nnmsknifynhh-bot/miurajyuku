@@ -172,6 +172,29 @@ function addQuestion(b, actorId) {
   audit(actorId, 'kanken.question_added', v.q.word, null);
   return null;
 }
+// まとめて追加（表計算ソフトから貼り付け）。同じ級・同じ漢字の問題はとばす
+function addBulk(rows, actorId) {
+  if (!Array.isArray(rows) || !rows.length) return { error: '問題がありません' };
+  if (rows.length > 1000) return { error: '一度に登録できるのは1000問までです' };
+  const exists = db.prepare('SELECT 1 FROM quiz_questions WHERE level = ? AND word = ?');
+  const ins = db.prepare('INSERT INTO quiz_questions (level, word, answer, wrong1, wrong2, wrong3, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  let added = 0, skipped = 0;
+  const errors = [];
+  db.exec('BEGIN');
+  try {
+    rows.forEach((r, i) => {
+      const v = validateQuestion(r || {});
+      if (v.error) { errors.push({ line: (r && r.line) || i + 1, error: v.error }); return; }
+      if (exists.get(v.q.level, v.q.word)) { skipped++; return; }
+      ins.run(v.q.level, v.q.word, v.q.answer, ...v.q.wrong, now());
+      added++;
+    });
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
+  audit(actorId, 'kanken.bulk_added', String(added), { skipped, errors: errors.length });
+  return { added, skipped, errors };
+}
+
 function updateQuestion(id, b, actorId) {
   const cur = db.prepare('SELECT * FROM quiz_questions WHERE id = ?').get(id);
   if (!cur) return '問題が見つかりません';
@@ -199,6 +222,6 @@ function stats() {
 }
 
 module.exports = {
-  LEVELS, getConfig, setConfig, levelsFor, required, newQuestion, answer, listQuestions, addQuestion, updateQuestion, deleteQuestion, stats,
+  LEVELS, getConfig, setConfig, levelsFor, required, newQuestion, answer, listQuestions, addQuestion, addBulk, updateQuestion, deleteQuestion, stats,
   _reset: () => { pending.clear(); passedAt.clear(); },
 };
