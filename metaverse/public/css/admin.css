@@ -103,8 +103,16 @@ h3.sec { margin: 22px 0 8px; font-size: 17px; }
 tr.kq-bad td { background: #fdecec; }
 tr.kq-auto td { background: #fff8e1; }
 .gb-week { display: grid; gap: 6px; }
-.gb-wd { display: flex; align-items: center; gap: 6px 14px; flex-wrap: wrap; padding: 8px 10px; border: 2px solid var(--line); border-radius: 12px; }
+.gb-wd { display: grid; gap: 6px; padding: 8px 10px; border: 2px solid var(--line); border-radius: 12px; }
 .gb-wd.off { background: #f6f4f1; opacity: .7; }
-.gb-wd .gb-check:first-child { font-weight: 800; min-width: 64px; }
+.gb-wd > .gb-row:first-child > .gb-check:first-child { font-weight: 800; min-width: 64px; }
 .gb-wd input[type=time] { min-height: 40px; border: 2px solid var(--line); border-radius: 8px; font-size: 16px; padding: 0 6px; }
 .gb-wd input[type=number] { width: 80px; min-height: 40px; border: 2px solid var(--line); border-radius: 8px; font-size: 16px; text-align: center; }
+.gb-slots { display: grid; gap: 6px; }
+.gb-slots input[type=time] { min-height: 40px; border: 2px solid var(--line); border-radius: 8px; font-size: 16px; padding: 0 6px; }
+.gb-slot { min-width: 2em; }
+.gb-wd .gb-row .gb-check { min-width: 3.5em; }
+.gb-slots .gb-row, .gb-wd .gb-row { flex-wrap: nowrap; gap: 4px; }
+.gb-wd > .gb-row:first-child { flex-wrap: wrap; gap: 6px 10px; }
+.gb-slots input[type=time], .gb-wd input[type=time] { width: 112px; min-width: 0; flex: 0 1 112px; }
+.gb-wd .gb-row .gb-check { min-width: 0; white-space: nowrap; }

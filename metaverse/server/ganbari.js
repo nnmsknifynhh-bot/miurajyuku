@@ -84,9 +84,10 @@ const weekdayOf = (day) => new Date(day + 'T00:00:00Z').getUTCDay();
 function defaults(today = jst()) {
   const y = today.month >= 4 ? today.year : today.year - 1;
   return {
-    window: { start: '00:00', end: '24:00' }, // 数える時間帯
+    window: { start: '00:00', end: '24:00' }, // 数える時間帯（朝）
+    window2: null,         // 2つ目の時間帯（夜）。使わないときは null
     dailyCap: 300,         // 1日に数える上限（分）
-    weekly: null,          // 曜日ごとの数え方（null＝毎日同じ）。[日,月,…,土] の7つ：{ on, start, end, cap }
+    weekly: null,          // 曜日ごとの数え方（null＝毎日同じ）。[日,月,…,土] の7つ：{ on, start, end, start2, end2, cap }（夜を使わないときは start2/end2 が null）
     requireSeat: true,     // 席に座っているときだけ数える
     requireCamera: false,  // 見守り写真がオンのとき、カメラがオンのときだけ数える
     streakMin: 90,         // 連続自習に数える1日の最低時間（分）
@@ -129,9 +130,21 @@ function getConfig() {
 function ruleFor(day, c = getConfig()) {
   if (Array.isArray(c.weekly) && c.weekly.length === 7) {
     const w = c.weekly[weekdayOf(day)];
-    return { weekday: WEEKDAYS[weekdayOf(day)], on: !!w.on, start: w.start, end: w.end, cap: w.cap };
+    const windows = [{ start: w.start, end: w.end }];
+    if (w.start2 && w.end2) windows.push({ start: w.start2, end: w.end2 });
+    return { weekday: WEEKDAYS[weekdayOf(day)], on: !!w.on, windows, cap: w.cap };
   }
-  return { weekday: WEEKDAYS[weekdayOf(day)], on: true, start: c.window.start, end: c.window.end, cap: c.dailyCap };
+  const windows = [{ ...c.window }];
+  if (c.window2) windows.push({ ...c.window2 });
+  return { weekday: WEEKDAYS[weekdayOf(day)], on: true, windows, cap: c.dailyCap };
+}
+// 時間帯（1つ目＝朝・2つ目＝夜）のチェック。エラーならメッセージを返す
+function checkWindows(s1, e1, s2, e2, label) {
+  if (!RE_HM.test(s1 || '') || !RE_HM.test(e1 || '') || s1 >= e1) return `${label}の時間帯（1つ目）が正しくありません`;
+  if (s2 == null && e2 == null) return null;
+  if (!RE_HM.test(s2 || '') || !RE_HM.test(e2 || '') || s2 >= e2) return `${label}の時間帯（2つ目）が正しくありません`;
+  if (s2 < e1) return `${label}の2つ目の時間帯は、1つ目が終わってからにしてください`;
+  return null;
 }
 // 連続自習の最低時間を 90分 に変更（以前の初期値20分のまま保存されている場合だけ、1回だけ直す）
 (function migrate() {
@@ -146,9 +159,12 @@ function ruleFor(day, c = getConfig()) {
 function setConfig(patch, actorId) {
   const c = getConfig();
   const p = patch || {};
-  if (p.window) {
-    if (!RE_HM.test(p.window.start || '') || !RE_HM.test(p.window.end || '') || p.window.start >= p.window.end) return '数える時間帯が正しくありません';
-    c.window = { start: p.window.start, end: p.window.end };
+  if (p.window || p.window2 !== undefined) {
+    const w1 = p.window || c.window, w2 = p.window2 !== undefined ? p.window2 : c.window2;
+    const err = checkWindows(w1.start, w1.end, w2 ? w2.start : null, w2 ? w2.end : null, '数える');
+    if (err) return err;
+    c.window = { start: w1.start, end: w1.end };
+    c.window2 = w2 ? { start: w2.start, end: w2.end } : null;
   }
   const int = (v, min, max) => Number.isInteger(v) && v >= min && v <= max;
   if (p.dailyCap !== undefined) { if (!int(p.dailyCap, 10, 1440)) return '1日の上限は10〜1440分にしてください'; c.dailyCap = p.dailyCap; }
@@ -160,11 +176,17 @@ function setConfig(patch, actorId) {
       for (let i = 0; i < 7; i++) {
         const d = p.weekly[i] || {};
         const on = !!d.on, cap = d.cap === undefined ? c.dailyCap : d.cap;
+        const has2 = d.start2 != null || d.end2 != null;
         if (on) {
-          if (!RE_HM.test(d.start || '') || !RE_HM.test(d.end || '') || d.start >= d.end) return `${WEEKDAYS[i]}曜日の時間帯が正しくありません`;
+          const err = checkWindows(d.start, d.end, has2 ? d.start2 : null, has2 ? d.end2 : null, `${WEEKDAYS[i]}曜日`);
+          if (err) return err;
           if (!int(cap, 10, 1440)) return `${WEEKDAYS[i]}曜日の上限は10〜1440分にしてください`;
         }
-        w.push({ on, start: RE_HM.test(d.start || '') ? d.start : '00:00', end: RE_HM.test(d.end || '') ? d.end : '24:00', cap: int(cap, 10, 1440) ? cap : c.dailyCap });
+        const ok2 = has2 && !checkWindows(d.start, d.end, d.start2, d.end2, '');
+        w.push({
+          on, start: RE_HM.test(d.start || '') ? d.start : '00:00', end: RE_HM.test(d.end || '') ? d.end : '24:00',
+          start2: ok2 ? d.start2 : null, end2: ok2 ? d.end2 : null, cap: int(cap, 10, 1440) ? cap : c.dailyCap,
+        });
       }
       if (!w.some(x => x.on)) return '数える曜日を1つ以上えらんでください';
       c.weekly = w;
@@ -279,7 +301,7 @@ function tick(online, opt = {}) {
   const c = getConfig();
   const t = jst(opt.date || new Date());
   const r = ruleFor(t.day, c);
-  if (!r.on || t.hm < r.start || t.hm >= r.end) return [];
+  if (!r.on || !r.windows.some(w => t.hm >= w.start && t.hm < w.end)) return [];
   const added = [];
   const up = db.prepare(`INSERT INTO study_days (user_id, day, auto_min) VALUES (?, ?, 1)
     ON CONFLICT(user_id, day) DO UPDATE SET auto_min = auto_min + 1`);

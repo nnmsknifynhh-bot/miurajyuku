@@ -166,6 +166,30 @@ test('曜日ごとの数え方：数える曜日・時間帯・上限を曜日�
   assert.equal(G.streak(U.b1.id, at(d2)), 1, '毎日数えるなら、その日で途切れる');
 });
 
+test('朝と夜の2つの時間帯で数えられる（毎日同じ設定・曜日ごとの設定）', () => {
+  const day = G.addDays(C().terms[2], 60);
+  assert.equal(G.setConfig({ window: { start: '06:00', end: '08:00' }, window2: { start: '19:00', end: '22:00' } }), null);
+  const o = new Map([[1, fake(U.a2)]]);
+  assert.equal(G.tick(o, { date: at(day, '06:30') }).length, 1, '朝');
+  assert.deepEqual(G.tick(o, { date: at(day, '12:00') }), [], '昼は数えない');
+  assert.equal(G.tick(o, { date: at(day, '21:59') }).length, 1, '夜');
+  assert.deepEqual(G.tick(o, { date: at(day, '22:00') }), [], '夜の終わり');
+  assert.match(G.setConfig({ window: { start: '06:00', end: '20:00' }, window2: { start: '19:00', end: '22:00' } }), /1つ目が終わってから/);
+  assert.equal(G.setConfig({ window: { start: '00:00', end: '24:00' }, window2: null }), null);
+  assert.equal(G.ruleFor(day).windows.length, 1);
+  // 曜日ごと：その曜日だけ朝と夜
+  const wd = new Date(day + 'T00:00:00Z').getUTCDay();
+  const weekly = Array.from({ length: 7 }, () => ({ on: true, start: '00:00', end: '24:00', cap: 300 }));
+  weekly[wd] = { on: true, start: '05:30', end: '07:00', start2: '20:00', end2: '23:00', cap: 300 };
+  assert.equal(G.setConfig({ weekly }), null);
+  assert.deepEqual(G.ruleFor(day).windows, [{ start: '05:30', end: '07:00' }, { start: '20:00', end: '23:00' }]);
+  assert.deepEqual(G.tick(o, { date: at(day, '19:00') }), [], 'その曜日の夜の前');
+  assert.equal(G.tick(o, { date: at(day, '20:15') }).length, 1);
+  weekly[wd] = { ...weekly[wd], start2: '06:00', end2: '09:00' };
+  assert.match(G.setConfig({ weekly }), /1つ目が終わってから/);
+  assert.equal(G.setConfig({ weekly: null }), null);
+});
+
 test('着せかえ：6種類（帽子・洋服・眼鏡・杖や剣・ペット・着ぐるみ）があり、値段に差がある', () => {
   const slots = new Set(G.SHOP.map(i => i.slot));
   for (const sl of ['head', 'clothes', 'face', 'hand', 'pet', 'costume']) assert.ok(slots.has(sl), sl);

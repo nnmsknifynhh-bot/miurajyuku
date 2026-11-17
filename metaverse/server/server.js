@@ -170,7 +170,7 @@ app.get('/api/me/ganbari', auth.requireAuth, (req, res) => {
     points: ganbari.points(u.id), streak: ganbari.streak(u.id), equip: ganbari.getEquip(u.id),
     shop: ganbari.shopFor(u.id), goal: term ? ganbari.goalOf(u.id, term.key) : null,
     dressup: ganbari.dressupInfo(), myItems: ganbari.getEquip(u.id, { ignorePeriod: true }).ids,
-    rules: { minutesPerPoint: c.minutesPerPoint, streakMin: c.streakMin, window: c.window, requireSeat: c.requireSeat, today: ganbari.ruleFor(today, c) },
+    rules: { minutesPerPoint: c.minutesPerPoint, streakMin: c.streakMin, window: c.window, window2: c.window2, requireSeat: c.requireSeat, today: ganbari.ruleFor(today, c) },
   });
 });
 app.post('/api/me/shop/buy', auth.requireAuth, (req, res) => {

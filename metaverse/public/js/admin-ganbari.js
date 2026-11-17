@@ -64,50 +64,71 @@
 
     // ═════ 自習時間の数え方 ═════
     const rule = section('⏱ 自習時間の数え方', '自習室にいて、アプリを見ている（離席していない）生徒の時間を1分ずつ数えます。公平になるように、条件を決めてください。');
-    const wStart = timeInput(c.window.start), wEnd = timeInput(c.window.end);
-    const allDay = check('時間帯を決めない（いつでも数える）', c.window.start === '00:00' && c.window.end === '24:00');
-    const syncWin = () => { wStart.disabled = wEnd.disabled = allDay[1].checked; };
-    allDay[1].onchange = syncWin; syncWin();
+    const endVal = (i) => (i.value === '23:59' ? '24:00' : i.value);
+    // 朝・夜の時間帯の入力欄（1行分）。初期値 w1 / w2（w2 が null なら夜は使わない）
+    const slotInputs = (w1, w2) => {
+      const s1 = timeInput(w1.start), e1 = timeInput(w1.end);
+      const s2 = timeInput(w2 ? w2.start : '18:00'), e2 = timeInput(w2 ? w2.end : '22:00');
+      const all = check('いつでも', w1.start === '00:00' && w1.end === '24:00' && !w2);
+      const night = check('夜も', !!w2);
+      const am = el('span', 'gb-row'); am.append(el('b', 'gb-slot', '朝'), s1, el('span', null, '〜'), e1);
+      const pm = el('span', 'gb-row'); pm.append(night[0], s2, el('span', null, '〜'), e2);
+      const sync = (off) => {
+        s1.disabled = e1.disabled = off || all[1].checked;
+        night[1].disabled = off || all[1].checked;
+        s2.disabled = e2.disabled = off || all[1].checked || !night[1].checked;
+        all[1].disabled = off;
+        am.hidden = pm.hidden = all[1].checked;
+      };
+      const value = () => all[1].checked
+        ? { start: '00:00', end: '24:00', start2: null, end2: null }
+        : { start: s1.value, end: endVal(e1), start2: night[1].checked ? s2.value : null, end2: night[1].checked ? endVal(e2) : null };
+      return { all, night, am, pm, sync, value };
+    };
+    // 毎日同じ数え方
+    const common = slotInputs(c.window, c.window2);
+    const allDay = common.all;
+    const syncCommon = () => common.sync(false);
+    allDay[1].onchange = common.night[1].onchange = syncCommon; syncCommon();
     const cap = numInput(c.dailyCap, 10, 1440), streakMin = numInput(c.streakMin, 1, 600), mpp = numInput(c.minutesPerPoint, 1, 120);
     const seat = check('席に座っているときだけ数える', c.requireSeat), cam = check('見守り写真がオンのときは、カメラがオンのときだけ数える', c.requireCamera);
     const grid = el('div', 'gb-grid');
-    const winRow = el('div', 'gb-row'); winRow.append(wStart, el('span', null, '〜'), wEnd);
-    grid.append(field('数える時間帯', winRow), field('1日に数える上限（分）', cap, '例：300 = 5時間'), field('連続自習🔥に数える1日の最低時間（分）', streakMin), field('何分で1ポイント', mpp));
+    const winRow = el('div', 'gb-slots'); winRow.append(allDay[0], common.am, common.pm);
+    grid.append((() => { const d = el('div', 'field'); d.append(el('span', null, '数える時間帯'), winRow, el('small', null, '朝だけ・夜だけのときは「朝」の欄だけ使ってください')); return d; })(), field('1日に数える上限（分）', cap, '例：300 = 5時間（朝と夜の合計）'), field('連続自習🔥に数える1日の最低時間（分）', streakMin), field('何分で1ポイント', mpp));
     const saveRule = el('button', 'btn', '保存する');
-    saveRule.onclick = () => save({
-      window: allDay[1].checked ? { start: '00:00', end: '24:00' } : { start: wStart.value, end: wEnd.value === '23:59' ? '24:00' : wEnd.value },
-      dailyCap: Number(cap.value), streakMin: Number(streakMin.value), minutesPerPoint: Number(mpp.value),
-      requireSeat: seat[1].checked, requireCamera: cam[1].checked,
-    }, '数え方を保存しました');
     // 曜日ごとの数え方
     const WD = ['日', '月', '火', '水', '木', '金', '土'];
     const byDay = check('曜日ごとに変える（数える曜日・時間帯・上限）', Array.isArray(c.weekly));
     const wkBox = el('div', 'gb-week');
     const wkRows = WD.map((name, i) => {
-      const w = (c.weekly && c.weekly[i]) || { on: true, start: c.window.start, end: c.window.end, cap: c.dailyCap };
+      const w = (c.weekly && c.weekly[i]) || { on: true, start: c.window.start, end: c.window.end, start2: c.window2 && c.window2.start, end2: c.window2 && c.window2.end, cap: c.dailyCap };
       const row = el('div', 'gb-wd');
       const on = check(name + '曜', w.on);
-      const s = timeInput(w.start), e = timeInput(w.end), cp = numInput(w.cap, 10, 1440);
-      const all = check('いつでも', w.start === '00:00' && w.end === '24:00');
-      const sync = () => { const off = !on[1].checked; s.disabled = e.disabled = off || all[1].checked; cp.disabled = all[1].disabled = off; row.classList.toggle('off', off); };
-      on[1].onchange = all[1].onchange = sync; sync();
-      const t = el('span', 'gb-row'); t.append(s, el('span', null, '〜'), e);
+      const sl = slotInputs(w, w.start2 && w.end2 ? { start: w.start2, end: w.end2 } : null);
+      const cp = numInput(w.cap, 10, 1440);
+      const sync = () => { const off = !on[1].checked; sl.sync(off); cp.disabled = off; row.classList.toggle('off', off); };
+      on[1].onchange = sl.all[1].onchange = sl.night[1].onchange = sync; sync();
       const capL = el('span', 'gb-row'); capL.append(el('span', 'muted', '上限'), cp, el('span', 'muted', '分'));
-      row.append(on[0], all[0], t, capL);
+      const head = el('div', 'gb-row'); head.append(on[0], sl.all[0], capL);
+      row.append(head, sl.am, sl.pm);
       wkBox.append(row);
-      return () => ({ on: on[1].checked, start: all[1].checked ? '00:00' : s.value, end: all[1].checked ? '24:00' : (e.value === '23:59' ? '24:00' : e.value), cap: Number(cp.value) });
+      return () => ({ on: on[1].checked, ...sl.value(), cap: Number(cp.value) });
     });
     const wkNote = el('p', 'muted', 'チェックをはずした曜日は自習時間を数えません。その曜日は連続自習🔥も途切れません（お休みの日として、とばして数えます）。');
-    const syncWeek = () => { const w = byDay[1].checked; wkBox.hidden = wkNote.hidden = !w; grid.querySelectorAll('.gb-common').forEach(x => { x.hidden = w; }); allDay[0].hidden = w; };
+    const syncWeek = () => { const w = byDay[1].checked; wkBox.hidden = wkNote.hidden = !w; grid.querySelectorAll('.gb-common').forEach(x => { x.hidden = w; }); };
     grid.children[0].classList.add('gb-common'); grid.children[1].classList.add('gb-common');
     byDay[1].onchange = syncWeek; syncWeek();
-    saveRule.onclick = () => save({
-      window: allDay[1].checked ? { start: '00:00', end: '24:00' } : { start: wStart.value, end: wEnd.value === '23:59' ? '24:00' : wEnd.value },
-      dailyCap: Number(cap.value), streakMin: Number(streakMin.value), minutesPerPoint: Number(mpp.value),
-      requireSeat: seat[1].checked, requireCamera: cam[1].checked,
-      weekly: byDay[1].checked ? wkRows.map(f => f()) : null,
-    }, '数え方を保存しました');
-    rule.append(allDay[0], byDay[0], wkBox, wkNote, grid, seat[0], cam[0], saveRule);
+    saveRule.onclick = () => {
+      const v = common.value();
+      const y = window.scrollY;
+      return save({
+        window: { start: v.start, end: v.end }, window2: v.start2 ? { start: v.start2, end: v.end2 } : null,
+        dailyCap: Number(cap.value), streakMin: Number(streakMin.value), minutesPerPoint: Number(mpp.value),
+        requireSeat: seat[1].checked, requireCamera: cam[1].checked,
+        weekly: byDay[1].checked ? wkRows.map(f => f()) : null,
+      }, '数え方を保存しました').then(ok => { if (ok) load(root, ctx).then(() => window.scrollTo(0, y)); });
+    };
+    rule.append(byDay[0], wkBox, wkNote, grid, seat[0], cam[0], saveRule);
 
     // ═════ 学期と年度 ═════
     const termSec = section('📅 学期と年度', `今は ${cfg.current ? cfg.current.name : '学期の期間外'}です。保護者レポートは学期ごとに作れます。`);
