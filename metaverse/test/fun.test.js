@@ -43,16 +43,23 @@ test('がんばりサンタ：11/1〜30に学年の最低時間（中2は60分�
   assert.match(G.buy(U.bbb.id, 'x_reindeer'), /買えません/, 'お店では買えない');
 });
 
-test('年越し自習：12/31 23:50〜1/1 0:10。バッジは明けた年で1年に1回', () => {
-  assert.equal(F.toshikoshiYear(at(`${Y}-12-31`, '23:49')), null);
-  assert.equal(F.toshikoshiYear(at(`${Y}-12-31`, '23:50')), Y + 1, '23:50から（明けた年）');
-  assert.equal(F.toshikoshiYear(at(`${Y}-12-31`, '23:59')), Y + 1);
-  assert.equal(F.toshikoshiYear(at(`${Y + 1}-01-01`, '00:00')), Y + 1);
-  assert.equal(F.toshikoshiYear(at(`${Y + 1}-01-01`, '00:09')), Y + 1);
-  assert.equal(F.toshikoshiYear(at(`${Y + 1}-01-01`, '00:10')), null, '0:10まで');
-  assert.equal(F.awardToshikoshi(U.aaa.id, Y + 1), true);
-  assert.equal(F.awardToshikoshi(U.aaa.id, Y + 1), false, '2回目はなし');
+test('年越し自習：23:50〜0:10に自習室にいて（20分のうち18分以上）、0:10にもいる生徒にバッジ', () => {
+  const tick = (ids, day, hm) => F.toshikoshiTick(ids, at(day, hm));
+  const minutes = [];
+  for (let m = 50; m < 60; m++) minutes.push([`${Y}-12-31`, `23:${m}`]);
+  for (let m = 0; m < 10; m++) minutes.push([`${Y + 1}-01-01`, `00:0${m}`]);
+  assert.deepEqual(tick([U.aaa.id], `${Y}-12-31`, '23:49'), { year: null, awarded: [] }, '23:50より前は数えない');
+  minutes.forEach(([d, hm], i) => {
+    const ids = [U.aaa.id];
+    if (i >= 5) ids.push(U.bbb.id); // bbb は 23:55 から（15分だけ）
+    assert.deepEqual(tick(ids, d, hm).awarded, [], '0:10までは、まだあげない');
+  });
+  const r = tick([U.aaa.id, U.bbb.id], `${Y + 1}-01-01`, '00:10');
+  assert.deepEqual(r.awarded, [U.aaa.id], 'ずっといた aaa だけ');
+  assert.equal(r.year, Y + 1);
+  assert.deepEqual(tick([U.aaa.id], `${Y + 1}-01-01`, '00:11').awarded, [], '2回目はなし');
   assert.ok(F.badgesOf(U.aaa.id).some(b => b.label.includes('年越し自習')));
+  assert.ok(!F.badgesOf(U.bbb.id).some(b => b.label.includes('年越し自習')));
 });
 
 test('朝活：6:00〜7:30に数えた時間が30分になった日にスタンプと3ポイント（バッジはなし）', () => {

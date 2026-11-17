@@ -5,6 +5,7 @@ const G = require('./ganbari');
 db.exec(`
 CREATE TABLE IF NOT EXISTS badges (user_id INTEGER NOT NULL, badge TEXT NOT NULL, label TEXT NOT NULL, emoji TEXT NOT NULL, earned_at TEXT NOT NULL, PRIMARY KEY (user_id, badge));
 CREATE TABLE IF NOT EXISTS santa_gifts (user_id INTEGER NOT NULL, year INTEGER NOT NULL, item TEXT NOT NULL, opened_at TEXT NOT NULL, PRIMARY KEY (user_id, year));
+CREATE TABLE IF NOT EXISTS toshikoshi_log (user_id INTEGER NOT NULL, year INTEGER NOT NULL, minutes INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user_id, year));
 CREATE TABLE IF NOT EXISTS study_morning (user_id INTEGER NOT NULL, day TEXT NOT NULL, minutes INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user_id, day));
 `);
 
@@ -66,6 +67,29 @@ function toshikoshiYear(date = new Date()) {
   if (md(t) === '01-01' && t.hm < '00:10') return t.year;
   return null;
 }
+// 1分ごとに呼ぶ：23:50〜0:09 は自習室にいた分を数え、0:10 にまだいて、20分のうち18分以上いた生徒にバッジ。バッジをあげた生徒の id を返す
+const TOSHIKOSHI_NEED = 18;
+function toshikoshiTick(presentIds, date = new Date()) {
+  const t = G.jst(date);
+  if (!cfg().toshikoshi) return { year: null, awarded: [] };
+  const m = md(t);
+  if ((m === '12-31' && t.hm >= '23:50') || (m === '01-01' && t.hm < '00:10')) {
+    const year = m === '12-31' ? t.year + 1 : t.year;
+    const up = db.prepare(`INSERT INTO toshikoshi_log (user_id, year, minutes) VALUES (?, ?, 1)
+      ON CONFLICT(user_id, year) DO UPDATE SET minutes = minutes + 1`);
+    for (const id of presentIds) up.run(id, year);
+    return { year, awarded: [] };
+  }
+  if (m === '01-01' && (t.hm === '00:10' || t.hm === '00:11')) { // 1分ごとの呼び出しが少しずれても取りこぼさない
+    const awarded = [];
+    for (const id of presentIds) {
+      const r = db.prepare('SELECT minutes FROM toshikoshi_log WHERE user_id = ? AND year = ?').get(id, t.year);
+      if (r && r.minutes >= TOSHIKOSHI_NEED && awardToshikoshi(id, t.year)) awarded.push(id);
+    }
+    return { year: t.year, awarded };
+  }
+  return { year: null, awarded: [] };
+}
 function awardToshikoshi(userId, year) {
   return awardBadge(userId, `toshikoshi-${year}`, `${year}年 年越し自習`, '🎍');
 }
@@ -106,6 +130,6 @@ function statusFor(userId, date = new Date()) {
 }
 
 module.exports = {
-  awardBadge, badgesOf, santaStatus, openSanta, toshikoshiYear, awardToshikoshi,
+  awardBadge, badgesOf, santaStatus, openSanta, toshikoshiYear, toshikoshiTick, awardToshikoshi,
   morningTick, morningStamps, morningStatus, statusFor,
 };

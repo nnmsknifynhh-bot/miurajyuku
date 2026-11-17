@@ -396,6 +396,9 @@
       if (f.santa && f.santa.phase === 'count') chips.push(f.santa.eligible ? `🎅 がんばりサンタ ✓ 12月1日をおたのしみに` : `🎅 がんばりサンタ ${f.santa.days}/${f.santa.need}日（1日${f.santa.minMinutes}分以上）`);
       const hm = new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Tokyo' });
       if (f.morning && hm >= f.morning.start && hm < f.morning.end) chips.push(f.morning.today >= f.morning.minutes ? `🌅 朝活 今日のスタンプ ✓（ぜんぶで${f.morning.stamps}こ）` : `🌅 朝活 ${f.morning.today}/${f.morning.minutes}分（スタンプ${f.morning.stamps}こ）`);
+      // 🎍 年越し自習（12/31 23:50〜1/1 0:10）
+      const jd = new Date(Date.now() + 9 * 3600e3), jmd = jd.toISOString().slice(5, 10);
+      if (state.newYearShow && ((jmd === '12-31' && hm >= '23:50') || (jmd === '01-01' && hm < '00:10'))) chips.push('🎍 年越し自習中：0:10まで自習室にいるとバッジ');
       $('#fun-chip').textContent = chips.join('\n'); $('#fun-chip').style.whiteSpace = 'pre-line'; $('#fun-chip').hidden = !chips.length;
       // 🎅 プレゼント（12/25〜1/7・がんばった人）
       if (f.santa && f.santa.phase === 'gift' && f.santa.eligible && !f.santa.opened && !santaAsked) { santaAsked = true; showWhenFree($('#santa-dialog')); }
@@ -472,10 +475,9 @@
         box.classList.add('out');
         setTimeout(() => {
           box.hidden = true; state.nyShowing = false;
-          // 年越し自習のバッジをもらっていたら、お祝いの画面
-          if (state.user && state.user.role === 'student') {
-            refreshFun(true).then(() => { const b = state.fun && state.fun.badges && state.fun.badges.find(x => x.badge === `toshikoshi-${year}`); if (b || state.nyBadgeYear === year) showNewYearDialog(year); });
-          }
+          // 年越し自習のバッジは 0:10 にわたす（そのときにお祝いの画面）
+          if (state.nyBadgeYear === year) showNewYearDialog(year);
+          refreshFun(true);
         }, 1000);
       }
     };

@@ -708,12 +708,10 @@ function attach(httpServer) {
         if (p) p.socket.emit('fun-event', { kind: 'asa', stamps: r.stamps, points: r.points });
       }
       // 🎆 年越し自習：年が明けた瞬間（0:00〜0:10）に自習室にいた生徒にバッジ
-      // （年が明ける前にもらった生徒は、0:00 の花火のあとに画面で知らせる。明けてから来た生徒には、すぐ知らせる）
-      const ny = fun.toshikoshiYear();
-      const afterMidnight = ganbari.jst().day.endsWith('-01-01');
-      if (ny) for (const p of online.values()) {
-        if (p.user.role === 'student' && SM.isStudyRoom(p.room) && !p.away && fun.awardToshikoshi(p.id, ny) && afterMidnight) p.socket.emit('fun-event', { kind: 'newyear', year: ny });
-      }
+      // 23:50〜0:10 に自習室にずっといて、0:10 にもいた生徒にバッジ
+      const present = [...online.values()].filter(p => p.user.role === 'student' && SM.isStudyRoom(p.room) && !p.away).map(p => p.id);
+      const ty = fun.toshikoshiTick(present);
+      for (const id of ty.awarded) { const p = online.get(id); if (p) p.socket.emit('fun-event', { kind: 'newyear', year: ty.year }); }
       for (const p of online.values()) { updateToday(p); refreshBirthday(p); refreshHS(p); } // 日付が変わったときも 0 にもどる
       // 決めた曜日・時刻を過ぎても来ていない高校生を、先生に知らせる
       for (const s of ganbari.lateStudents(new Set(online.keys()))) notify.studentLate(s, online).catch(e => console.error('遅れの通知に失敗:', e.message));
