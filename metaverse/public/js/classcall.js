@@ -232,6 +232,15 @@
           bar.append(el('span', 'cb-note', '画面共有はパソコンから使えます'));
         }
       }
+      // 生徒のスタンプ・吹き出し（授業中は先生が許可したときだけ）
+      if (isTeacher || u.role === 'owner') {
+        const chat = el('button', 'cb-btn' + (cls.allowChat ? ' on' : ' off'), cls.allowChat ? '😊 スタンプ・吹き出しOK' : '🤐 スタンプ・吹き出し止め中');
+        chat.title = 'タップで切りかえ';
+        chat.onclick = () => socket.emit('class-chat', { allow: !cls.allowChat }, (r) => { if (r && !r.ok) toast(r.error); else toast(r.allowChat ? '生徒がスタンプ・吹き出しを使えるようにしました' : '生徒のスタンプ・吹き出しを止めました'); });
+        bar.append(chat);
+      } else if (u.role === 'student') {
+        bar.append(el('span', 'cb-note', cls.allowChat ? '😊 スタンプ・吹き出しOK' : '🤐 スタンプ・吹き出しは先生がOKを出したときだけ'));
+      }
       if (isTeacher || u.role === 'owner') {
         const end = el('button', 'cb-btn danger', '授業を終わる');
         end.onclick = endClass;

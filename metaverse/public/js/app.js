@@ -90,7 +90,7 @@
       toast(`🔔 ${name}さんが入室しました（${time}）`, 6000);
       chime();
     });
-    socket.on('topic-cleared', ({ by }) => { state.me.topic = null; updateButtons(); toast(by ? `${by}が吹き出しを消しました` : '先生がはなれたので、吹き出しを消しました'); });
+    socket.on('topic-cleared', ({ by, reason }) => { state.me.topic = null; updateButtons(); toast(by ? `${by}が吹き出しを消しました` : reason === 'class' ? '先生がスタンプ・吹き出しを止めたので、吹き出しを消しました' : '先生がはなれたので、吹き出しを消しました'); });
     socket.on('study-photo', ({ id, at }) => { refreshPhotoMeta(); void id; void at; });
     socket.on('study-photo-result', ({ id, name, ok, reason }) => {
       clearTimeout(photoWait[id]);
@@ -395,7 +395,7 @@
     return false;
   }
   function openTopic() {
-    if (state.user.role === 'student' && !state.me.topic && !talkingWithStaff()) {
+    if (state.user.role === 'student' && !state.me.topic && $('#btn-topic').hidden) {
       return toast('💬 吹き出しは、先生と話すときだけ使えます。先生に近くに来てもらってね', 5000);
     }
     const warn = chatWarning();
@@ -474,12 +474,15 @@
   // スタンプは授業中の教室でも使える（サーバーでも同じようにたしかめる）
   function updateTalkButtons() {
     if (!state.user || state.user.role !== 'student' || !state.me) return;
-    const talk = talkingWithStaff();
+    // 授業中の教室では、先生が「スタンプ・吹き出しOK」にしたときだけ
+    const cls = state.me.room && state.classes && state.classes[state.me.room];
+    const inCall = !!(state.pc && state.pc.active());
+    const talk = inCall || (cls ? !!cls.allowChat : talkingWithStaff());
     const topicOn = talk || !!state.me.topic;
-    const reactOn = talk || !!(state.me.room && state.classes && state.classes[state.me.room]);
+    const reactOn = talk;
     if ($('#btn-topic').hidden === topicOn) $('#btn-topic').hidden = !topicOn;
     if ($('#btn-react').hidden === reactOn) { $('#btn-react').hidden = !reactOn; if (!reactOn) $('#react-pop').hidden = true; }
-    if (talk && !state.talkHinted) { state.talkHinted = true; toast('👋 先生が話しかけています。吹き出しやスタンプで返事ができます', 4000); }
+    if (talk && !state.talkHinted) { state.talkHinted = true; toast(cls && !inCall ? '😊 先生がスタンプ・吹き出しをOKにしました' : '👋 先生が話しかけています。吹き出しやスタンプで返事ができます', 4000); }
     if (!talk) state.talkHinted = false;
   }
   setInterval(updateTalkButtons, 700);

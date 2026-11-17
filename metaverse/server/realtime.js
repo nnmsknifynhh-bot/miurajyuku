@@ -147,7 +147,7 @@ function classState() {
   const s = {};
   for (const [id, c] of classes) {
     // away: 先生が個別指導中（授業の部屋には声が届かない）
-    s[id] = { teacherId: c.teacherId, teacherName: c.teacherName, startedAt: c.startedAt, mic: c.mic, screen: c.screen, away: inActiveCall(online.get(c.teacherId)) };
+    s[id] = { teacherId: c.teacherId, teacherName: c.teacherName, startedAt: c.startedAt, mic: c.mic, screen: c.screen, allowChat: !!c.allowChat, away: inActiveCall(online.get(c.teacherId)) };
   }
   return s;
 }
@@ -411,7 +411,7 @@ function attach(httpServer) {
     socket.on('reaction', (kind) => {
       if (!REACTIONS.includes(kind)) return;
       // 生徒のスタンプは、先生・オーナーに話しかけられているとき（近く・個別通話中・授業中の教室）だけ
-      if (p.user.role === 'student' && !talkingWithStaff(p) && !(p.room && classes.has(p.room))) return;
+      if (p.user.role === 'student' && !studentChatAllowed(p)) return;
       const t = Date.now();
       if (t - p.lastReactionAt < 1200) return;
       p.lastReactionAt = t;
@@ -432,7 +432,7 @@ function attach(httpServer) {
       const cur = classes.get(room.id);
       if (cur && cur.teacherId !== p.id) return ack({ ok: false, error: `${cur.teacherName}先生が授業中です` });
       if (!cur) {
-        classes.set(room.id, { teacherId: p.id, teacherName: p.user.display_name, startedAt: Date.now(), mic: false, screen: false, graceTimer: null });
+        classes.set(room.id, { teacherId: p.id, teacherName: p.user.display_name, startedAt: Date.now(), mic: false, screen: false, allowChat: false, graceTimer: null });
         audit(p.id, 'class.started', room.id, null, p.ip);
         broadcastClasses();
       }
@@ -479,6 +479,25 @@ function attach(httpServer) {
       c.mic = !!d.mic;
       c.screen = !!d.screen && can(p.user, 'share_screen');
       broadcastClasses();
+    });
+
+    // 授業中の生徒のスタンプ・吹き出しを、授業をしている先生（またはオーナー）が許可する／止める
+    socket.on('class-chat', (d, ack) => {
+      if (typeof ack !== 'function') ack = () => {};
+      const c = p.room && classes.get(p.room);
+      if (!c) return ack({ ok: false, error: '授業中ではありません' });
+      if (c.teacherId !== p.id && p.user.role !== 'owner') return ack({ ok: false, error: '授業をしている先生だけが変えられます' });
+      c.allowChat = !!(d && d.allow);
+      broadcastClasses();
+      if (!c.allowChat) { // 止めたら、その教室の生徒の吹き出しを消す
+        for (const o of online.values()) {
+          if (o.user.role !== 'student' || o.room !== p.room || !o.topic || inActiveCall(o)) continue;
+          o.topic = null;
+          io.emit('user-updated', { id: o.id, topic: null });
+          o.socket.emit('topic-cleared', { by: null, reason: 'class' });
+        }
+      }
+      ack({ ok: true, allowChat: c.allowChat });
     });
 
     // ── 個別通話（第4段階） ──
@@ -561,7 +580,9 @@ function attach(httpServer) {
       if (typeof ack !== 'function') ack = () => {};
       const text = String((d && d.text) || '').replace(/[\u0000-\u001f\u007f<>]/g, '').trim().slice(0, 24);
       // 生徒の吹き出しは、先生・オーナーと話すとき（近くにいる・個別通話中）だけ
-      if (text && p.user.role === 'student' && !talkingWithStaff(p)) return ack({ ok: false, error: '吹き出しは、先生と話すときだけ使えます。先生に近くに来てもらってね' });
+      if (text && p.user.role === 'student' && !studentChatAllowed(p)) {
+        return ack({ ok: false, error: p.room && classes.has(p.room) ? '授業中は、先生がOKを出したときだけ吹き出しを使えます' : '吹き出しは、先生と話すときだけ使えます。先生に近くに来てもらってね' });
+      }
       p.topic = text || null;
       io.emit('user-updated', { id: p.id, topic: p.topic });
       ack({ ok: true, topic: p.topic });
@@ -638,7 +659,7 @@ function attach(httpServer) {
   // 先生・オーナーがはなれたら、生徒の吹き出しを消す（10秒ごと）
   setInterval(() => {
     for (const p of online.values()) {
-      if (p.user.role !== 'student' || !p.topic || talkingWithStaff(p)) continue;
+      if (p.user.role !== 'student' || !p.topic || studentChatAllowed(p)) continue;
       p.topic = null;
       io.emit('user-updated', { id: p.id, topic: null });
       p.socket.emit('topic-cleared', { by: null });
@@ -725,6 +746,14 @@ function refreshUser(userId) {
 
 function refreshRooms() { broadcastRooms(); }
 
+// 生徒が吹き出し・スタンプを使えるか。
+// 授業中の教室では、先生が「スタンプ・吹き出しOK」にしているときだけ（個別通話中は別）。それ以外は先生と話しているときだけ
+function studentChatAllowed(p) {
+  if (inActiveCall(p)) return true;
+  const c = p.room && classes.get(p.room);
+  if (c) return !!c.allowChat;
+  return talkingWithStaff(p);
+}
 // 生徒が先生・オーナーと話している（近くにいる・個別通話中）か
 const TALK_DIST = T * 3.5;
 function talkingWithStaff(p) {

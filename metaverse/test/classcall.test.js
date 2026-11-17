@@ -63,7 +63,7 @@ async function walk(c, tx, ty) {
   await sleep(60);
   return true;
 }
-const ask = (c, ev) => new Promise(r => c.s.emit(ev, {}, r));
+const ask = (c, ev, d = {}) => new Promise(r => c.s.emit(ev, d, r));
 const jwt = (t) => JSON.parse(Buffer.from(t.split('.')[1], 'base64url'));
 
 let owner;
@@ -139,6 +139,31 @@ test('トークン：教室にいる生徒は聞くだけ。教室の外・授�
   assert.equal(jwt(r.token).sub, `u-${U.stu1.id}`);
   assert.equal(await walk(U.stu2.c, 22, 6), true); // class2（授業なし）
   assert.equal((await ask(U.stu2.c, 'lk-token')).ok, false);
+});
+
+test('授業中の生徒のスタンプ・吹き出しは、先生がOKにしたときだけ（最初は止めている）', async () => {
+  // stu1 は授業中の class1 にいる
+  assert.equal(U.stu1.c.classes.class1.allowChat, false);
+  const topic = await ask(U.stu1.c, 'study-topic', { text: 'わかった！' });
+  assert.equal(topic.ok, false);
+  assert.match(topic.error, /先生がOKを出したとき/);
+  assert.equal((await ask(U.stu1.c, 'class-chat', { allow: true })).ok, false, '生徒は切りかえられない');
+  assert.equal((await ask(U.tch3.c, 'class-chat', { allow: true })).ok, false, '授業をしていない先生も切りかえられない');
+  assert.equal((await ask(U.tch1.c, 'class-chat', { allow: true })).ok, true);
+  await sleep(80);
+  assert.equal(U.stu1.c.classes.class1.allowChat, true);
+  assert.equal((await ask(U.stu1.c, 'study-topic', { text: 'わかった！' })).ok, true);
+  const n = () => U.tch1.c.events.filter(e => e.ev === 'reaction' && e.data.id === U.stu1.id).length;
+  const before = n();
+  U.stu1.c.s.emit('reaction', '👍'); await sleep(120);
+  assert.equal(n(), before + 1, 'OKのときはスタンプが届く');
+  // 止めると、吹き出しは消え、スタンプも届かない
+  assert.equal((await ask(U.tch1.c, 'class-chat', { allow: false })).ok, true);
+  await sleep(80);
+  assert.ok(U.stu1.c.events.some(e => e.ev === 'topic-cleared' && e.data.reason === 'class'));
+  await sleep(1300);
+  U.stu1.c.s.emit('reaction', '👍'); await sleep(120);
+  assert.equal(n(), before + 1, '止めているときは届かない');
 });
 
 test('画面共有の権限がない先生にはトークンに画面共有が入らない', async () => {
