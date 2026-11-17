@@ -10,12 +10,33 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// 判定：○（正解）・×（不正解）・保留（AIが確信を持てない → 講師が判断）
+class Judgment {
+  static const ok = '○';
+  static const ng = '×';
+  static const hold = '保留';
+
+  /// 先生がタップしたときの切り替え順
+  static String next(String j) => j == ok ? ng : (j == ng ? hold : ok);
+}
+
 class GradeItem {
+  String page;
   String number;
   String studentAnswer;
-  String correctAnswer;
-  bool correct;
-  String comment;
+  String modelAnswer;
+  bool modelAnswerFound;
+  String judgment;
+
+  /// AIが最初に出した判定（講師が変えたかどうかの記録用）
+  String aiJudgment;
+  bool teacherEdited;
+
+  String mistake; // 間違えた内容
+  String cause; // 間違いの原因（計算ミス・符号ミス・立式ミス・理解不足…）
+  String review; // 必要な復習
+  String teacherCheck; // 教師による確認事項（保留の理由・確認箇所）
+  String unit; // 単元
 
   /// 答えが写っている写真の番号（1始まり）
   int photo;
@@ -24,36 +45,94 @@ class GradeItem {
   List<int>? box;
 
   GradeItem({
+    this.page = '',
     required this.number,
     required this.studentAnswer,
-    required this.correctAnswer,
-    required this.correct,
-    required this.comment,
+    this.modelAnswer = '',
+    this.modelAnswerFound = true,
+    required this.judgment,
+    this.aiJudgment = '',
+    this.teacherEdited = false,
+    this.mistake = '',
+    this.cause = '',
+    this.review = '',
+    this.teacherCheck = '',
+    this.unit = '',
     this.photo = 1,
     this.box,
   });
 
-  factory GradeItem.fromJson(Map<String, dynamic> j) => GradeItem(
-        number: '${j['number'] ?? ''}',
-        studentAnswer: '${j['studentAnswer'] ?? ''}',
-        correctAnswer: '${j['correctAnswer'] ?? ''}',
-        correct: j['correct'] == true,
-        comment: '${j['comment'] ?? ''}',
-        photo: (j['photo'] as num?)?.toInt() ?? 1,
-        box: (j['box'] is List && (j['box'] as List).length == 4)
-            ? (j['box'] as List).map((v) => (v as num).toInt()).toList()
-            : null,
-      );
+  bool get isOk => judgment == Judgment.ok;
+  bool get isNg => judgment == Judgment.ng;
+  bool get isHold => judgment == Judgment.hold;
+
+  /// 「p.12 1(2)」のような表示
+  String get label => page.isEmpty ? number : 'p.$page  $number';
+
+  void cycleJudgment() {
+    judgment = Judgment.next(judgment);
+    teacherEdited = true;
+  }
+
+  factory GradeItem.fromJson(Map<String, dynamic> j) {
+    // 旧形式（correct: true/false）にも対応
+    final judgment = j['judgment'] is String && '${j['judgment']}'.isNotEmpty
+        ? '${j['judgment']}'
+        : (j['correct'] == true ? Judgment.ok : Judgment.ng);
+    return GradeItem(
+      page: '${j['page'] ?? ''}',
+      number: '${j['number'] ?? ''}',
+      studentAnswer: '${j['studentAnswer'] ?? ''}',
+      modelAnswer: '${j['modelAnswer'] ?? j['correctAnswer'] ?? ''}',
+      modelAnswerFound: j['modelAnswerFound'] != false,
+      judgment: judgment,
+      aiJudgment: '${j['aiJudgment'] ?? ''}',
+      teacherEdited: j['teacherEdited'] == true,
+      mistake: '${j['mistake'] ?? j['comment'] ?? ''}',
+      cause: '${j['cause'] ?? ''}',
+      review: '${j['review'] ?? ''}',
+      teacherCheck: '${j['teacherCheck'] ?? ''}',
+      unit: '${j['unit'] ?? ''}',
+      photo: (j['photo'] as num?)?.toInt() ?? 1,
+      box: (j['box'] is List && (j['box'] as List).length == 4)
+          ? (j['box'] as List).map((v) => (v as num).toInt()).toList()
+          : null,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
+        'page': page,
         'number': number,
         'studentAnswer': studentAnswer,
-        'correctAnswer': correctAnswer,
-        'correct': correct,
-        'comment': comment,
+        'modelAnswer': modelAnswer,
+        'modelAnswerFound': modelAnswerFound,
+        'judgment': judgment,
+        'aiJudgment': aiJudgment,
+        'teacherEdited': teacherEdited,
+        'mistake': mistake,
+        'cause': cause,
+        'review': review,
+        'teacherCheck': teacherCheck,
+        'unit': unit,
         'photo': photo,
         'box': box,
       };
+}
+
+/// ○・×・保留の件数。正答率は保留を除いて計算する
+class GradeCounts {
+  final int ok, ng, hold;
+  GradeCounts(this.ok, this.ng, this.hold);
+
+  factory GradeCounts.of(List<GradeItem> items) => GradeCounts(
+        items.where((e) => e.isOk).length,
+        items.where((e) => e.isNg).length,
+        items.where((e) => e.isHold).length,
+      );
+
+  int get graded => ok + ng;
+  double get rate => graded == 0 ? 0 : ok / graded;
+  String get scoreText => '$ok/$graded';
 }
 
 class HomeworkSubmission {
@@ -61,6 +140,8 @@ class HomeworkSubmission {
   final DateTime? submittedAt;
   final String studentId;
   final String studentName;
+  final String grade; // 学年（例: 中2）
+  final String subject; // 教科
   final String workbook;
   final String pages;
   final int photoCount;
@@ -68,16 +149,20 @@ class HomeworkSubmission {
   final DateTime? returnedAt;
   final int? score;
   final int? total;
+  final int holdCount;
   final List<GradeItem> items;
   final String overallComment;
   final String teacherComment;
-  final String error;
+  final String error; // 採点エラーの内容、または講師向けメモ（模範解答の確認状況など）
+  final String lineReport;
 
   HomeworkSubmission({
     required this.id,
     required this.submittedAt,
     required this.studentId,
     required this.studentName,
+    required this.grade,
+    required this.subject,
     required this.workbook,
     required this.pages,
     required this.photoCount,
@@ -85,10 +170,12 @@ class HomeworkSubmission {
     required this.returnedAt,
     required this.score,
     required this.total,
+    required this.holdCount,
     required this.items,
     required this.overallComment,
     required this.teacherComment,
     required this.error,
+    required this.lineReport,
   });
 
   static const statusGrading = '採点中';
@@ -100,11 +187,17 @@ class HomeworkSubmission {
   bool get isGraded => status == statusGraded;
   bool get isError => status == statusError;
 
+  /// 「中2・田中 太郎」（ルール：学年・氏名）
+  String get studentLabel =>
+      [grade, studentName.isEmpty ? studentId : studentName].where((e) => e.isNotEmpty).join('・');
+
   factory HomeworkSubmission.fromJson(Map<String, dynamic> j) => HomeworkSubmission(
         id: '${j['id']}',
         submittedAt: DateTime.tryParse('${j['submittedAt'] ?? ''}')?.toLocal(),
         studentId: '${j['studentId'] ?? ''}',
         studentName: '${j['studentName'] ?? ''}',
+        grade: '${j['grade'] ?? ''}',
+        subject: '${j['subject'] ?? ''}',
         workbook: '${j['workbook'] ?? ''}',
         pages: '${j['pages'] ?? ''}',
         photoCount: (j['photoCount'] as num?)?.toInt() ?? 0,
@@ -112,12 +205,14 @@ class HomeworkSubmission {
         returnedAt: DateTime.tryParse('${j['returnedAt'] ?? ''}')?.toLocal(),
         score: (j['score'] as num?)?.toInt(),
         total: (j['total'] as num?)?.toInt(),
+        holdCount: (j['holdCount'] as num?)?.toInt() ?? 0,
         items: ((j['items'] as List?) ?? [])
             .map((e) => GradeItem.fromJson(Map<String, dynamic>.from(e as Map)))
             .toList(),
         overallComment: '${j['overallComment'] ?? ''}',
         teacherComment: '${j['teacherComment'] ?? ''}',
         error: '${j['error'] ?? ''}',
+        lineReport: '${j['lineReport'] ?? ''}',
       );
 }
 
@@ -207,6 +302,8 @@ class GradingService {
   Future<HomeworkSubmission> submit({
     required String studentId,
     required String studentName,
+    required String grade,
+    required String subject,
     required String workbook,
     required String pages,
     required List<Uint8List> jpegImages,
@@ -214,6 +311,8 @@ class GradingService {
     final j = await _call('submit', {
       'studentId': studentId,
       'studentName': studentName,
+      'grade': grade,
+      'subject': subject,
       'workbook': workbook,
       'pages': pages,
       'images': jpegImages
@@ -297,6 +396,18 @@ class GradingService {
   }
 
   Future<void> delete(String id) => _call('delete', {'id': id}, admin: true);
+
+  /// 保護者向けLINE学習報告を作成（三浦塾のLINE報告ルール）
+  Future<String> lineReport(String id) async {
+    final j = await _call('lineReport', {'id': id}, admin: true);
+    return '${j['text'] ?? ''}';
+  }
+
+  /// 生徒別の苦手分析（その生徒の記録だけを使う）
+  Future<String> analyzeStudent(String studentId) async {
+    final j = await _call('analyzeStudent', {'studentId': studentId}, admin: true);
+    return '${j['text'] ?? ''}';
+  }
 
   Future<HomeworkSubmission> _update(
       String action, String id, List<GradeItem> items, String teacherComment) async {

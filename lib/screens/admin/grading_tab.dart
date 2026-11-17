@@ -2,8 +2,8 @@
 // 管理者：宿題 採点・返却タブ
 // 生徒が提出 → AIが自動採点 → ここに届く → 「返却」で生徒に戻る
 // ============================================================
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../services/grading_service.dart';
 import '../../theme/app_theme.dart';
@@ -75,7 +75,7 @@ class _GradingTabState extends State<GradingTab> {
     setState(() => _busy.add(s.id));
     try {
       await _svc.returnToStudent(s.id, s.items, s.teacherComment);
-      _snack('${s.studentName} さんに返却しました', AppColors.success);
+      _snack('${s.studentLabel} さんに返却しました', AppColors.success);
       await _reload();
     } catch (e) {
       _snack('$e', AppColors.danger);
@@ -291,6 +291,7 @@ class _AdminSubmissionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = submission;
     final date = s.submittedAt == null ? '' : DateFormat('M/d(E) HH:mm', 'ja').format(s.submittedAt!);
+    final counts = GradeCounts.of(s.items);
     return GlowCard(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
@@ -298,13 +299,13 @@ class _AdminSubmissionCard extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Expanded(
-            child: Text(s.studentName.isEmpty ? s.studentId : s.studentName,
+            child: Text(s.studentLabel,
                 style: const TextStyle(color: AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w700)),
           ),
           AppChip(label: s.status, color: statusColor(s.status)),
         ]),
         const SizedBox(height: 4),
-        Text('${s.workbook}  p.${s.pages}',
+        Text([if (s.subject.isNotEmpty) s.subject, s.workbook, 'p.${s.pages}'].join('  '),
             style: const TextStyle(color: AppColors.silver, fontSize: 13)),
         Text('$date 提出・写真${s.photoCount}枚',
             style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
@@ -316,15 +317,20 @@ class _AdminSubmissionCard extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(color: AppColors.danger, fontSize: 11)),
           ),
-        if (s.score != null && !s.isError) ...[
+        if (s.items.isNotEmpty && !s.isError) ...[
           const SizedBox(height: 10),
           Row(children: [
-            Text('${s.score}',
+            Text('${counts.ok}',
                 style: const TextStyle(color: AppColors.yellow, fontSize: 22, fontWeight: FontWeight.w900)),
-            Text(' / ${s.total} 問正解',
+            Text(' / ${counts.graded} 問正解',
                 style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+            if (counts.hold > 0) ...[
+              const SizedBox(width: 8),
+              AppChip(label: '保留 ${counts.hold}', color: holdColor),
+            ],
             const Spacer(),
-            if (onReturn != null)
+            // 保留が残っているものは、開いて確認してから返却する
+            if (onReturn != null && counts.hold == 0)
               ElevatedButton.icon(
                 onPressed: busy ? null : onReturn,
                 icon: busy
@@ -390,6 +396,8 @@ class _GradingDetailPageState extends State<_GradingDetailPage> {
     super.dispose();
   }
 
+  void _toggle(GradeItem it) => setState(it.cycleJudgment);
+
   Future<void> _run(Future<HomeworkSubmission?> Function() action, String doneMsg,
       {bool close = false}) async {
     setState(() => _busy = true);
@@ -398,22 +406,22 @@ class _GradingDetailPageState extends State<_GradingDetailPage> {
       _changed = true;
       if (!mounted) return;
       if (updated != null) setState(() => _apply(updated));
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(doneMsg),
-        backgroundColor: AppColors.success,
-        behavior: SnackBarBehavior.floating,
-      ));
+      _snack(doneMsg, AppColors.success);
       if (close) Navigator.of(context).pop(true);
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('$e'),
-        backgroundColor: AppColors.danger,
-        behavior: SnackBarBehavior.floating,
-      ));
+      _snack('$e', AppColors.danger);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  void _snack(String msg, Color color) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: color,
+      behavior: SnackBarBehavior.floating,
+    ));
   }
 
   Future<void> _confirmDelete() async {
@@ -439,9 +447,52 @@ class _GradingDetailPageState extends State<_GradingDetailPage> {
     }
   }
 
+  /// AIの文章（LINE報告・苦手分析）を作って表示する
+  Future<void> _showGenerated(String title, Future<String> Function() make, {String? existing}) async {
+    String? text = existing;
+    if (text == null || text.isEmpty) {
+      setState(() => _busy = true);
+      try {
+        // LINE報告は保存済みの採点結果から作るので、先に今の判定を保存する
+        await _svc.save(_s.id, _items, _commentCtrl.text.trim());
+        _changed = true;
+        text = await make();
+      } catch (e) {
+        _snack('$e', AppColors.danger);
+        return;
+      } finally {
+        if (mounted) setState(() => _busy = false);
+      }
+    }
+    if (!mounted) return;
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.navyDark,
+      builder: (ctx) => _GeneratedTextSheet(
+        title: title,
+        text: text!,
+        onRegenerate: () async {
+          Navigator.pop(ctx);
+          await _showGenerated(title, make);
+        },
+      ),
+    );
+  }
+
+  Future<void> _lineReport({bool fresh = false}) async {
+    if (GradeCounts.of(_items).hold > 0) {
+      _snack('保留が残っています。保留の問題は報告に含めずに作成します', holdColor);
+    }
+    await _showGenerated('保護者向けLINE報告', () => _svc.lineReport(_s.id),
+        existing: fresh ? null : _s.lineReport);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final score = _items.where((e) => e.correct).length;
+    final counts = GradeCounts.of(_items);
+    // 報告は「×・保留」のみ。問題集の掲載順（サーバーでページ順に並べ済み）
+    final ngAndHold = _items.where((e) => !e.isOk).toList();
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -450,35 +501,46 @@ class _GradingDetailPageState extends State<_GradingDetailPage> {
       child: Scaffold(
         backgroundColor: AppColors.bg,
         appBar: AppBar(
-          title: Text(_s.studentName.isEmpty ? _s.studentId : _s.studentName),
+          title: Text(_s.studentLabel),
           actions: [
             PopupMenuButton<String>(
               color: AppColors.navyCard,
               enabled: !_busy,
               onSelected: (v) {
-                if (v == 'regrade') {
-                  _run(() => _svc.regrade(_s.id), 'AIで採点し直しました');
-                } else if (v == 'delete') {
-                  _confirmDelete();
+                switch (v) {
+                  case 'line':
+                    _lineReport();
+                    break;
+                  case 'analyze':
+                    _showGenerated('${_s.studentLabel} の苦手分析', () => _svc.analyzeStudent(_s.studentId));
+                    break;
+                  case 'regrade':
+                    _run(() => _svc.regrade(_s.id), 'AIで採点し直しました');
+                    break;
+                  case 'delete':
+                    _confirmDelete();
+                    break;
                 }
               },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'regrade', child: Text('AIで採点し直す')),
-                PopupMenuItem(value: 'delete', child: Text('削除', style: TextStyle(color: AppColors.danger))),
+              itemBuilder: (_) => [
+                if (_items.isNotEmpty) const PopupMenuItem(value: 'line', child: Text('保護者LINE報告を作成')),
+                const PopupMenuItem(value: 'analyze', child: Text('この生徒の苦手分析')),
+                const PopupMenuItem(value: 'regrade', child: Text('AIで採点し直す')),
+                const PopupMenuItem(value: 'delete', child: Text('削除', style: TextStyle(color: AppColors.danger))),
               ],
             ),
           ],
         ),
         body: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
           children: [
-            Text('${_s.workbook}  p.${_s.pages}',
+            Text([if (_s.subject.isNotEmpty) _s.subject, _s.workbook, 'p.${_s.pages}'].join('  '),
                 style: const TextStyle(color: AppColors.silver, fontSize: 14, fontWeight: FontWeight.w600)),
             const SizedBox(height: 10),
             if (_items.isNotEmpty) ...[
-              ScoreHeader(score: score, total: _items.length),
+              ScoreHeader(counts: counts),
               const SizedBox(height: 6),
-              const Text('写真の ○ / ✓ をタップで切り替え（AIの間違いを直せます）',
+              const Text('写真の ○ / × / ? をタップすると 判定が変わります（○→×→保留）',
                   style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
               const SizedBox(height: 10),
             ],
@@ -486,9 +548,8 @@ class _GradingDetailPageState extends State<_GradingDetailPage> {
               photos: _photos,
               error: _photoError,
               items: _items,
-              onToggleItem: _busy ? null : (it) => setState(() => it.correct = !it.correct),
+              onToggleItem: _busy ? null : _toggle,
             ),
-            const SizedBox(height: 4),
             if (_s.isError) ...[
               CommentBox(
                   title: '採点エラー', text: _s.error, icon: Icons.error_outline, color: AppColors.danger),
@@ -499,33 +560,41 @@ class _GradingDetailPageState extends State<_GradingDetailPage> {
                 label: const Text('AIで採点し直す'),
               ),
               const SizedBox(height: 16),
+            ] else if (_s.error.isNotEmpty) ...[
+              CommentBox(title: 'AIの確認状況', text: _s.error, icon: Icons.fact_check_outlined, color: AppColors.silver),
+              const SizedBox(height: 12),
             ],
             if (_items.isNotEmpty) ...[
+              Row(children: [
+                const Text('× ・保留', style: TextStyle(color: AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w700)),
+                const SizedBox(width: 8),
+                Text('（○ ${counts.ok}問は省略・掲載順）',
+                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+              ]),
+              const SizedBox(height: 8),
+              if (ngAndHold.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Text('×・保留の問題はありません 🎉', style: TextStyle(color: AppColors.success)),
+                ),
+              for (final it in ngAndHold)
+                ResultRow(item: it, forTeacher: true, onToggle: _busy ? null : () => _toggle(it)),
               if (_s.overallComment.isNotEmpty) ...[
+                const SizedBox(height: 6),
                 CommentBox(
                     title: 'AIからのひとこと（生徒にも表示）',
                     text: _s.overallComment,
                     icon: Icons.lightbulb_outline,
                     color: AppColors.info),
-                const SizedBox(height: 10),
               ],
-              const Text('問題ごとの答え',
-                  style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-              const SizedBox(height: 6),
-              for (var i = 0; i < _items.length; i++)
-                GradeItemTile(
-                  item: _items[i],
-                  answerLabel: '生徒の答え',
-                  onToggle: _busy ? null : () => setState(() => _items[i].correct = !_items[i].correct),
-                ),
             ],
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
             TextField(
               controller: _commentCtrl,
               maxLines: 3,
               style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
               decoration: const InputDecoration(
-                labelText: '先生からのコメント（任意）',
+                labelText: '先生からのコメント（任意・生徒に表示）',
                 alignLabelWithHint: true,
               ),
             ),
@@ -557,7 +626,8 @@ class _GradingDetailPageState extends State<_GradingDetailPage> {
               Expanded(
                 flex: 2,
                 child: ElevatedButton.icon(
-                  onPressed: _busy || _s.isError || _items.isEmpty
+                  // 保留が残っている間は返却できない（最終判断は講師）
+                  onPressed: _busy || _s.isError || _items.isEmpty || counts.hold > 0
                       ? null
                       : () => _run(
                           () => _svc.returnToStudent(_s.id, _items, _commentCtrl.text.trim()),
@@ -569,12 +639,16 @@ class _GradingDetailPageState extends State<_GradingDetailPage> {
                           height: 16,
                           child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.navyDark))
                       : const Icon(Icons.reply_rounded),
-                  label: Text(_s.isReturned ? '修正して再返却' : '返却する',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                  label: Text(
+                      counts.hold > 0
+                          ? '保留${counts.hold}件を判定して返却'
+                          : (_s.isReturned ? '修正して再返却' : '返却する'),
+                      style: TextStyle(fontSize: counts.hold > 0 ? 13 : 16, fontWeight: FontWeight.w800)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.yellow,
                     foregroundColor: AppColors.navyDark,
                     disabledBackgroundColor: AppColors.yellow.withValues(alpha: 0.3),
+                    disabledForegroundColor: AppColors.navyDark.withValues(alpha: 0.7),
                     minimumSize: const Size(0, 50),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
@@ -584,6 +658,94 @@ class _GradingDetailPageState extends State<_GradingDetailPage> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// AIが作った文章（LINE報告・苦手分析）を表示してコピーする
+class _GeneratedTextSheet extends StatelessWidget {
+  final String title;
+  final String text;
+  final VoidCallback onRegenerate;
+  const _GeneratedTextSheet({required this.title, required this.text, required this.onRegenerate});
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.85,
+      maxChildSize: 0.95,
+      builder: (ctx, scroll) => Column(children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 8, 6),
+          child: Row(children: [
+            Expanded(
+              child: Text(title,
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
+            ),
+            IconButton(
+                tooltip: '閉じる',
+                onPressed: () => Navigator.pop(ctx),
+                icon: const Icon(Icons.close, color: AppColors.silverDim)),
+          ]),
+        ),
+        Expanded(
+          child: ListView(controller: scroll, padding: const EdgeInsets.fromLTRB(16, 0, 16, 16), children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.cardBorder),
+              ),
+              child: SelectableText(text,
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, height: 1.7)),
+            ),
+            const SizedBox(height: 8),
+            const Text('AIが作成した文章です。送る前に内容を確認してください。',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+          ]),
+        ),
+        SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+            child: Row(children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: onRegenerate,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.silver,
+                    side: const BorderSide(color: AppColors.silverDim),
+                    minimumSize: const Size(0, 48),
+                  ),
+                  child: const Text('作り直す'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 2,
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: text));
+                    if (ctx.mounted) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                          content: Text('コピーしました。LINEに貼り付けてください'),
+                          behavior: SnackBarBehavior.floating));
+                    }
+                  },
+                  icon: const Icon(Icons.copy_rounded, size: 18),
+                  label: const Text('コピー', style: TextStyle(fontWeight: FontWeight.w800)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.yellow,
+                    foregroundColor: AppColors.navyDark,
+                    minimumSize: const Size(0, 48),
+                  ),
+                ),
+              ),
+            ]),
+          ),
+        ),
+      ]),
     );
   }
 }

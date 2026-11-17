@@ -1,101 +1,165 @@
 // ============================================================
 // 採点結果の表示部品（生徒・先生 共通）
+//   判定は ○（正解）・×（不正解）・保留（講師が判断）の3つ
+//   正答率は保留を除いて計算し、保留件数は別に表示する
 // ============================================================
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../services/grading_service.dart';
 import '../theme/app_theme.dart';
 
-/// 点数の大きな表示
+const Color redPen = Color(0xFFE53935);
+const Color holdColor = Color(0xFFFF9800);
+
+Color judgmentColor(String j) => j == Judgment.ok
+    ? AppColors.success
+    : j == Judgment.ng
+        ? AppColors.danger
+        : holdColor;
+
+/// 正答率（保留を除く）と保留件数
 class ScoreHeader extends StatelessWidget {
-  final int score;
-  final int total;
-  const ScoreHeader({super.key, required this.score, required this.total});
+  final GradeCounts counts;
+  const ScoreHeader({super.key, required this.counts});
 
   @override
   Widget build(BuildContext context) {
-    final rate = total == 0 ? 0.0 : score / total;
-    final color = rate >= 0.8
-        ? AppColors.success
-        : rate >= 0.5
-            ? AppColors.warning
-            : AppColors.danger;
+    final rate = counts.rate;
+    final color = counts.graded == 0
+        ? AppColors.silverDim
+        : rate >= 0.8
+            ? AppColors.success
+            : rate >= 0.5
+                ? AppColors.warning
+                : AppColors.danger;
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: color.withValues(alpha: 0.5)),
       ),
       child: Row(children: [
-        Icon(Icons.task_alt, color: color, size: 28),
-        const SizedBox(width: 10),
-        Text('$score', style: TextStyle(color: color, fontSize: 32, fontWeight: FontWeight.w900)),
-        Text(' / $total 問 正解',
-            style: const TextStyle(color: AppColors.textSecondary, fontSize: 14, fontWeight: FontWeight.w600)),
+        Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+          const Text('正答率（保留を除く）', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+          Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+            Text('${counts.ok}', style: TextStyle(color: color, fontSize: 30, fontWeight: FontWeight.w900)),
+            Text(' / ${counts.graded} 問',
+                style: const TextStyle(color: AppColors.textSecondary, fontSize: 14, fontWeight: FontWeight.w600)),
+            const SizedBox(width: 10),
+            Text('${(rate * 100).round()}%',
+                style: TextStyle(color: color, fontSize: 17, fontWeight: FontWeight.w800)),
+          ]),
+        ]),
         const Spacer(),
-        Text('${(rate * 100).round()}%',
-            style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.w800)),
+        if (counts.hold > 0)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: holdColor.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: holdColor),
+            ),
+            child: Text('保留 ${counts.hold}件',
+                style: const TextStyle(color: holdColor, fontSize: 13, fontWeight: FontWeight.w800)),
+          ),
       ]),
     );
   }
 }
 
-/// 1問ごとの ○× 行。[onToggle] を渡すと先生が ○× を切り替えられる
-class GradeItemTile extends StatelessWidget {
-  final GradeItem item;
-  final VoidCallback? onToggle;
-  final String answerLabel;
-  const GradeItemTile({super.key, required this.item, this.onToggle, this.answerLabel = 'あなたの答え'});
+/// 判定バッジ（○ / × / 保留）。[onTap] を渡すと先生が切り替えられる
+class JudgmentBadge extends StatelessWidget {
+  final String judgment;
+  final VoidCallback? onTap;
+  const JudgmentBadge({super.key, required this.judgment, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final color = item.correct ? AppColors.success : AppColors.danger;
+    final c = judgmentColor(judgment);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 46,
+        height: 46,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: c.withValues(alpha: 0.15),
+          border: Border.all(color: c, width: 2),
+        ),
+        alignment: Alignment.center,
+        child: judgment == Judgment.hold
+            ? const Text('保留', style: TextStyle(color: holdColor, fontSize: 12, fontWeight: FontWeight.w900))
+            : Icon(judgment == Judgment.ok ? Icons.circle_outlined : Icons.close_rounded, color: c, size: 24),
+      ),
+    );
+  }
+}
+
+/// ×・保留の1問分（ページ・問題／判定／生徒の解答／模範解答／原因・確認事項）
+class ResultRow extends StatelessWidget {
+  final GradeItem item;
+  final bool forTeacher;
+  final VoidCallback? onToggle;
+  const ResultRow({super.key, required this.item, this.forTeacher = false, this.onToggle});
+
+  @override
+  Widget build(BuildContext context) {
+    final it = item;
+    final c = judgmentColor(it.judgment);
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.cardBorder),
+        border: Border.all(color: it.isHold ? holdColor.withValues(alpha: 0.6) : AppColors.cardBorder),
       ),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        GestureDetector(
-          onTap: onToggle,
-          child: Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: color.withValues(alpha: 0.15),
-              border: Border.all(color: color, width: 2),
-            ),
-            alignment: Alignment.center,
-            child: Icon(item.correct ? Icons.circle_outlined : Icons.close_rounded, color: color, size: 24),
-          ),
-        ),
+        JudgmentBadge(judgment: it.judgment, onTap: onToggle),
         const SizedBox(width: 12),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(item.number,
-                style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w700)),
+            Row(children: [
+              Flexible(
+                child: Text(it.label,
+                    style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w700)),
+              ),
+              if (it.unit.isNotEmpty) ...[
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(it.unit,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                ),
+              ],
+            ]),
             const SizedBox(height: 4),
-            _line(answerLabel, item.studentAnswer, AppColors.silver),
-            if (!item.correct) _line('正解', item.correctAnswer, AppColors.success),
-            if (!item.correct && item.comment.isNotEmpty)
+            _line(forTeacher ? '生徒の解答' : 'あなたの答え', it.studentAnswer, AppColors.silver),
+            _line('模範解答', it.modelAnswerFound && it.modelAnswer.isNotEmpty ? it.modelAnswer : '（確認できませんでした）',
+                AppColors.success),
+            if (it.isNg && it.cause.isNotEmpty) _line('原因', it.cause, c),
+            if (it.isNg && it.mistake.isNotEmpty) _line('間違えた内容', it.mistake, AppColors.textPrimary),
+            if (it.isNg && it.review.isNotEmpty) _line('復習', it.review, AppColors.info),
+            if (forTeacher && it.teacherCheck.isNotEmpty)
+              Container(
+                margin: const EdgeInsets.only(top: 6),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: holdColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text('確認事項：${it.teacherCheck}',
+                    style: const TextStyle(color: holdColor, fontSize: 12, height: 1.4)),
+              ),
+            if (forTeacher && it.teacherEdited && it.aiJudgment.isNotEmpty && it.aiJudgment != it.judgment)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
-                child: Text(item.comment,
-                    style: const TextStyle(color: AppColors.warning, fontSize: 12, height: 1.4)),
+                child: Text('講師が修正（AIの判定: ${it.aiJudgment}）',
+                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
               ),
           ]),
         ),
-        if (onToggle != null)
-          IconButton(
-            tooltip: '○×を切り替え',
-            icon: const Icon(Icons.swap_horiz, color: AppColors.silverDim, size: 20),
-            onPressed: onToggle,
-          ),
       ]),
     );
   }
@@ -104,7 +168,7 @@ class GradeItemTile extends StatelessWidget {
         padding: const EdgeInsets.only(top: 2),
         child: Text.rich(TextSpan(children: [
           TextSpan(text: '$label：', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-          TextSpan(text: value, style: TextStyle(color: color, fontSize: 13)),
+          TextSpan(text: value, style: TextStyle(color: color, fontSize: 13, height: 1.4)),
         ])),
       );
 }
@@ -141,67 +205,16 @@ class CommentBox extends StatelessWidget {
   }
 }
 
-/// 答案写真の横並びサムネイル（タップで拡大）
-class PhotoStrip extends StatelessWidget {
-  final List<Uint8List>? photos; // null = 読み込み中
-  final String? error;
-  const PhotoStrip({super.key, required this.photos, this.error});
-
-  @override
-  Widget build(BuildContext context) {
-    if (error != null) {
-      return Text('写真を読み込めませんでした: $error',
-          style: const TextStyle(color: AppColors.danger, fontSize: 12));
-    }
-    if (photos == null) {
-      return const SizedBox(
-        height: 120,
-        child: Center(child: CircularProgressIndicator(color: AppColors.yellow, strokeWidth: 2)),
-      );
-    }
-    return SizedBox(
-      height: 120,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: photos!.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (ctx, i) => GestureDetector(
-          onTap: () => showPhotoViewer(ctx, photos!, i),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: Image.memory(photos![i], height: 120, fit: BoxFit.cover),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
+/// 提出フォームでの写真プレビュー（全画面・拡大）
 void showPhotoViewer(BuildContext context, List<Uint8List> photos, int initial) {
   showDialog(
     context: context,
     barrierColor: Colors.black,
-    builder: (ctx) => Stack(children: [
-      PageView.builder(
-        controller: PageController(initialPage: initial),
-        itemCount: photos.length,
-        itemBuilder: (_, i) => InteractiveViewer(
-          maxScale: 5,
-          child: Center(child: Image.memory(photos[i])),
-        ),
-      ),
-      Positioned(
-        top: 16,
-        right: 16,
-        child: SafeArea(
-          child: IconButton(
-            style: IconButton.styleFrom(backgroundColor: Colors.black54),
-            icon: const Icon(Icons.close, color: Colors.white),
-            onPressed: () => Navigator.pop(ctx),
-          ),
-        ),
-      ),
-    ]),
+    builder: (ctx) => _FullscreenPager(
+      count: photos.length,
+      initial: initial,
+      builder: (i) => Image.memory(photos[i]),
+    ),
   );
 }
 
@@ -220,13 +233,12 @@ Color statusColor(String status) {
 }
 
 // ============================================================
-// 答案写真に赤ペンで ○ / ✓ を書き込んで表示する
-//   ○ = 正解、✓ = 不正解（日本の採点の書き方）
+// 答案写真に赤ペンで ○ / × を書き込んで表示する
+//   保留は オレンジの「?」（講師の画面のみ。保留が残っていると返却できない）
 //   位置は AI が返した box（答えの範囲, 0〜1000）を使う
 // ============================================================
-const Color redPen = Color(0xFFE53935);
 
-/// 1枚の答案写真 + 赤ペンの採点マーク
+/// 1枚の答案写真 + 採点マーク
 class MarkedPhoto extends StatefulWidget {
   final Uint8List bytes;
 
@@ -237,7 +249,7 @@ class MarkedPhoto extends StatefulWidget {
   /// 右上に書く点数（例: "8/10"）。null なら書かない
   final String? scoreLabel;
 
-  /// マークをタップしたとき（先生が ○/✓ を切り替える）。null なら切り替え不可
+  /// マークをタップしたとき（先生が判定を切り替える）。null なら切り替え不可
   final void Function(GradeItem item)? onToggleItem;
 
   /// マーク以外をタップしたとき（拡大表示など）
@@ -336,7 +348,7 @@ class _MarkedPhotoState extends State<MarkedPhoto> {
 /// マークの位置と大きさ（描画とタップ判定で共通）
 class _MarkGeometry {
   final Offset center;
-  final Rect oval; // ○ の外形 / ✓ の大きさの基準
+  final Rect oval;
   final double stroke;
   _MarkGeometry(this.center, this.oval, this.stroke);
 
@@ -367,22 +379,38 @@ class _RedPenPainter extends CustomPainter {
     for (final it in items) {
       final g = _MarkGeometry.of(it, size);
       final pen = Paint()
-        ..color = redPen.withValues(alpha: 0.9)
+        ..color = (it.isHold ? holdColor : redPen).withValues(alpha: 0.9)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = it.correct ? g.stroke : g.stroke * 1.3
+        ..strokeWidth = it.isOk ? g.stroke : g.stroke * 1.3
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round;
-      if (it.correct) {
+      final s = g.oval.height;
+      final c = g.center;
+      if (it.isOk) {
         canvas.drawOval(g.oval, pen);
+      } else if (it.isNg) {
+        // × を答えの上に書く
+        final d = s * 0.42;
+        canvas.drawLine(Offset(c.dx - d, c.dy - d), Offset(c.dx + d, c.dy + d), pen);
+        canvas.drawLine(Offset(c.dx + d, c.dy - d), Offset(c.dx - d, c.dy + d), pen);
+        // 先生が問題集に書くように、正しい答えを赤で書き添える
+        if (it.modelAnswerFound && it.modelAnswer.isNotEmpty) {
+          _writeAnswer(canvas, size, g, it.modelAnswer);
+        }
       } else {
-        // ✓（チェック）を答えの上に書く
-        final s = g.oval.height;
-        final c = g.center;
-        final path = Path()
-          ..moveTo(c.dx - s * 0.45, c.dy - s * 0.05)
-          ..lineTo(c.dx - s * 0.12, c.dy + s * 0.38)
-          ..lineTo(c.dx + s * 0.55, c.dy - s * 0.55);
-        canvas.drawPath(path, pen);
+        // 保留：オレンジの破線の枠 + 「?」
+        final dash = Path()..addOval(g.oval);
+        for (final m in dash.computeMetrics()) {
+          for (double t = 0; t < m.length; t += pen.strokeWidth * 4) {
+            canvas.drawPath(m.extractPath(t, t + pen.strokeWidth * 2.2), pen);
+          }
+        }
+        final tp = TextPainter(
+          text: TextSpan(
+              text: '?', style: TextStyle(color: holdColor, fontSize: s * 0.75, fontWeight: FontWeight.w900)),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        tp.paint(canvas, Offset(g.oval.right + s * 0.05, c.dy - tp.height / 2));
       }
     }
 
@@ -401,7 +429,6 @@ class _RedPenPainter extends CustomPainter {
       canvas.drawRRect(RRect.fromRectAndRadius(bg, Radius.circular(pad)),
           Paint()..color = Colors.white.withValues(alpha: 0.85));
       tp.paint(canvas, topRight);
-      // 点数の下に二重線（先生の書き方）
       final line = Paint()
         ..color = redPen
         ..strokeWidth = (fontSize * 0.06).clamp(1.0, 4.0);
@@ -412,11 +439,34 @@ class _RedPenPainter extends CustomPainter {
     }
   }
 
+  /// × の右（入らなければ下）に模範解答を赤で書く
+  void _writeAnswer(Canvas canvas, Size size, _MarkGeometry g, String answer) {
+    final fontSize = (g.oval.height * 0.42).clamp(9.0, size.width * 0.05);
+    final maxW = size.width * 0.45;
+    final tp = TextPainter(
+      text: TextSpan(
+        text: answer,
+        style: TextStyle(color: redPen, fontSize: fontSize, fontWeight: FontWeight.w800, height: 1.15),
+      ),
+      textDirection: TextDirection.ltr,
+      maxLines: 2,
+      ellipsis: '…',
+    )..layout(maxWidth: maxW);
+    var pos = Offset(g.oval.right + fontSize * 0.4, g.center.dy - tp.height / 2);
+    if (pos.dx + tp.width > size.width - 4) {
+      pos = Offset((g.center.dx - tp.width / 2).clamp(4.0, size.width - tp.width - 4), g.oval.bottom + 2);
+    }
+    final bg = Rect.fromLTWH(pos.dx - 3, pos.dy - 2, tp.width + 6, tp.height + 4);
+    canvas.drawRRect(RRect.fromRectAndRadius(bg, const Radius.circular(4)),
+        Paint()..color = Colors.white.withValues(alpha: 0.8));
+    tp.paint(canvas, pos);
+  }
+
   @override
   bool shouldRepaint(_RedPenPainter old) => true;
 }
 
-/// 採点マーク付きの答案写真を縦に並べる（1枚目の右上に点数）
+/// 採点マーク付きの答案写真を縦に並べる（1枚目の右上に正答数/採点数）
 class MarkedPhotoList extends StatelessWidget {
   final List<Uint8List>? photos; // null = 読み込み中
   final String? error;
@@ -431,7 +481,7 @@ class MarkedPhotoList extends StatelessWidget {
     this.onToggleItem,
   });
 
-  String get _score => '${items.where((e) => e.correct).length}/${items.length}';
+  String get _score => GradeCounts.of(items).scoreText;
 
   @override
   Widget build(BuildContext context) {
@@ -457,7 +507,20 @@ class MarkedPhotoList extends StatelessWidget {
               items: items,
               scoreLabel: i == 0 && items.isNotEmpty ? _score : null,
               onToggleItem: onToggleItem,
-              onTapPhoto: () => showMarkedPhotoViewer(context, photos!, items, i, _score),
+              onTapPhoto: () => showDialog(
+                context: context,
+                barrierColor: Colors.black,
+                builder: (_) => _FullscreenPager(
+                  count: photos!.length,
+                  initial: i,
+                  builder: (k) => MarkedPhoto(
+                    bytes: photos![k],
+                    photoNumber: k + 1,
+                    items: items,
+                    scoreLabel: k == 0 && items.isNotEmpty ? _score : null,
+                  ),
+                ),
+              ),
             ),
           ),
         ),
@@ -465,27 +528,19 @@ class MarkedPhotoList extends StatelessWidget {
   }
 }
 
-/// 採点マーク付き写真の全画面表示（ピンチで拡大）
-void showMarkedPhotoViewer(
-    BuildContext context, List<Uint8List> photos, List<GradeItem> items, int initial, String score) {
-  showDialog(
-    context: context,
-    barrierColor: Colors.black,
-    builder: (ctx) => Stack(children: [
+class _FullscreenPager extends StatelessWidget {
+  final int count;
+  final int initial;
+  final Widget Function(int i) builder;
+  const _FullscreenPager({required this.count, required this.initial, required this.builder});
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(children: [
       PageView.builder(
         controller: PageController(initialPage: initial),
-        itemCount: photos.length,
-        itemBuilder: (_, i) => InteractiveViewer(
-          maxScale: 5,
-          child: Center(
-            child: MarkedPhoto(
-              bytes: photos[i],
-              photoNumber: i + 1,
-              items: items,
-              scoreLabel: i == 0 && items.isNotEmpty ? score : null,
-            ),
-          ),
-        ),
+        itemCount: count,
+        itemBuilder: (_, i) => InteractiveViewer(maxScale: 5, child: Center(child: builder(i))),
       ),
       Positioned(
         top: 16,
@@ -494,10 +549,10 @@ void showMarkedPhotoViewer(
           child: IconButton(
             style: IconButton.styleFrom(backgroundColor: Colors.black54),
             icon: const Icon(Icons.close, color: Colors.white),
-            onPressed: () => Navigator.pop(ctx),
+            onPressed: () => Navigator.pop(context),
           ),
         ),
       ),
-    ]),
-  );
+    ]);
+  }
 }

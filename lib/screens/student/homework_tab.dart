@@ -29,6 +29,9 @@ class _HomeworkTabState extends State<HomeworkTab> {
 
   List<String> _workbooks = [];
   String? _workbook;
+  String? _subject;
+  static const _subjects = ['数学', '英語', '国語', '理科', '社会'];
+  static const _maxPhotos = 4; // ルール：4ページ（見開き2組）ずつ採点
   final List<Uint8List> _photos = [];
   bool _submitting = false;
 
@@ -82,7 +85,10 @@ class _HomeworkTabState extends State<HomeworkTab> {
       if (picked.isEmpty || !mounted) return;
       setState(() {
         _photos.addAll(picked);
-        if (_photos.length > 8) _photos.removeRange(8, _photos.length);
+        if (_photos.length > _maxPhotos) {
+          _photos.removeRange(_maxPhotos, _photos.length);
+          _snack('1回に送れるのは$_maxPhotosページまでです。続きは次の提出で送ってください', AppColors.warning);
+        }
       });
     } catch (e) {
       _snack('写真を読み込めませんでした: $e', AppColors.danger);
@@ -90,6 +96,7 @@ class _HomeworkTabState extends State<HomeworkTab> {
   }
 
   Future<void> _submit() async {
+    if (_subject == null) return _snack('教科を選んでください', AppColors.danger);
     if (_workbook == null) return _snack('問題集を選んでください', AppColors.danger);
     if (_pagesCtrl.text.trim().isEmpty) return _snack('ページを入力してください', AppColors.danger);
     if (_photos.isEmpty) return _snack('答案の写真を撮ってください', AppColors.danger);
@@ -100,6 +107,8 @@ class _HomeworkTabState extends State<HomeworkTab> {
       await _svc.submit(
         studentId: user?.id ?? '',
         studentName: user?.name ?? '',
+        grade: user?.grade == null ? '' : '中${user!.grade}',
+        subject: _subject!,
         workbook: _workbook!,
         pages: _pagesCtrl.text.trim(),
         jpegImages: List.of(_photos),
@@ -187,6 +196,24 @@ class _HomeworkTabState extends State<HomeworkTab> {
   Widget _buildForm() {
     return GlowCard(
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        const Text('教科', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+        const SizedBox(height: 6),
+        Wrap(spacing: 8, runSpacing: 6, children: [
+          for (final sub in _subjects)
+            ChoiceChip(
+              label: Text(sub),
+              selected: _subject == sub,
+              onSelected: _submitting ? null : (_) => setState(() => _subject = sub),
+              selectedColor: AppColors.yellow.withValues(alpha: 0.2),
+              backgroundColor: AppColors.card,
+              side: BorderSide(color: _subject == sub ? AppColors.yellow : AppColors.cardBorder),
+              labelStyle: TextStyle(
+                  color: _subject == sub ? AppColors.yellow : AppColors.textSecondary,
+                  fontWeight: _subject == sub ? FontWeight.w700 : FontWeight.w400),
+              showCheckmark: false,
+            ),
+        ]),
+        const SizedBox(height: 14),
         DropdownButtonFormField<String>(
           initialValue: _workbook,
           isExpanded: true,
@@ -201,7 +228,14 @@ class _HomeworkTabState extends State<HomeworkTab> {
               .map((w) => DropdownMenuItem(
                   value: w, child: Text(w, style: const TextStyle(color: AppColors.textPrimary))))
               .toList(),
-          onChanged: _submitting ? null : (v) => setState(() => _workbook = v),
+          onChanged: _submitting
+              ? null
+              : (v) => setState(() {
+                    _workbook = v;
+                    // 問題集名に教科が入っていれば自動で選ぶ
+                    final hit = _subjects.where((sub) => (v ?? '').contains(sub));
+                    if (hit.isNotEmpty) _subject = hit.first;
+                  }),
         ),
         const SizedBox(height: 12),
         TextField(
@@ -267,7 +301,7 @@ class _HomeworkTabState extends State<HomeworkTab> {
           ),
         ]),
         const SizedBox(height: 4),
-        Text('写真 ${_photos.length}/8枚・答えがはっきり写るように撮ってください',
+        Text('写真 ${_photos.length}/$_maxPhotos枚・1ページずつ、真上からはっきり撮ってください',
             style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
         const SizedBox(height: 14),
         ElevatedButton(
@@ -286,7 +320,7 @@ class _HomeworkTabState extends State<HomeworkTab> {
                       height: 18,
                       child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.navyDark)),
                   SizedBox(width: 10),
-                  Text('送信・採点中…（30秒ほどかかります）', style: TextStyle(fontWeight: FontWeight.w700)),
+                  Text('送信・採点中…（1分ほどかかります）', style: TextStyle(fontWeight: FontWeight.w700)),
                 ])
               : const Text('提出する', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
         ),
@@ -344,10 +378,10 @@ class _SubmissionCard extends StatelessWidget {
                 style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
           ]),
         ),
-        if (s.isReturned && s.score != null)
+        if (s.isReturned && s.items.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(right: 8),
-            child: Text('${s.score}/${s.total}',
+            child: Text(GradeCounts.of(s.items).scoreText,
                 style: const TextStyle(color: AppColors.yellow, fontSize: 18, fontWeight: FontWeight.w800)),
           ),
         AppChip(label: s.status, color: color),
@@ -389,7 +423,7 @@ class _ReturnedDetailPageState extends State<_ReturnedDetailPage> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
-          ScoreHeader(score: s.score ?? 0, total: s.total ?? 0),
+          ScoreHeader(counts: GradeCounts.of(s.items)),
           const SizedBox(height: 12),
           if (s.teacherComment.isNotEmpty) ...[
             CommentBox(
@@ -403,9 +437,13 @@ class _ReturnedDetailPageState extends State<_ReturnedDetailPage> {
                 title: 'ひとこと', text: s.overallComment, icon: Icons.lightbulb_outline, color: AppColors.info),
             const SizedBox(height: 16),
           ],
-          const Text('問題ごとの答え', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-          const SizedBox(height: 6),
-          ...s.items.map((it) => GradeItemTile(item: it)),
+          if (s.items.any((it) => it.isNg)) ...[
+            const Text('間違えた問題（解き直そう）',
+                style: TextStyle(color: AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            ...s.items.where((it) => it.isNg).map((it) => ResultRow(item: it)),
+          ] else
+            const Text('全問正解です！🎉', style: TextStyle(color: AppColors.success, fontSize: 15)),
         ],
       ),
     );
