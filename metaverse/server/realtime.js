@@ -294,7 +294,7 @@ function attach(httpServer) {
     Object.assign(p, spawnPos(p));
     p.equip = ganbari.getEquip(p.id);
     p.streak = user.role === 'student' ? ganbari.streak(p.id) : 0;
-    p.today10 = user.role === 'student' ? Math.floor(ganbari.dayTotal(p.id, ganbari.jst().day) / 10) * 10 : null;
+    p.today10 = user.role === 'student' ? shownToday(ganbari.dayTotal(p.id, ganbari.jst().day)) : null;
     p.bday = user.role === 'student' ? ganbari.birthdayInfo(p.id) : null;
     refreshHS(p, false);
     p.room = roomIdAt(p.x, p.y);
@@ -309,7 +309,7 @@ function attach(httpServer) {
         if (Math.hypot(c.x - p.x, c.y - p.y) <= 8) { p.seat = gap.seat; p.x = c.x; p.y = c.y; p.dir = SM.seatFacing(sx, sy); }
       }
       try { gapMinutes = ganbari.creditGap(p.id, gap.at, Date.now(), Math.floor(STUDY_GAP_MS / 60_000)); } catch (e) { console.error('切れていた間の自習時間を足せませんでした:', e.message); }
-      if (gapMinutes) { p.streak = ganbari.streak(p.id); p.today10 = Math.floor(ganbari.dayTotal(p.id, ganbari.jst().day) / 10) * 10; }
+      if (gapMinutes) { p.streak = ganbari.streak(p.id); p.today10 = shownToday(ganbari.dayTotal(p.id, ganbari.jst().day)); }
     }
     // 授業中の先生が再接続したら、授業の自動終了を取り消す
     const myClass = p.room && classes.get(p.room);
@@ -816,10 +816,16 @@ function talkingWithStaff(p) {
   }
   return false;
 }
-// 今日の自習時間（10分単位）を更新して、変わったら全員に知らせる
+// 頭の上に出す今日の自習時間：10分までは1分ごと、1時間までは5分ごと、1時間からは10分ごと（切り捨て）
+function shownToday(m) {
+  if (m < 10) return m;
+  if (m < 60) return Math.floor(m / 5) * 5;
+  return Math.floor(m / 10) * 10;
+}
+// 今日の自習時間（表示用に丸めたもの）を更新して、変わったら全員に知らせる
 function updateToday(p) {
   if (p.user.role !== 'student') return;
-  const v = Math.floor(ganbari.dayTotal(p.id, ganbari.jst().day) / 10) * 10;
+  const v = shownToday(ganbari.dayTotal(p.id, ganbari.jst().day));
   if (v === p.today10) return;
   p.today10 = v;
   if (io) io.emit('user-updated', { id: p.id, today: v });
@@ -915,6 +921,7 @@ function presence() {
 function _reset() { online.clear(); lastPos.clear(); lastOffline.clear(); calls.clear(); studyPhotos.clear(); }
 
 module.exports = {
+  shownToday,
   isQuickRejoin, refreshGanbari, refreshBirthday, refreshAllGanbari, _online: online,
   storeStudyPhoto, getStudyPhoto, studyPhotoTimes, canViewStudyPhotos, setStudyPhotosFeature, studyPhotosEnabled,
   attach, kick, refreshUser, refreshRooms, presence, roomCounts, classState, endClass, endCallOf, REACTIONS, _reset };

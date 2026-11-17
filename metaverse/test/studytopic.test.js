@@ -115,3 +115,8 @@ test('生徒のスタンプも、先生が近くにいるときだけ届く', as
   U.stu1.c.s.emit('reaction', '👍'); await sleep(150);
   assert.equal(got(), before + 1, '先生が近くにいると届く');
 });
+
+test('頭の上の今日の自習時間：10分までは1分ごと、1時間までは5分ごと、それより上は10分ごと', () => {
+  const { shownToday } = require('../server/realtime.js');
+  assert.deepEqual([0, 1, 7, 9, 10, 14, 15, 59, 60, 67, 89, 125].map(shownToday), [0, 1, 7, 9, 10, 10, 15, 55, 60, 60, 80, 120]);
+});
