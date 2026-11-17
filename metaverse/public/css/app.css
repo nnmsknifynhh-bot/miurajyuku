@@ -148,7 +148,7 @@ body:not(.is-student) .student-only, body:not(.is-staff) .staff-only { display: 
 .sc-card { position: fixed; left: 10px; right: 10px; bottom: calc(env(safe-area-inset-bottom) + 96px); max-width: 420px; margin: 0 auto; background: #fff; border-radius: 18px; padding: 14px 16px; box-shadow: var(--shadow); z-index: 16; }
 .sc-card p { margin: 6px 0 10px; font-size: 14px; }
 .sc-actions { display: flex; gap: 8px; justify-content: flex-end; }
-.sc-badge { position: fixed; right: 10px; bottom: calc(env(safe-area-inset-bottom) + 96px); display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,.96); border-radius: 16px; padding: 6px 8px; box-shadow: var(--shadow); z-index: 15; max-width: calc(100vw - 150px); }
+.sc-badge { position: fixed; right: 10px; top: calc(env(safe-area-inset-top) + 66px); display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,.96); border-radius: 16px; padding: 6px 8px; box-shadow: var(--shadow); z-index: 15; max-width: calc(100vw - 150px); }
 .sc-badge video { width: 56px; height: 42px; object-fit: cover; border-radius: 8px; background: #000; transform: scaleX(-1); }
 .sc-badge b { display: block; font-size: 13px; }
 .sc-badge small { display: block; font-size: 11px; color: var(--muted); }

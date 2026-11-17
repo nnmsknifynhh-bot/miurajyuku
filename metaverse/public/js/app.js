@@ -882,7 +882,6 @@
   }
   setInterval(updateWakeLock, 3000);
   document.addEventListener('visibilitychange', updateWakeLock);
-  $('#stage-note').onclick = () => { $('#stage-note').hidden = true; };
 
   // 先生への通知音（短いチャイム）
   let audioCtx = null;
@@ -902,13 +901,34 @@
   }
 
   // ───────── 描画 ─────────
+  // 上のバー・下のボタン・スティックの高さ（0.5秒ごとに測りなおす）
+  let insetCache = { at: -1e9, top: 0, bottom: 0 };
+  function uiInsets(time) {
+    if (time - insetCache.at < 500) return insetCache;
+    let top = 0, bottom = 0;
+    const topEl = document.querySelector('.hud-top');
+    if (topEl) top = Math.max(0, topEl.getBoundingClientRect().bottom);
+    for (const sel of ['.hud-bottom', '.joystick']) {
+      const el = document.querySelector(sel);
+      if (!el || el.hidden || getComputedStyle(el).display === 'none') continue; // position: fixed なので offsetParent は使えない
+      const r = el.getBoundingClientRect();
+      if (r.height) bottom = Math.max(bottom, innerHeight - r.top);
+    }
+    insetCache = { at: time, top, bottom: Math.min(bottom, innerHeight * 0.4) };
+    return insetCache;
+  }
   function render(time) {
     ctx.fillStyle = '#3a3341'; ctx.fillRect(0, 0, innerWidth, innerHeight);
     const me = state.me;
     if (!me || !mapCanvas) return;
     const z = state.zoom;
-    const clamp = (v, view, size) => size <= view ? size / 2 : Math.max(view / 2, Math.min(size - view / 2, v));
-    const tx = clamp(me.x, innerWidth / z, SM.W * T), ty = clamp(me.y, innerHeight / z, SM.H * T);
+    // 画面の上下にあるボタンの下にマップの端（自習室の木など）が隠れないよう、その分だけ余白をとって動かす
+    const ins = uiInsets(time);
+    const clamp = (v, view, size, padA = 0, padB = 0) => size + padA + padB <= view ? size / 2 + (padB - padA) / 2 : Math.max(view / 2 - padA, Math.min(size - view / 2 + padB, v));
+    // 自習室では、自分と部屋のまん中の間を見る（上の席にすわっても、まん中の学年の木が見えるように）
+    const zone = SM.zoneAtPx(me.x, me.y);
+    const lookY = zone && zone.type === 'study' ? (me.y + (zone.y1 + zone.y2 + 1) / 2 * T) / 2 : me.y;
+    const tx = clamp(me.x, innerWidth / z, SM.W * T), ty = clamp(lookY, innerHeight / z, SM.H * T, ins.top / z, ins.bottom / z);
     state.cam.x += (tx - state.cam.x) * 0.12;
     state.cam.y += (ty - state.cam.y) * 0.12;
 
