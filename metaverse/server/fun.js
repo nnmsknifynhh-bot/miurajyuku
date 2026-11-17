@@ -24,24 +24,24 @@ function bonus(userId, reason, points) {
 }
 
 // ───────── 🎅 がんばりサンタ ─────────
-// 12/1〜12/24 に「1日○分以上」自習した日が○日以上なら、12/25〜1/7 にプレゼント箱が開けられる
+// 11/1〜11/30 に「1日○分以上」自習した日が○日以上なら、12/1〜12/7 にプレゼント箱が開けられる
 function santaStatus(userId, date = new Date()) {
   const f = cfg(), t = G.jst(date);
   if (!f.santa) return null;
   const m = md(t);
-  const inCount = m >= '12-01' && m <= '12-24';
-  const inGift = m >= '12-25' || m <= '01-07';
+  const inCount = m >= '11-01' && m <= '11-30';
+  const inGift = m >= '12-01' && m <= '12-07';
   if (!inCount && !inGift) return null;
-  const year = t.month === 1 ? t.year - 1 : t.year;
-  const rows = db.prepare('SELECT day, COALESCE(manual_min, auto_min) AS m FROM study_days WHERE user_id = ? AND day >= ? AND day <= ?').all(userId, `${year}-12-01`, `${year}-12-24`);
+  const year = t.year;
+  const rows = db.prepare('SELECT day, COALESCE(manual_min, auto_min) AS m FROM study_days WHERE user_id = ? AND day >= ? AND day <= ?').all(userId, `${year}-11-01`, `${year}-11-30`);
   const days = rows.filter(r => r.m >= f.santaMinMinutes).length;
   const opened = db.prepare('SELECT item FROM santa_gifts WHERE user_id = ? AND year = ?').get(userId, year);
   return { year, phase: inCount ? 'count' : 'gift', days, need: f.santaDays, minMinutes: f.santaMinMinutes, eligible: days >= f.santaDays, opened: opened ? opened.item : null };
 }
 function openSanta(userId, date = new Date()) {
   const st = santaStatus(userId, date);
-  if (!st || st.phase !== 'gift') return { error: 'プレゼントは12月25日からです' };
-  if (!st.eligible) return { error: `12月に${st.need}日以上自習するともらえます` };
+  if (!st || st.phase !== 'gift') return { error: 'プレゼントは12月1日〜7日に開けられます' };
+  if (!st.eligible) return { error: `11月に${st.need}日以上自習するともらえます` };
   if (st.opened) return { error: 'もう開けました', item: G.itemById(st.opened) };
   const have = new Set(G.owned(userId));
   const pool = G.SHOP.filter(i => i.special === 'santa' && !have.has(i.id));
@@ -67,10 +67,10 @@ function awardToshikoshi(userId, year) {
 }
 
 // ───────── 🌅 朝活チャレンジ ─────────
-// 朝6〜8時に自習として数えられた時間が○分になった日に「早起きスタンプ」。○個で早起きバッジ
+// 朝（初期設定 6:00〜7:30）に自習として数えられた時間が○分になった日に「早起きスタンプ」とポイント
 function morningTick(userIds, date = new Date()) {
   const f = cfg(), t = G.jst(date);
-  if (!f.asakatsu || t.hm < '06:00' || t.hm >= '08:00') return [];
+  if (!f.asakatsu || t.hm < f.asakatsuStart || t.hm >= f.asakatsuEnd) return [];
   const out = [];
   const up = db.prepare(`INSERT INTO study_morning (user_id, day, minutes) VALUES (?, ?, 1)
     ON CONFLICT(user_id, day) DO UPDATE SET minutes = minutes + 1`);
@@ -79,9 +79,7 @@ function morningTick(userIds, date = new Date()) {
     const m = db.prepare('SELECT minutes FROM study_morning WHERE user_id = ? AND day = ?').get(id, t.day).minutes;
     if (m !== f.asakatsuMinutes) continue; // ちょうど達したときだけ
     bonus(id, `asa:${t.day}`, f.asakatsuPoints);
-    const stamps = morningStamps(id);
-    const badge = stamps >= f.asakatsuBadge && awardBadge(id, 'early-bird', '早起きバッジ', '🌅');
-    out.push({ id, stamps, badge });
+    out.push({ id, stamps: morningStamps(id), points: f.asakatsuPoints });
   }
   return out;
 }
@@ -92,7 +90,7 @@ function morningStatus(userId, date = new Date()) {
   const f = cfg();
   if (!f.asakatsu) return null;
   const r = db.prepare('SELECT minutes FROM study_morning WHERE user_id = ? AND day = ?').get(userId, G.jst(date).day);
-  return { today: r ? r.minutes : 0, minutes: f.asakatsuMinutes, stamps: morningStamps(userId), badgeAt: f.asakatsuBadge, points: f.asakatsuPoints };
+  return { today: r ? r.minutes : 0, minutes: f.asakatsuMinutes, stamps: morningStamps(userId), points: f.asakatsuPoints, start: f.asakatsuStart, end: f.asakatsuEnd };
 }
 
 // 生徒の画面用まとめ

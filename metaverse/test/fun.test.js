@@ -26,19 +26,20 @@ test('準備', async () => {
   }
 });
 
-test('がんばりサンタ：12/1〜24に「30分以上」の日が10日以上で、12/25〜1/7に箱を開けられる（1回だけ）', () => {
-  for (let d = 1; d <= 10; d++) G.setManual(U.aaa.id, `${Y}-12-${String(d).padStart(2, '0')}`, 40, null);
-  for (let d = 1; d <= 10; d++) G.setManual(U.bbb.id, `${Y}-12-${String(d).padStart(2, '0')}`, d === 1 ? 20 : 40, null); // 1日は足りない
-  const c1 = F.santaStatus(U.aaa.id, at(`${Y}-12-20`));
+test('がんばりサンタ：11/1〜30に「30分以上」の日が10日以上で、12/1〜7に箱を開けられる（1回だけ）', () => {
+  for (let d = 1; d <= 10; d++) G.setManual(U.aaa.id, `${Y}-11-${String(d).padStart(2, '0')}`, 40, null);
+  for (let d = 1; d <= 10; d++) G.setManual(U.bbb.id, `${Y}-11-${String(d).padStart(2, '0')}`, d === 1 ? 20 : 40, null); // 1日は足りない
+  const c1 = F.santaStatus(U.aaa.id, at(`${Y}-11-20`));
   assert.equal(c1.phase, 'count'); assert.equal(c1.days, 10); assert.equal(c1.eligible, true);
-  assert.equal(F.santaStatus(U.bbb.id, at(`${Y}-12-20`)).days, 9);
-  assert.equal(F.santaStatus(U.aaa.id, at(`${Y}-11-30`)), null, '期間の外');
-  assert.match(F.openSanta(U.aaa.id, at(`${Y}-12-20`)).error, /25日/);
-  const r = F.openSanta(U.aaa.id, at(`${Y + 1}-01-03`));
+  assert.equal(F.santaStatus(U.bbb.id, at(`${Y}-11-20`)).days, 9);
+  assert.equal(F.santaStatus(U.aaa.id, at(`${Y}-10-31`)), null, '期間の外');
+  assert.equal(F.santaStatus(U.aaa.id, at(`${Y}-12-08`)), null, '12/8からは開けられない');
+  assert.match(F.openSanta(U.aaa.id, at(`${Y}-11-20`)).error, /12月1日/);
+  const r = F.openSanta(U.aaa.id, at(`${Y}-12-03`));
   assert.ok(r.item && r.item.emoji, 'クリスマスのアイテムが入っている');
   assert.ok(G.owned(U.aaa.id).includes(r.item.id));
-  assert.match(F.openSanta(U.aaa.id, at(`${Y}-12-26`)).error, /もう開けました/);
-  assert.match(F.openSanta(U.bbb.id, at(`${Y}-12-25`)).error, /10日以上/);
+  assert.match(F.openSanta(U.aaa.id, at(`${Y}-12-05`)).error, /もう開けました/);
+  assert.match(F.openSanta(U.bbb.id, at(`${Y}-12-01`)).error, /10日以上/);
   assert.match(G.buy(U.bbb.id, 'x_reindeer'), /買えません/, 'お店では買えない');
 });
 
@@ -51,17 +52,17 @@ test('年越し自習：1/1 0:00〜0:10だけ。バッジは1年に1回', () => 
   assert.ok(F.badgesOf(U.aaa.id).some(b => b.label.includes('年越し自習')));
 });
 
-test('朝活：朝6〜8時に数えた時間が15分になった日にスタンプとポイント。10こで早起きバッジ', () => {
+test('朝活：6:00〜7:30に数えた時間が15分になった日にスタンプと3ポイント（バッジはなし）', () => {
   const before = G.points(U.bbb.id).earned;
   let got = [];
   for (let m = 0; m < 15; m++) got = got.concat(F.morningTick([U.bbb.id], at(`${Y}-10-01`, `06:${String(10 + m).padStart(2, '0')}`)));
   assert.equal(got.length, 1, '15分になったときに1回だけ');
-  assert.equal(got[0].stamps, 1);
+  assert.equal(got[0].stamps, 1); assert.equal(got[0].points, 3);
   assert.equal(G.points(U.bbb.id).earned, before + 3, 'スタンプのポイント');
-  assert.deepEqual(F.morningTick([U.bbb.id], at(`${Y}-10-01`, '09:00')), [], '8時より後は数えない');
-  for (let d = 2; d <= 10; d++) for (let m = 0; m < 15; m++) got = got.concat(F.morningTick([U.bbb.id], at(`${Y}-10-${String(d).padStart(2, '0')}`, `07:${String(m).padStart(2, '0')}`)));
-  assert.equal(got.at(-1).stamps, 10); assert.equal(got.at(-1).badge, true);
-  assert.ok(F.badgesOf(U.bbb.id).some(b => b.label === '早起きバッジ'));
+  assert.deepEqual(F.morningTick([U.bbb.id], at(`${Y}-10-02`, '07:30')), [], '7:30からは数えない');
+  assert.equal(F.morningStatus(U.bbb.id, at(`${Y}-10-02`)).today, 0);
+  assert.ok(!F.badgesOf(U.bbb.id).some(b => b.label === '早起きバッジ'));
+  assert.match(G.setConfig({ fun: { asakatsuStart: '08:00', asakatsuEnd: '07:00' } }), /時間帯/);
 });
 
 test('オーナーはお楽しみのオン/オフと条件を変えられる。オフにすると出ない', async () => {

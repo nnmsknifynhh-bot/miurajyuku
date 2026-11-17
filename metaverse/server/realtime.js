@@ -702,10 +702,10 @@ function attach(httpServer) {
         if (s !== p.streak) { p.streak = s; io.emit('user-updated', { id, streak: s }); }
         p.socket.emit('study-minute');
       }
-      // 🌅 朝活チャレンジ：朝6〜8時に数えた時間で早起きスタンプ
+      // 🌅 朝活チャレンジ：朝（初期設定 6:00〜7:30）に数えた時間で早起きスタンプとポイント
       for (const r of fun.morningTick(added)) {
         const p = online.get(r.id);
-        if (p) p.socket.emit('fun-event', { kind: 'asa', stamps: r.stamps, badge: r.badge });
+        if (p) p.socket.emit('fun-event', { kind: 'asa', stamps: r.stamps, points: r.points });
       }
       // 🎆 年越し自習：年が明けた瞬間（0:00〜0:10）に自習室にいた生徒にバッジ
       const ny = fun.toshikoshiYear();

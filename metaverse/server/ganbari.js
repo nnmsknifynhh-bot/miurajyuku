@@ -125,7 +125,7 @@ function defaults(today = jst()) {
     events: Object.fromEntries(EVENTS.map(e => [e.id, true])), // 季節の飾り（オン/オフ）
     birthdayMessage: 'いつもがんばっているね。すてきな1年になりますように！', // 誕生日カードのひとこと
     // 季節のお楽しみ（オン/オフと条件）
-    fun: { santa: true, santaDays: 10, santaMinMinutes: 30, toshikoshi: true, asakatsu: true, asakatsuMinutes: 15, asakatsuPoints: 3, asakatsuBadge: 10 },
+    fun: { santa: true, santaDays: 10, santaMinMinutes: 30, toshikoshi: true, asakatsu: true, asakatsuStart: '06:00', asakatsuEnd: '07:30', asakatsuMinutes: 15, asakatsuPoints: 3 },
   };
 }
 
@@ -281,13 +281,19 @@ function setConfig(patch, actorId) {
   if (p.fun !== undefined) {
     const f = p.fun || {}, out = { ...c.fun };
     for (const k of ['santa', 'toshikoshi', 'asakatsu']) if (f[k] !== undefined) out[k] = !!f[k];
-    const lim = { santaDays: [1, 24, 'がんばりサンタの日数は1〜24日'], santaMinMinutes: [1, 600, 'がんばりサンタの1日の時間は1〜600分'],
-      asakatsuMinutes: [1, 120, '朝活の時間は1〜120分'], asakatsuPoints: [0, 100, '朝活のポイントは0〜100'], asakatsuBadge: [1, 100, '早起きバッジのスタンプ数は1〜100'] };
+    const lim = { santaDays: [1, 30, 'がんばりサンタの日数は1〜30日'], santaMinMinutes: [1, 600, 'がんばりサンタの1日の時間は1〜600分'],
+      asakatsuMinutes: [1, 120, '朝活の時間は1〜120分'], asakatsuPoints: [0, 100, '朝活のポイントは0〜100'] };
     for (const [k, [mn, mx, msg]] of Object.entries(lim)) {
       if (f[k] === undefined) continue;
       if (!int(f[k], mn, mx)) return msg + 'にしてください';
       out[k] = f[k];
     }
+    for (const k of ['asakatsuStart', 'asakatsuEnd']) {
+      if (f[k] === undefined) continue;
+      if (!RE_HM.test(f[k]) || f[k] === '24:00') return '朝活の時間帯が正しくありません';
+      out[k] = f[k];
+    }
+    if (out.asakatsuStart >= out.asakatsuEnd) return '朝活の時間帯が正しくありません（はじめ ＜ おわり）';
     c.fun = out;
   }
   if (p.birthdayMessage !== undefined) {
