@@ -104,3 +104,14 @@ test('先生がはなれると、生徒の吹き出しは自動で消える', as
   assert.equal(lastTopic(U.stu2.c, U.stu1.id), null);
   assert.ok(U.stu1.c.events.filter(e => e.ev === 'topic-cleared').some(e => e.d.by === null));
 });
+
+test('生徒のスタンプも、先生が近くにいるときだけ届く', async () => {
+  const got = () => U.stu2.c.events.filter(e => e.ev === 'reaction' && e.d.id === U.stu1.id).length;
+  const before = got();
+  U.stu1.c.s.emit('reaction', '👍'); await sleep(150);
+  assert.equal(got(), before, '先生が遠いと届かない');
+  await walk(U.tch1.c, 11, 22);
+  await sleep(1300); // 連打よけの間かく
+  U.stu1.c.s.emit('reaction', '👍'); await sleep(150);
+  assert.equal(got(), before + 1, '先生が近くにいると届く');
+});

@@ -410,6 +410,8 @@ function attach(httpServer) {
     // ── リアクション ──
     socket.on('reaction', (kind) => {
       if (!REACTIONS.includes(kind)) return;
+      // 生徒のスタンプは、先生・オーナーに話しかけられているとき（近く・個別通話中・授業中の教室）だけ
+      if (p.user.role === 'student' && !talkingWithStaff(p) && !(p.room && classes.has(p.room))) return;
       const t = Date.now();
       if (t - p.lastReactionAt < 1200) return;
       p.lastReactionAt = t;

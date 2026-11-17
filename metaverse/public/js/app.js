@@ -387,8 +387,10 @@
   function talkingWithStaff() {
     const me = state.me;
     if (state.pc && state.pc.active()) return true;
+    const zoneId = (x, y) => (SM.zoneAtPx(x, y) || {}).id || null; // 部屋は位置から求める（ほかの人の room は移動中に古いことがある）
+    const myZone = zoneId(me.x, me.y);
     for (const u of state.others.values()) {
-      if (u.role !== 'student' && u.room === me.room && Math.hypot(u.x - me.x, u.y - me.y) <= T * 3.5) return true;
+      if (u.role !== 'student' && Math.hypot(u.x - me.x, u.y - me.y) <= T * 3.5 && zoneId(u.x, u.y) === myZone) return true;
     }
     return false;
   }
@@ -468,8 +470,22 @@
     $('#place-cap').textContent = c ? `生徒 ${c.students}/${c.capacity}人` : '';
   }
 
+  // 生徒の「吹き出し」「スタンプ」は、先生・オーナーに話しかけられたとき（近くに来た・個別通話中）だけ出す。
+  // スタンプは授業中の教室でも使える（サーバーでも同じようにたしかめる）
+  function updateTalkButtons() {
+    if (!state.user || state.user.role !== 'student' || !state.me) return;
+    const talk = talkingWithStaff();
+    const topicOn = talk || !!state.me.topic;
+    const reactOn = talk || !!(state.me.room && state.classes && state.classes[state.me.room]);
+    if ($('#btn-topic').hidden === topicOn) $('#btn-topic').hidden = !topicOn;
+    if ($('#btn-react').hidden === reactOn) { $('#btn-react').hidden = !reactOn; if (!reactOn) $('#react-pop').hidden = true; }
+    if (talk && !state.talkHinted) { state.talkHinted = true; toast('👋 先生が話しかけています。吹き出しやスタンプで返事ができます', 4000); }
+    if (!talk) state.talkHinted = false;
+  }
+  setInterval(updateTalkButtons, 700);
   function updateButtons() {
     const me = state.me;
+    updateTalkButtons();
     $('#sit-label').textContent = me && me.seat ? 'たつ' : 'すわる';
     $('#btn-sit').classList.toggle('on', !!(me && me.seat));
     $('#hand-label').textContent = me && me.hand ? '手をおろす' : '手をあげる';
