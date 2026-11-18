@@ -63,3 +63,4 @@ dialog::backdrop { background: rgba(30, 25, 40, .45); }
 .dialog-body { padding: 22px; display: grid; gap: 14px; }
 .dialog-body h2 { margin: 0; font-size: 20px; }
 .dialog-actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+.badge.trial { background: #ff8a3d; }

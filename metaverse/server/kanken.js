@@ -119,7 +119,7 @@ function hasQuestions(levels) {
 }
 /** この生徒は、入室の前にテストが必要か */
 function required(user, { quickRejoin = false } = {}) {
-  if (!user || user.role !== 'student') return false;
+  if (!user || user.role !== 'student' || user.trial_until) return false; // 体験中の子はテストなし
   const c = getConfig();
   if (!c.enabled || quickRejoin) return false;
   if (!hasQuestions(levelsFor(user.grade, c))) return false; // 対象の学年でない・問題がない
@@ -218,7 +218,7 @@ function stats() {
   const since = new Date(Date.now() - 30 * 86400e3).toISOString();
   return db.prepare(`SELECT u.id, u.display_name AS name, u.grade, COUNT(r.id) AS answered, COALESCE(SUM(r.correct), 0) AS correct
     FROM users u LEFT JOIN quiz_results r ON r.user_id = u.id AND r.answered_at >= ?
-    WHERE u.role = 'student' AND u.is_active = 1 GROUP BY u.id ORDER BY u.grade, u.display_name`).all(since);
+    WHERE u.role = 'student' AND u.is_active = 1 AND u.trial_until IS NULL GROUP BY u.id ORDER BY u.grade, u.display_name`).all(since);
 }
 
 module.exports = {

@@ -445,7 +445,7 @@ function tick(online, opt = {}) {
   db.exec('BEGIN');
   try {
     for (const p of online.values()) {
-      if (p.user.role !== 'student' || !SM.isStudyRoom(p.room) || p.away) continue;
+      if (p.user.role !== 'student' || p.user.trial_until || !SM.isStudyRoom(p.room) || p.away) continue; // 体験中の子は記録しない
       if (c.requireSeat && !p.seat) continue;
       if (c.requireCamera && opt.photosOn && !p.studyCam) continue;
       const r = rules[isHS(p.user.grade) ? 'hs' : 'jh'];
@@ -534,6 +534,9 @@ const SHOP = [
   { id: 'diamond', slot: 'head', emoji: '💎', name: 'ダイヤのかざり', price: 1000 },
   // 誕生日のプレゼント（お店では買えない。誕生日に入室するともらえる）
   { id: 'bday_cake', slot: 'head', emoji: '🎂', name: 'バースデーケーキの帽子', price: 0, special: 'birthday' },
+  // 友だち紹介でしかもらえないアイテム
+  { id: 'friend_chick', slot: 'pet', emoji: '🐥', name: 'なかよしひよこ（おそろい）', price: 0, special: 'friend' },
+  { id: 'pair_star', slot: 'head', emoji: '💫', name: 'ペア自習のきらきら星', price: 0, special: 'friend' },
   // がんばりサンタのプレゼント（12月にがんばった人だけ。お店では買えない）
   { id: 'x_star', slot: 'head', emoji: '🌟', name: 'ツリーの星', price: 0, special: 'santa' },
   { id: 'x_reindeer', slot: 'pet', emoji: '🦌', name: 'トナカイ', price: 0, special: 'santa' },
@@ -600,7 +603,8 @@ function points(userId, date = new Date()) {
   // ポイントは年度をまたいで引きつぐ（数え始めた日からの合計）
   const gu = db.prepare('SELECT grade, role FROM users WHERE id = ?').get(userId);
   if (gu && gu.role === 'parent') { // 保護者：毎日の問題で正解した数がポイント（1問1ポイント）
-    const earnedP = db.prepare('SELECT COUNT(*) AS n FROM parent_quiz WHERE user_id = ? AND correct = 1').get(userId).n;
+    const earnedP = db.prepare('SELECT COUNT(*) AS n FROM parent_quiz WHERE user_id = ? AND correct = 1').get(userId).n
+      + db.prepare('SELECT COALESCE(SUM(points), 0) AS s FROM bonus_points WHERE user_id = ?').get(userId).s; // 紹介のボーナスなど
     const spentP = db.prepare('SELECT COALESCE(SUM(price), 0) AS s FROM shop_owned WHERE user_id = ?').get(userId).s;
     return { earned: earnedP, spent: spentP, balance: earnedP - spentP, yearMinutes: 0 };
   }
@@ -715,7 +719,7 @@ function forest(date = new Date(), termOverride = null) {
   const c = getConfig();
   const term = termOverride || termOf(jst(date).day, c);
   const trees = c.trees.map((t, i) => {
-    const students = db.prepare(`SELECT id, display_name AS name FROM users WHERE role = 'student' AND is_active = 1 AND grade IN (${t.grades.map(() => '?').join(',')})`).all(...t.grades);
+    const students = db.prepare(`SELECT id, display_name AS name FROM users WHERE role = 'student' AND is_active = 1 AND trial_until IS NULL AND grade IN (${t.grades.map(() => '?').join(',')})`).all(...t.grades);
     let sum = 0;
     if (term) for (const s of students) sum += minutesBetween(s.id, term.start, term.end);
     const avg = students.length ? sum / students.length : 0; // 人数の差が出ないように「平均」
@@ -741,7 +745,7 @@ function studentSummary(date = new Date()) {
   const c = getConfig();
   const today = jst(date).day;
   const term = termOf(today, c);
-  return db.prepare("SELECT id, display_name AS name, grade FROM users WHERE role = 'student' AND is_active = 1 ORDER BY grade, display_name").all().map(s => {
+  return db.prepare("SELECT id, display_name AS name, grade FROM users WHERE role = 'student' AND is_active = 1 AND trial_until IS NULL ORDER BY grade, display_name").all().map(s => {
     const pt = points(s.id, date);
     return {
       ...s, today: dayTotal(s.id, today), term: term ? minutesBetween(s.id, term.start, term.end) : 0,
@@ -760,7 +764,7 @@ function newYear(terms, promote, actorId) {
   setSetting('ganbari', JSON.stringify(c));
   let promoted = 0;
   if (promote) {
-    for (const u of db.prepare("SELECT id, grade FROM users WHERE role = 'student' AND grade IS NOT NULL").all()) {
+    for (const u of db.prepare("SELECT id, grade FROM users WHERE role = 'student' AND grade IS NOT NULL AND trial_until IS NULL").all()) {
       if (NEXT_GRADE[u.grade]) { db.prepare('UPDATE users SET grade = ? WHERE id = ?').run(NEXT_GRADE[u.grade], u.id); promoted++; }
     }
   }

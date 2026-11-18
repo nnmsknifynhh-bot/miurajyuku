@@ -399,6 +399,7 @@
     }
     // 帽子・かざりをつけているときは、名札を少し上へ（アイテムがかくれないように）
     const byTag = by - ((u.equip && u.equip.head && !(u.equip.costume)) || (u.equip && u.equip.costume) ? 12 : 0);
+    if (opts.noTag) return; // 招待カードなど：アバターだけ
     // 名札（連続自習の日数🔥つき）
     const tag = ROLE_TAG[u.role];
     // 高校生：称号を名前の前に、🔥は「週」で数える

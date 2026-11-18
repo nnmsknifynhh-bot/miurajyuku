@@ -133,6 +133,9 @@ function pruneAuditLogs() {
 pruneAuditLogs();
 setInterval(pruneAuditLogs, 24 * 3600e3).unref();
 
+// 体験アカウント（友だち紹介）：体験の終わりの時刻（ミリ秒）。入塾したら NULL
+if (!db.prepare('PRAGMA table_info(users)').all().some(c => c.name === 'trial_until')) db.exec('ALTER TABLE users ADD COLUMN trial_until INTEGER');
+if (!db.prepare('PRAGMA table_info(users)').all().some(c => c.name === 'class_days')) db.exec('ALTER TABLE users ADD COLUMN class_days TEXT');
 function getSetting(key, def = null) {
   const r = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
   return r ? r.value : def;

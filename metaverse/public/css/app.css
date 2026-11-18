@@ -300,6 +300,14 @@ body.is-parent #menu-shop.student-only { display: block !important; }
 .saver-sub { font-size: 16px; margin-top: 6px; color: #7a7a7a; }
 .saver-sub.low { color: #c46a6a; }
 .saver-hint { font-size: 12px; margin-top: 26px; color: #4f4f4f; }
+/* 🤝 友だちを招待 */
+body.is-trial .not-trial { display: none !important; }
+#invite-card { width: 100%; max-width: 300px; display: block; margin: 6px auto 10px; border-radius: 14px; box-shadow: 0 4px 14px rgba(60,40,20,.2); }
+.invite-actions { display: grid; gap: 8px; }
+.btn.line { background: #06c755; border-color: #05a948; color: #fff; }
+.ref-chip { background: rgba(255,244,230,.96); border-color: #ffc078; color: #a85a00; white-space: pre-line; }
+.family-invite { display: grid; gap: 4px; margin: 8px 0; }
+.muted.small { font-size: 12px; }
 /* 保護者：のこり時間 */
 .visit-chip { background: rgba(255,240,246,.96); border-color: #f0a6c4; color: #8a2f58; }
 .visit-chip.warn { background: #ffe0e0; border-color: #e57373; color: #b71c1c; }

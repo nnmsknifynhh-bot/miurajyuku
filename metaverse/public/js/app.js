@@ -28,6 +28,7 @@
     $('#me-role').textContent = ROLE_LABEL[u.role];
     $('#me-role').className = 'badge ' + u.role;
     document.body.classList.add(u.role === 'student' ? 'is-student' : u.role === 'parent' ? 'is-parent' : 'is-staff');
+    if (state.trial) { $('#me-role').textContent = '体験'; document.body.classList.add('is-trial'); try { localStorage.setItem('juku-trial-until', String(state.trial.until)); } catch (e) {} }
     mapCanvas = window.Render.buildMap();
     state.zoom = autoZoom();
     if (matchMedia('(pointer: coarse)').matches) $('#joystick').hidden = false;
@@ -77,6 +78,7 @@
     state.user = data.user; state.rooms = data.rooms;
     state.studyPhotos = !!(data.features && data.features.studyPhotos);
     state.closed = data.closed || null;
+    state.trial = data.trial || null;
     $('#menu-admin').hidden = !(data.user.role === 'owner' || data.user.permissions.manage_classroom);
   }
 
@@ -177,6 +179,12 @@
     });
     // ── 保護者 ──
     socket.on('visit-over', ({ message }) => showVisitOver(message));
+    socket.on('referral-reward', ({ kind, points }) => {
+      const msg = kind === 'enroll' ? '🐥 友だちが入塾しました！ おそろいの「なかよしひよこ」をもらったよ。7日間のペア自習チャレンジもスタート！'
+        : kind === 'pair' ? `🤝 ペア自習チャレンジ成功！ 「ペア自習のきらきら星」💫と ${points}ポイントをもらったよ`
+        : `🌷 ご紹介のご家族が入塾しました！ 母達の木に🌷が咲き、${points}ポイントをもらいました`;
+      toast(msg, 9000); chime(0.2); refreshFun(true);
+    });
     socket.on('meeting-closed', ({ message }) => { state.ready = false; showVisitOver(message); });
     socket.on('meeting-soon', ({ start, end }) => { toast(`📣 まもなく保護者会です（${start}〜${end}）。${start}になったら一度退室します。${end}からまた入れます`, 12000); chime(0.2); });
     socket.on('parent-meeting', ({ on }) => {
@@ -554,7 +562,7 @@
       card.append(stamps); list.append(card);
     }
     const m = d.moms;
-    $('#family-moms').textContent = `🌸 母達の木：花${m.flowers}こ（${m.stageName}）・今月${m.families}家族が挑戦中・あなたは🔥${d.streak}日連続・${d.points}ポイント`;
+    $('#family-moms').textContent = `🌸 母達の木：花${m.flowers}こ${m.tulips ? `・🌷${m.tulips}` : ''}（${m.stageName}）・今月${m.families}家族が挑戦中・あなたは🔥${d.streak}日連続・${d.points}ポイント`;
     if (!$('#family-dialog').open) $('#family-dialog').showModal();
   }
   const fmtMin = (m) => m >= 60 ? `${Math.floor(m / 60)}時間${m % 60 ? (m % 60) + '分' : ''}` : `${m}分`;
@@ -632,6 +640,17 @@
       const hm = new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Tokyo' });
       if (f.morning && hm >= f.morning.start && hm < f.morning.end) chips.push(f.morning.today >= f.morning.minutes ? `🌅 朝活 今日のスタンプ ✓（ぜんぶで${f.morning.stamps}こ）` : `🌅 朝活 ${f.morning.today}/${f.morning.minutes}分（スタンプ${f.morning.stamps}こ）`);
       $('#fun-chip').textContent = chips.join('\n'); $('#fun-chip').style.whiteSpace = 'pre-line'; $('#fun-chip').hidden = !chips.length;
+      // 🤝 友だち紹介：体験中・ペア自習チャレンジ・紹介ウィーク
+      const rc = [];
+      if (state.trial) {
+        const left = Math.max(0, Math.ceil((state.trial.until - Date.now()) / 86400e3)), end = new Date(state.trial.until);
+        rc.push(`🎈 体験中・あと${left}日（${end.getMonth() + 1}/${end.getDate()}まで）${state.trial.inviter ? `\n${state.trial.inviter}さんからの招待` : ''}`);
+      }
+      const pr = g.pair;
+      if (pr && !pr.result) rc.push(`🤝 ペア自習チャレンジ（${pr.partner}さんと）\nあなた ${pr.mine}/${pr.days}日・${pr.partner} ${pr.theirs}/${pr.days}日${pr.broken ? '（おしかった！）' : ''}`);
+      else if (pr && pr.result === 'success') rc.push(`🤝 ペア自習チャレンジ成功！ 💫と+${pr.points}ポイント`);
+      if (g.referralWeek && !state.trial) rc.push(`🎉 友だち紹介ウィーク（〜${Number(g.referralWeek.end.slice(5, 7))}/${Number(g.referralWeek.end.slice(8))}）\nメニューの「🤝 友だちを招待」から`);
+      $('#ref-chip').textContent = rc.join('\n'); $('#ref-chip').hidden = !rc.length;
       // 🎅 プレゼント（12/25〜1/7・がんばった人）
       if (f.santa && f.santa.phase === 'gift' && f.santa.eligible && !f.santa.opened && !santaAsked) { santaAsked = true; showWhenFree($('#santa-dialog')); }
     } catch (e) { /* 次の機会に */ } finally { funBusy = false; }
@@ -1289,6 +1308,70 @@
   });
 
   // ───────── がんばり（ポイント・目標・学年の木） ─────────
+  // ───── 🤝 友だちを招待（招待カード・LINE） ─────
+  let invite = null;
+  async function openInvite() {
+    $('#me-menu').hidden = true;
+    try { invite = await api('GET', '/api/me/referral'); } catch (e) { return toast(e.message); }
+    if (!invite.trial) return toast('いまは体験の受付をお休みしています');
+    invite.url = location.origin + invite.path;
+    const parent = isParent();
+    $('#invite-title').textContent = parent ? '🌷 お友だちのご家族に紹介する' : '🤝 友だちを招待しよう';
+    $('#invite-note').textContent = `${invite.week ? '🎉 友だち紹介ウィーク中！ ' : ''}リンクを送ると、${invite.days}日間オンライン自習室を体験できます（記録は残りません）。`;
+    $('#invite-rewards').textContent = parent
+      ? `紹介したご家族のお子さんが入塾すると、母達の木に🌷が咲き、${invite.rewards.parentPoints}ポイントもらえます。`
+      : `友だちが入塾したら、2人におそろいの「なかよしひよこ🐥」。さらに7日間2人とも🔥を続けたら「ペア自習のきらきら星💫」と${invite.rewards.pairPoints}ポイント！`;
+    $('#invite-card').hidden = parent; $('#invite-share').hidden = parent;
+    if (!parent) drawInviteCard();
+    $('#invite-dialog').showModal();
+  }
+  const inviteText = () => isParent()
+    ? `三浦塾のオンライン自習室、よかったら体験してみませんか？ ${invite.days}日間、お子さんが体験できます。\n${invite.url}`
+    : `${state.user.displayName}だよ！ 三浦塾のオンライン自習室で、いっしょに自習しよう！ ${invite.days}日間体験できるよ🎉\n${invite.url}`;
+  function drawInviteCard() {
+    const cv = $('#invite-card'), c = cv.getContext('2d'), W = cv.width, H = cv.height;
+    const g = c.createLinearGradient(0, 0, W, H); g.addColorStop(0, '#47b4ff'); g.addColorStop(0.5, '#8a7cff'); g.addColorStop(1, '#ff8fbf');
+    c.fillStyle = g; c.fillRect(0, 0, W, H);
+    c.fillStyle = 'rgba(255,255,255,.12)'; for (let i = 0; i < 40; i++) { c.beginPath(); c.arc((i * 197) % W, (i * 311) % H, 6 + (i % 4) * 4, 0, Math.PI * 2); c.fill(); }
+    c.textAlign = 'center'; c.fillStyle = '#fff'; c.font = '900 64px sans-serif';
+    c.fillText('いっしょに自習しよう！', W / 2, 150);
+    c.font = '700 40px sans-serif'; c.fillText(`${state.user.displayName}さんからの招待状`, W / 2, 225);
+    // まん中：自分のアバター（着せかえのまま）
+    c.fillStyle = 'rgba(255,255,255,.95)'; c.beginPath(); c.roundRect(140, 290, W - 280, 620, 60); c.fill();
+    c.fillStyle = '#ffe9a8'; c.beginPath(); c.ellipse(W / 2, 760, 230, 50, 0, 0, Math.PI * 2); c.fill();
+    c.save(); c.translate(W / 2, 640); c.scale(7, 7);
+    const me = state.me || {};
+    window.Render.drawAvatar(c, { ...me, seat: null, moving: false, dir: 'down', name: '', topic: null, today: null, reaction: null, streak: 0, title: null, bday: false }, 0, 0, { time: 0, noTag: true });
+    c.restore();
+    c.fillStyle = '#3a2f28'; c.font = '900 52px sans-serif';
+    c.fillText(me.streak >= 1 ? `🔥 ${me.streak}${me.hs ? '週' : '日'}連続で自習中！` : '📚 毎日コツコツ自習中！', W / 2, 870);
+    c.fillStyle = '#fff'; c.font = '900 54px sans-serif'; c.fillText('三浦塾 オンライン自習室', W / 2, 1010);
+    c.font = '700 38px sans-serif';
+    c.fillText(`アバターで入って、席にすわって集中！`, W / 2, 1075);
+    c.fillText(`${invite.days}日間、体験できます`, W / 2, 1130);
+    c.fillStyle = 'rgba(255,255,255,.9)'; c.beginPath(); c.roundRect(120, 1180, W - 240, 110, 30); c.fill();
+    c.fillStyle = '#6f4cff'; c.font = '900 40px sans-serif'; c.fillText('リンクから体験スタート ▶', W / 2, 1250);
+  }
+  $('#menu-invite').onclick = openInvite;
+  $('#family-invite').onclick = () => { $('#family-dialog').close(); openInvite(); };
+  $('#invite-close').onclick = () => $('#invite-dialog').close();
+  $('#invite-line').onclick = () => { window.open('https://line.me/R/share?text=' + encodeURIComponent(inviteText()), '_blank', 'noopener'); };
+  $('#invite-copy').onclick = async () => {
+    try { await navigator.clipboard.writeText(inviteText()); toast('招待のメッセージとリンクをコピーしました'); } catch (e) { toast('コピーできませんでした'); }
+  };
+  $('#invite-share').onclick = () => {
+    $('#invite-card').toBlob(async (blob) => {
+      const file = new File([blob], '三浦塾_招待カード.png', { type: 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try { await navigator.share({ files: [file], text: inviteText() }); } catch (e) { /* やめた */ }
+        return;
+      }
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = file.name; a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      toast('カードを保存しました。LINEで送るときは、リンクもいっしょに送ってね');
+    }, 'image/png');
+  };
+
   $('#menu-shop').onclick = () => { $('#me-menu').hidden = true; state.gb.openShop(); };
   $('#menu-goal').onclick = () => { $('#me-menu').hidden = true; state.gb.openGoal(); };
   $('#menu-forest').onclick = () => { $('#me-menu').hidden = true; state.gb.openForest(null); };
@@ -1483,7 +1566,7 @@
     // 母達の木（ロビー）：見たよスタンプで花が咲く
     if (forest && forest.moms) {
       const m = forest.moms;
-      list.push({ tree: { name: m.name, stage: m.stage, stageName: `🌸${m.flowers}・今月${m.families}家族が挑戦中`, goals: [], grades: [] }, x: (SM.MOM_TREE.x + 1) * T, y: (SM.MOM_TREE.y + 1) * T - 6 });
+      list.push({ tree: { name: m.name, stage: m.stage, stageName: `🌸${m.flowers}${m.tulips ? `・🌷${m.tulips}` : ''}・今月${m.families}家族が挑戦中`, goals: [], grades: [] }, x: (SM.MOM_TREE.x + 1) * T, y: (SM.MOM_TREE.y + 1) * T - 6 });
     }
     list.sort((a, b) => a.y - b.y);
     const season = window.Render.seasonOf();

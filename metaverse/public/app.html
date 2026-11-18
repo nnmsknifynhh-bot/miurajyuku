@@ -118,7 +118,7 @@
     <div class="test-q-head"><b>順番待ち</b><span id="test-q-count"></span></div>
     <ol id="test-queue"></ol>
   </aside>
-  <div class="top-chips"><div class="week-chip" id="week-chip" hidden></div><div class="week-chip fun-chip" id="fun-chip" hidden></div><div class="week-chip visit-chip" id="visit-chip" hidden></div></div>
+  <div class="top-chips"><div class="week-chip" id="week-chip" hidden></div><div class="week-chip fun-chip" id="fun-chip" hidden></div><div class="week-chip visit-chip" id="visit-chip" hidden></div><div class="week-chip ref-chip" id="ref-chip" hidden></div></div>
 
   <!-- 🎅 がんばりサンタのプレゼント -->
   <dialog id="santa-dialog" class="fun-card santa-card">
@@ -131,6 +131,21 @@
   </dialog>
 
 
+  <!-- 🤝 友だちを招待（招待カード） -->
+  <dialog id="invite-dialog">
+    <div class="dialog-body">
+      <h2 id="invite-title">🤝 友だちを招待しよう</h2>
+      <p class="muted" id="invite-note"></p>
+      <canvas id="invite-card" width="1080" height="1350"></canvas>
+      <div class="invite-actions">
+        <button type="button" class="btn line" id="invite-line">LINEで送る</button>
+        <button type="button" class="btn secondary" id="invite-share">カードを送る・保存</button>
+        <button type="button" class="btn secondary" id="invite-copy">リンクをコピー</button>
+      </div>
+      <p class="muted small" id="invite-rewards"></p>
+      <div class="dialog-actions"><button type="button" class="btn secondary" id="invite-close">とじる</button></div>
+    </div>
+  </dialog>
   <!-- 👪 保護者：ロビーのソファをえらぶ -->
   <dialog id="sofa-dialog">
     <div class="dialog-body">
@@ -145,6 +160,7 @@
       <h2>🏠 わが子の様子</h2>
       <div id="family-list"></div>
       <p class="muted" id="family-moms"></p>
+      <div class="family-invite"><button type="button" class="btn secondary" id="family-invite">🌷 お友だちのご家族に紹介する</button><small class="muted">紹介したご家族が入塾すると、母達の木に🌷が咲き、50ポイントもらえます</small></div>
       <details class="family-add"><summary>👪 きょうだいを追加する</summary>
         <div class="gb-row"><input id="family-code" placeholder="招待コード" autocapitalize="characters"><button type="button" class="btn small" id="family-add">追加</button></div>
       </details>
@@ -264,8 +280,9 @@
 
   <nav class="me-menu" id="me-menu" hidden>
     <a href="/admin" id="menu-admin" hidden>⚙️ 管理画面</a>
-    <button id="menu-shop" class="student-only">🎁 ポイントと着せかえ</button>
-    <button id="menu-goal" class="student-only">🎯 今学期の目標</button>
+    <button id="menu-invite" class="student-only not-trial">🤝 友だちを招待</button>
+    <button id="menu-shop" class="student-only not-trial">🎁 ポイントと着せかえ</button>
+    <button id="menu-goal" class="student-only not-trial">🎯 今学期の目標</button>
     <button id="menu-forest" class="not-parent">🌳 学年の木</button>
     <button id="menu-notify" class="staff-only">🔔 入室の通知</button>
     <button id="menu-sound">🔈 音のテスト</button>

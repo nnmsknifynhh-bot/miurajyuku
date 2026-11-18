@@ -26,9 +26,9 @@ const DUMMY_HASH = hashPassword(crypto.randomBytes(8).toString('hex'));
 // ── セッション ──
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 
-function createSession(userId, req) {
+function createSession(userId, req, untilMs) {
   const token = crypto.randomBytes(32).toString('base64url');
-  const expires = new Date(Date.now() + SESSION_DAYS * 86400e3).toISOString();
+  const expires = new Date(untilMs || Date.now() + SESSION_DAYS * 86400e3).toISOString(); // 体験アカウントは体験の終わりまで
   db.prepare('INSERT INTO sessions (token_hash, user_id, created_at, expires_at, ip, user_agent) VALUES (?, ?, ?, ?, ?, ?)')
     .run(sha256(token), userId, now(), expires, req.ip, String(req.headers['user-agent'] || '').slice(0, 200));
   return { token, expires };
@@ -56,7 +56,7 @@ function readCookie(req, name) {
 
 // ユーザーを権限・担当教室付きで読み込む
 function loadUser(id) {
-  const u = db.prepare('SELECT id, login_id, display_name, role, avatar_color, grade, birthday, birthday_public, visit_days, visit_time, class_days, is_active, created_at, updated_at FROM users WHERE id = ?').get(id);
+  const u = db.prepare('SELECT id, login_id, display_name, role, avatar_color, grade, birthday, birthday_public, visit_days, visit_time, class_days, trial_until, is_active, created_at, updated_at FROM users WHERE id = ?').get(id);
   if (!u) return null;
   const perm = db.prepare('SELECT * FROM permissions WHERE user_id = ?').get(id);
   u.is_active = !!u.is_active;
@@ -75,6 +75,7 @@ function userFromRequest(req) {
   if (s.expires_at < now()) { db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(sha256(token)); return null; }
   const u = loadUser(s.user_id);
   if (!u || !u.is_active) return null;
+  if (u.trial_until && u.trial_until < Date.now()) return null; // 体験期間が終わった
   u.sessionTokenHash = sha256(token);
   return u;
 }

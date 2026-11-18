@@ -11,6 +11,7 @@ const notify = require('./notify');
 const ganbari = require('./ganbari');
 const fun = require('./fun');
 const parents = require('./parents');
+const referral = require('./referral');
 const SchoolMap = require('../public/shared/map.js');
 const kanken = require('./kanken');
 
@@ -73,6 +74,7 @@ function publicUser(u) {
     birthday: u.birthday || null, birthdayPublic: u.birthday_public === undefined ? true : !!u.birthday_public,
     visitDays: u.visit_days ? u.visit_days.split(',').map(Number) : [], visitTime: u.visit_time || null,
     classDays: u.class_days ? u.class_days.split(',').map(Number) : [],
+    trialUntil: u.trial_until || null,
   };
 }
 function listRooms(user) {
@@ -148,6 +150,7 @@ app.get('/api/me', auth.requireAuth, (req, res) => {
     user: publicUser(req.user), rooms: listRooms(req.user),
     features: { classCall: livekit.enabled, studyPhotos: realtime.studyPhotosEnabled() },
     // 保護者会の時間は、生徒は入れない
+    trial: req.user.trial_until ? { until: req.user.trial_until, inviter: (db.prepare('SELECT display_name FROM users WHERE id = ?').get(referral.referrerOf(req.user.id)) || {}).display_name || null } : null,
     closed: req.user.role === 'student' && parents.meetingOn() ? `今は保護者会です。${parents.getMeeting().end}から入れます` : null,
   });
 });
@@ -182,7 +185,9 @@ app.get('/api/me/ganbari', auth.requireAuth, (req, res) => {
     shop: ganbari.shopFor(u.id), goal: term ? ganbari.goalOf(u.id, term.key) : null,
     dressup: ganbari.dressupInfo(), myItems: ganbari.getEquip(u.id, { ignorePeriod: true }).ids,
     hs: ganbari.isHS(u.grade) ? { ...ganbari.hsWeeks(u.id), title: ganbari.titleOf(u.id), plan: ganbari.planOf(u.id), visitDays: u.visit_days ? u.visit_days.split(',').map(Number) : [], visitTime: u.visit_time || null } : null,
-    fun: u.role === 'student' ? fun.statusFor(u.id) : null, parent: u.role === 'parent',
+    fun: u.role === 'student' && !u.trial_until ? fun.statusFor(u.id) : null, parent: u.role === 'parent',
+    pair: u.role === 'student' && !u.trial_until ? referral.pairOf(u.id) : null,
+    referralWeek: referral.weekOn() ? referral.getConfig().week : null,
     rules: { minutesPerPoint: c.minutesPerPoint, streakMin: ganbari.streakMinFor(u.id, c), window: c.window, window2: c.window2, requireSeat: c.requireSeat, today: ganbari.ruleFor(today, c, ganbari.isHS(u.grade) ? 'hs' : null) },
   });
 });
@@ -212,6 +217,34 @@ app.get('/api/forest', auth.requireAuth, (req, res) => {
   // 保護者には、自分の子ども以外の生徒の名前を見せない（短冊の目標は見せる）
   if (req.user.role === 'parent') { const mine = new Set(parents.childrenOf(req.user.id).map(k => k.name)); for (const t of f.trees) for (const g of t.goals) if (!mine.has(g.name)) g.name = '生徒'; }
   res.json({ ...f, moms: parents.momsTree() });
+});
+
+// ═════════ 友だち紹介・体験 ═════════
+// 招待リンクの中身（ログインしていなくても見られる。だれからの招待かと体験の日数）
+app.get('/api/trial/info', (req, res) => {
+  const c = referral.getConfig(), inv = referral.inviterOf(req.query.code);
+  if (!c.trial) return res.json({ ok: false, error: 'いまは体験の受付をしていません' });
+  if (!inv) return res.json({ ok: false, error: '招待のリンクが正しくありません' });
+  res.json({ ok: true, inviter: inv.role === 'parent' ? null : inv.name, days: referral.trialDays(), week: referral.weekOn() });
+});
+// 体験をはじめる（体験用のアカウントを作ってログイン）
+app.post('/api/trial/start', (req, res) => {
+  const ipKey = 'ip:' + req.ip;
+  if (auth.isLocked(ipKey)) return bad(res, `まちがいが続いたため、${auth.LOCK_MINUTES}分ほど待ってからためしてください`, 429);
+  const b = req.body || {};
+  const r = referral.startTrial({ code: b.code, name: b.name, grade: b.grade }, req.ip);
+  if (r.error) { if (/リンク/.test(r.error)) auth.recordFailure(ipKey, 10); return bad(res, r.error, r.status || 400); }
+  const s = auth.createSession(r.id, req, r.until);
+  auth.setSessionCookie(res, s.token, s.expires);
+  res.json({ ok: true, until: r.until, days: r.days });
+});
+// 自分の招待リンク（入塾している生徒・保護者）
+app.get('/api/me/referral', auth.requireAuth, (req, res) => {
+  const u = req.user;
+  if (!['student', 'parent'].includes(u.role) || u.trial_until) return bad(res, '生徒と保護者の機能です', 403);
+  const c = referral.getConfig(), code = referral.codeOf(u.id);
+  res.json({ code, path: '/#trial=' + code, trial: c.trial, days: referral.trialDays(), week: referral.weekOn() ? c.week : null,
+    pair: u.role === 'student' ? referral.pairOf(u.id) : null, rewards: { pairPoints: referral.PAIR_POINTS, parentPoints: referral.PARENT_POINTS } });
 });
 
 // ═════════ 保護者 ═════════
@@ -381,7 +414,7 @@ admin.get('/meta', (req, res) => {
 admin.get('/users', requireOwner, (req, res) => {
   const ids = db.prepare("SELECT id FROM users ORDER BY CASE role WHEN 'owner' THEN 0 WHEN 'teacher' THEN 1 ELSE 2 END, display_name").all();
   const sessionCounts = new Map(db.prepare('SELECT user_id, COUNT(*) AS n FROM sessions WHERE expires_at > ? GROUP BY user_id').all(now()).map(r => [r.user_id, r.n]));
-  res.json({ users: ids.map(({ id }) => { const u = auth.loadUser(id); return { ...publicUser(u), activeSessions: sessionCounts.get(id) || 0, locked: !!auth.isLocked('id:' + u.login_id) }; }) });
+  res.json({ users: ids.map(({ id }) => { const u = auth.loadUser(id); const ref = referral.referrerOf(id), rn = ref && db.prepare('SELECT display_name AS n, role FROM users WHERE id = ?').get(ref); return { ...publicUser(u), activeSessions: sessionCounts.get(id) || 0, locked: !!auth.isLocked('id:' + u.login_id), referrer: rn ? { id: ref, name: rn.n, role: rn.role } : null }; }) });
 });
 // 保護者の招待コード（生徒ごと）
 admin.post('/users/:id/parent-invite', requireOwner, (req, res) => {
@@ -396,6 +429,35 @@ admin.delete('/users/:id/parents/:parentId', requireOwner, (req, res) => {
   res.json({ ok: true });
 });
 // 保護者の毎日の問題（英単語・数学・理科・社会。漢字は漢字テストの問題を使う）
+// 友だち紹介：設定・体験中の人・紹介の一覧（オーナーだけ）
+admin.get('/referral', requireOwner, (req, res) => res.json({ config: referral.getConfig(), weekOn: referral.weekOn(), trials: referral.trials(), referrals: referral.referralList() }));
+admin.patch('/referral', requireOwner, (req, res) => {
+  const e = referral.setConfig(req.body || {});
+  if (e) return bad(res, e);
+  audit(req.user.id, 'referral.config', null, req.body, req.ip);
+  res.json({ ok: true, config: referral.getConfig(), weekOn: referral.weekOn() });
+});
+// 体験中の子を入塾させる（アバターはそのまま。ログインIDとパスワードを決める）
+admin.post('/users/:id/enroll', requireOwner, (req, res) => {
+  const b = req.body || {}, loginId = String(b.loginId || '').trim();
+  if (!RE_LOGIN.test(loginId)) return bad(res, 'ログインIDは半角英数字と _ . - の3〜32文字にしてください');
+  const e = validatePassword(b.password);
+  if (e) return bad(res, e);
+  if (db.prepare('SELECT 1 FROM users WHERE login_id = ? AND id != ?').get(loginId, Number(req.params.id))) return bad(res, 'このログインIDはすでに使われています', 409);
+  const r = referral.enrollTrial(Number(req.params.id), loginId, auth.hashPassword(b.password), req.user.id);
+  if (r.error) return bad(res, r.error);
+  realtime.kick(Number(req.params.id), '入塾の手続きができました。新しいログインIDとパスワードでログインしてください');
+  realtime.referralRewarded(r.rewards);
+  res.json({ ok: true, user: publicUser(auth.loadUser(Number(req.params.id))), rewards: r.rewards });
+});
+// 紹介してくれた人を登録（体験なしで入塾した生徒）
+admin.post('/users/:id/referrer', requireOwner, (req, res) => {
+  const r = referral.setReferrer(Number(req.params.id), Number((req.body || {}).referrerId), req.user.id);
+  if (r.error) return bad(res, r.error);
+  realtime.referralRewarded(r.rewards);
+  res.json({ ok: true, rewards: r.rewards });
+});
+
 // 今日来た保護者（オーナーだけ）・保護者会のオン/オフ
 admin.get('/parents/today', requireOwner, (req, res) => {
   const day = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.day || '')) ? String(req.query.day) : ganbari.jst().day;
@@ -680,7 +742,7 @@ function reportTerm(key) {
 admin.post('/ganbari/reports', requireOwner, (req, res) => {
   const term = reportTerm(req.body.termKey);
   if (!term) return bad(res, '学期を選んでください');
-  const ids = req.body.all ? db.prepare("SELECT id FROM users WHERE role = 'student' AND is_active = 1 ORDER BY grade, display_name").all().map(r => r.id)
+  const ids = req.body.all ? db.prepare("SELECT id FROM users WHERE role = 'student' AND is_active = 1 AND trial_until IS NULL ORDER BY grade, display_name").all().map(r => r.id)
     : [Number(req.body.userId)];
   const out = [];
   for (const id of ids) {

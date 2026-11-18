@@ -33,6 +33,19 @@
         <p class="help"><a href="#parent" id="to-parent">👪 保護者の方で、はじめて登録する方はこちら</a></p>
       </form>
 
+      <form id="trial-form" hidden>
+        <div class="notice trial-notice"><b id="trial-from">🎉 三浦塾の自習室に招待されました！</b><br><span id="trial-days"></span></div>
+        <label class="field">お名前（ニックネームでOK）<input id="trial-name" maxlength="12" required placeholder="例：けんた"></label>
+        <label class="field">学年<select id="trial-grade" required>
+          <option value="">えらんでください</option><option>中1</option><option>中2</option><option>中3</option><option>高1</option><option>高2</option><option>高3</option>
+        </select></label>
+        <p class="help">体験中は、記録は残りません。ほかの生徒の名前は表示されません（招待してくれた友だちは表示されます）。</p>
+        <p class="error" id="trial-error" role="alert"></p>
+        <button class="btn big" type="submit">体験をはじめる</button>
+      </form>
+      <div id="trial-bad" class="notice" hidden></div>
+      <div id="trial-over" class="notice" hidden><b>🎈 体験期間はおわりました</b><br>体験してくれてありがとう！ 入塾のお問い合わせは、三浦塾までお気軽にどうぞ。</div>
+
       <form id="parent-form" hidden>
         <div class="notice"><b>👪 保護者の方の登録</b><br>塾からお渡しした「招待コード」を入れて、ログインIDとパスワードをご自分で決めてください。次からはそのID・パスワードでログインできます。</div>
         <label class="field">招待コード<input id="parent-code" autocapitalize="characters" spellcheck="false" required placeholder="例：K7PX-29QM"></label>

@@ -43,7 +43,7 @@ function newCode() {
   return s.slice(0, 4) + '-' + s.slice(4);
 }
 function createInvite(studentId, actorId) {
-  const st = db.prepare("SELECT id FROM users WHERE id = ? AND role = 'student'").get(studentId);
+  const st = db.prepare("SELECT id FROM users WHERE id = ? AND role = 'student' AND trial_until IS NULL").get(studentId);
   if (!st) return { error: '生徒が見つかりません' };
   const code = newCode();
   db.prepare('INSERT INTO parent_invites (code, student_id, created_at) VALUES (?, ?, ?)').run(code, studentId, now());
@@ -277,7 +277,7 @@ function momsTree(date = new Date()) {
   const families = db.prepare("SELECT COUNT(DISTINCT user_id) AS n FROM parent_visits WHERE day >= ? AND day <= ?").get(`${month}-01`, `${month}-31`).n;
   let stage = 0;
   for (let i = 0; i < MOM_STAGES.length; i++) if (flowers >= MOM_STAGES[i]) stage = i;
-  return { name: '母達の木', flowers, families, stage, stageName: G.STAGE_NAMES[stage], nextFlowers: MOM_STAGES[stage + 1] ?? null };
+  return { name: '母達の木', tulips: require('./referral').tulips(), flowers, families, stage, stageName: G.STAGE_NAMES[stage], nextFlowers: MOM_STAGES[stage + 1] ?? null };
 }
 
 module.exports = {

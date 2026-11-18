@@ -13,6 +13,7 @@ const notify = require('./notify');
 const ganbari = require('./ganbari');
 const fun = require('./fun');
 const parents = require('./parents');
+const referral = require('./referral');
 const kanken = require('./kanken');
 const { can, canEnterRoom } = require('./permissions');
 
@@ -50,7 +51,7 @@ function pub(p) {
     inPrivate: inActiveCall(p), away: p.away || null, studyCam: !!p.studyCam, topic: p.topic || null, today: p.today10 ?? null,
     bday: !!(p.bday && p.bday.public), // 誕生日（ほかの生徒にも見せる設定のときだけ。先生だけの設定は staff にだけ別に送る）
     hs: !!p.hs, title: p.title || null, plan: p.plan || null, // 高校生：称号・今日やること（🔥は週で数える）
-    equip: equipView(p.equip), streak: p.streak || 0,
+    equip: equipView(p.equip), streak: p.streak || 0, trial: !!p.user.trial_until,
   };
 }
 // 見る人に合わせた情報：生徒には保護者の名前を見せない。保護者には自分の子ども以外の生徒の名前を見せない（時間と🔥は見せる）
@@ -59,6 +60,10 @@ function pubFor(p, viewer) {
   if (p.user.role === 'parent' && viewer.user.role === 'student') d.name = '保護者';
   if (viewer.user.role === 'parent' && p.user.role === 'student' && !(viewer.childIds && viewer.childIds.has(p.id))) { d.name = '生徒'; d.title = null; d.plan = null; d.bday = false; }
   if (viewer.user.role === 'parent' && p.user.role === 'student' && viewer.childIds && viewer.childIds.has(p.id)) d.myChild = true;
+  // 体験中の子：名札は「体験」。体験中の子からは、招待してくれた子以外の生徒の名前は見えない
+  if (p.user.trial_until && viewer.user.role === 'student') d.name = '体験：' + d.name;
+  if (viewer.user.trial_until && p.user.role === 'student' && p.id !== viewer.referrerId) { d.name = '生徒'; d.title = null; d.plan = null; d.bday = false; }
+  if (viewer.user.trial_until && p.user.role === 'parent') d.name = '保護者';
   return d;
 }
 
@@ -348,6 +353,7 @@ function attach(httpServer) {
     p.equip = ganbari.getEquip(p.id);
     p.streak = user.role === 'student' ? ganbari.streak(p.id) : user.role === 'parent' ? parents.visitStreak(p.id) : 0;
     if (visit) { p.visitEndsAt = visit.endsAt; p.childIds = parents.childIds(p.id); }
+    if (user.trial_until) p.referrerId = referral.referrerOf(p.id); // 体験中：招待してくれた子の名前だけ見える
     p.today10 = user.role === 'student' ? shownToday(ganbari.dayAll(p.id, ganbari.jst().day)) : null;
     p.bday = user.role === 'student' ? ganbari.birthdayInfo(p.id) : null;
     refreshHS(p, false);
@@ -356,7 +362,7 @@ function attach(httpServer) {
     let gapMinutes = 0;
     const gap = studyGaps.get(p.id);
     studyGaps.delete(p.id);
-    if (gap && user.role === 'student' && Date.now() - gap.at <= STUDY_GAP_MS && p.room === gap.room) {
+    if (gap && user.role === 'student' && !user.trial_until && Date.now() - gap.at <= STUDY_GAP_MS && p.room === gap.room) {
       if (gap.seat && ![...online.values()].some(o => o.id !== p.id && o.seat === gap.seat)) {
         const [sx, sy] = gap.seat.split(',').map(Number);
         const c = SM.tileCenter(sx, sy);
@@ -375,7 +381,7 @@ function attach(httpServer) {
     if (user.role === 'student') {
       const off = lastOffline.get(p.id);
       const quiet = old || (off && Date.now() - off < REJOIN_QUIET_MS);
-      if (!quiet) notify.studentArrived({ id: p.id, name: user.display_name, birthday: !!p.bday }, online).catch(e => console.error('入室通知に失敗:', e.message));
+      if (!quiet) notify.studentArrived({ id: p.id, name: (user.trial_until ? '体験：' : '') + user.display_name, birthday: !!p.bday }, online).catch(e => console.error('入室通知に失敗:', e.message));
     }
 
     socket.emit('init', {
@@ -830,6 +836,11 @@ function attach(httpServer) {
         if (s !== p.streak) { p.streak = s; io.emit('user-updated', { id, streak: s }); }
         p.socket.emit('study-minute');
       }
+      // ペア自習チャレンジ：7日そろったら2人にごほうび
+      for (const id of added.counted) {
+        const won = referral.settlePair(id);
+        if (won) for (const w of won) { refreshGanbari(w); const o = online.get(w); if (o) o.socket.emit('referral-reward', { kind: 'pair', points: referral.PAIR_POINTS }); }
+      }
       // 🌅 朝活チャレンジ：朝（初期設定 6:00〜7:30）に数えた時間で早起きスタンプとポイント
       for (const r of fun.morningTick(added)) {
         const p = online.get(r.id);
@@ -1105,10 +1116,20 @@ function mendanChanged(userId) {
   p.socket.emit('me-updated');
   if (!ok && p.room === 'mendan') forceOut(p, '面談ブースの許可がなくなったため、ロビーにもどりました');
 }
+// 紹介のごほうび（入塾したとき）を、入室中の人に知らせる
+function referralRewarded(r) {
+  if (!r) return;
+  for (const id of r.ids) {
+    refreshGanbari(id);
+    const o = online.get(id);
+    if (o) o.socket.emit('referral-reward', { kind: r.kind === 'student' ? 'enroll' : 'parent', points: r.kind === 'parent' ? referral.PARENT_POINTS : 0 });
+  }
+  if (r.kind === 'parent') refreshMoms();
+}
 function refreshMoms() { if (io) io.emit('moms-updated', parents.momsTree()); }
 
 module.exports = {
-  shownToday, refreshMoms, parentMeetingChanged, mendanChanged,
+  shownToday, refreshMoms, parentMeetingChanged, mendanChanged, referralRewarded,
   isQuickRejoin, refreshGanbari, refreshBirthday, refreshAllGanbari, _online: online,
   storeStudyPhoto, getStudyPhoto, studyPhotoTimes, canViewStudyPhotos, setStudyPhotosFeature, studyPhotosEnabled,
   attach, kick, refreshUser, refreshRooms, presence, roomCounts, classState, endClass, endCallOf, REACTIONS, _reset };

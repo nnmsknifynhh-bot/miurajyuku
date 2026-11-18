@@ -61,6 +61,8 @@
       name.append(el('span', 'badge ' + u.role, ROLE_LABEL[u.role]));
       if (!u.isActive) name.append(el('span', 'badge off', '無効'));
       if (u.locked) name.append(el('span', 'badge off', '🔒 ロック中'));
+      if (u.trialUntil) name.append(el('span', 'badge trial', u.trialUntil > Date.now() ? `🎈 体験中（${new Date(u.trialUntil).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', timeZone: 'Asia/Tokyo' })}まで）` : '🎈 体験おわり'));
+      if (u.referrer) name.append(el('span', 'badge', `🤝 紹介：${u.referrer.name}${u.referrer.role === 'parent' ? '（保護者）' : ''}`));
       const sub = [`ID: ${u.loginId}`, ...(u.role === "student" ? [`学年: ${u.grade || "未設定"}`] : []), ...(u.classDays && u.classDays.length ? [`🏫 授業 ${u.classDays.map(i => '日月火水木金土'[i]).join('・')}`] : []), ...(u.visitDays && u.visitDays.length ? [`📅 ${u.visitDays.map(i => '日月火水木金土'[i]).join('・')} ${u.visitTime}〜`] : []), ...(u.birthday ? [`🎂 ${Number(u.birthday.slice(0, 2))}月${Number(u.birthday.slice(3))}日${u.birthdayPublic ? '' : '（先生だけ）'}`] : []), `ログイン中の端末: ${u.activeSessions}`];
       if (u.role === 'teacher') sub.push('担当: ' + (u.rooms.length ? u.rooms.map(roomName).join('・') : 'なし'));
       info.append(name, el('div', 'sub', sub.join('　')));
@@ -69,7 +71,9 @@
       const btn = (label, cls, fn) => { const b = el('button', 'btn small ' + cls, label); b.onclick = fn; actions.append(b); };
       if (u.locked) btn('🔓 ロックを解除', '', () => unlock(u));
       btn('編集', 'secondary', () => openEditor(u));
-      if (u.role === 'student' && me.role === 'owner') btn('👪 保護者', 'secondary', () => openFamily(u));
+      if (u.role === 'student' && me.role === 'owner' && !u.trialUntil) btn('👪 保護者', 'secondary', () => openFamily(u));
+      if (u.trialUntil && me.role === 'owner') btn('🎓 入塾にする', '', () => enrollTrial(u));
+      if (u.role === 'student' && !u.trialUntil && !u.referrer && me.role === 'owner') btn('🤝 紹介者', 'secondary', () => openRef(u));
       if (u.role !== 'owner') {
         btn(u.isActive ? '無効にする' : '有効にする', u.isActive ? 'danger' : '', () => toggleActive(u));
       }
@@ -270,6 +274,41 @@
   $('#fa-copy').onclick = async () => { try { await navigator.clipboard.writeText($('#fa-code').textContent); toast('コピーしました'); } catch (e) { toast('コピーできませんでした'); } };
   $('#fa-close').onclick = () => $('#family-admin').close();
 
+  // ── 🤝 体験 → 入塾・紹介者の登録 ──
+  async function enrollTrial(u) {
+    const loginId = prompt(`${u.displayName} さんを入塾にします。\n新しいログインIDを入れてください（半角英数字）`, '');
+    if (!loginId) return;
+    const pw = makePassword();
+    try {
+      const r = await api('POST', `/api/admin/users/${u.id}/enroll`, { loginId: loginId.trim(), password: pw });
+      showCredentials(r.user, pw);
+      toast(r.rewards ? (r.rewards.kind === 'student' ? '入塾にしました。紹介してくれた生徒と2人に🐥をわたし、ペア自習チャレンジが始まりました' : '入塾にしました。紹介してくれた保護者に🌷と50ポイント') : '入塾にしました', 7000);
+      loadUsers(); if (typeof loadReferral === 'function') loadReferral();
+    } catch (e) { toast(e.message); }
+  }
+  let refUser = null;
+  function openRef(u) {
+    refUser = u;
+    $('#ref-title').textContent = `${u.displayName} さんを紹介してくれた人`;
+    const sel = $('#ref-select'); sel.textContent = '';
+    sel.append(Object.assign(el('option', null, '— えらんでください —'), { value: '' }));
+    for (const x of users.filter(v => v.isActive && v.id !== u.id && !v.trialUntil && (v.role === 'student' || v.role === 'parent'))) {
+      const o = el('option', null, `${x.role === 'parent' ? '保護者' : '生徒'}：${x.displayName}${x.grade ? `（${x.grade}）` : ''}`); o.value = x.id; sel.append(o);
+    }
+    $('#ref-dialog').showModal();
+  }
+  $('#ref-cancel').onclick = () => $('#ref-dialog').close();
+  $('#ref-save').onclick = async () => {
+    const id = $('#ref-select').value;
+    if (!id) return toast('えらんでください');
+    try {
+      const r = await api('POST', `/api/admin/users/${refUser.id}/referrer`, { referrerId: Number(id) });
+      $('#ref-dialog').close();
+      toast(r.rewards && r.rewards.kind === 'parent' ? '登録しました。保護者に🌷と50ポイント' : '登録しました。2人に🐥をわたし、ペア自習チャレンジが始まりました', 6000);
+      loadUsers();
+    } catch (e) { toast(e.message); }
+  };
+
   function showCredentials(u, pw) {
     $('#cred-text').textContent = `三浦塾 オンライン教室\nURL：${location.origin}/\n名前：${u.displayName}\nログインID：${u.loginId}\nパスワード：${pw}`;
     $('#cred-dialog').showModal();
@@ -340,7 +379,7 @@
     const isOwner = me.role === 'owner';
     $('#status-note').textContent = isOwner ? '不審な接続は「切断」で止められます。' : '（接続の切断はオーナーのみ）';
     $('#ip-col').hidden = !isOwner;
-    if (isOwner) loadParentsToday();
+    if (isOwner) { loadParentsToday(); loadReferral(); }
     const box = $('#status-rooms'); box.textContent = '';
     for (const [id, r] of Object.entries(data.rooms)) {
       const card = el('div', 'room-box');
@@ -393,7 +432,47 @@
     if (!data.users.length) { const tr = el('tr'); const td = el('td', 'empty', 'いま接続している人はいません'); td.colSpan = 8; tr.append(td); body.append(tr); }
   }
   // 今日来た保護者・保護者会
-  let pmLoaded = false, mdLoaded = 0;
+  let pmLoaded = false, mdLoaded = 0, rfLoaded = false;
+  // 🤝 友だち紹介・体験
+  async function loadReferral() {
+    let d;
+    try { d = await api('GET', '/api/admin/referral'); } catch (e) { return; }
+    const c = d.config;
+    if (!rfLoaded) {
+      rfLoaded = true;
+      $('#rf-trial').checked = c.trial; $('#rf-days').value = c.trialDays; $('#rf-wdays').value = c.weekTrialDays;
+      $('#rf-wstart').value = c.week ? c.week.start : ''; $('#rf-wend').value = c.week ? c.week.end : '';
+    }
+    $('#rf-state').textContent = d.weekOn ? '🎉 いま友だち紹介ウィーク中' : c.week ? `紹介ウィーク：${c.week.start}〜${c.week.end}` : '';
+    const tb = $('#rf-trials'); tb.textContent = '';
+    const active = d.trials.filter(t => t.active);
+    tb.append(el('p', null, `🎈 体験中：${active.length}人`));
+    for (const t of active) {
+      const row = el('div', 'gb-row');
+      row.append(el('span', null, `${t.name}（${t.grade}）・${new Date(t.until).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', timeZone: 'Asia/Tokyo' })}まで・招待：${t.referrer || '—'}${t.referrerRole === 'parent' ? '（保護者）' : ''}`));
+      const b = el('button', 'btn small', '🎓 入塾にする');
+      b.onclick = () => enrollTrial({ id: t.id, displayName: t.name });
+      row.append(b); tb.append(row);
+    }
+    const lb = $('#rf-list'); lb.textContent = '';
+    if (d.referrals.length) {
+      lb.append(el('p', null, `🤝 紹介で入塾：${d.referrals.length}人`));
+      for (const r of d.referrals.slice(0, 20)) {
+        const pair = r.referrerRole === 'student' ? (r.pairResult === 'success' ? '・ペア成功💫' : r.pairResult === 'over' ? '・ペアおしかった' : '・ペア挑戦中') : '・🌷';
+        lb.append(el('div', 'muted', `${r.newName} ← ${r.referrer}${r.referrerRole === 'parent' ? '（保護者）' : ''}（${r.enrolledAt.slice(0, 10)}）${pair}`));
+      }
+    }
+  }
+  $('#rf-save').onclick = async () => {
+    const body = { trial: $('#rf-trial').checked, trialDays: Number($('#rf-days').value), weekTrialDays: Number($('#rf-wdays').value) };
+    const ws = $('#rf-wstart').value, we = $('#rf-wend').value;
+    if (ws || we) body.week = { start: ws, end: we };
+    try { await api('PATCH', '/api/admin/referral', body); toast('保存しました'); loadReferral(); } catch (e) { toast(e.message); }
+  };
+  $('#rf-wclear').onclick = async () => {
+    try { await api('PATCH', '/api/admin/referral', { week: null }); $('#rf-wstart').value = ''; $('#rf-wend').value = ''; toast('紹介ウィークを消しました'); loadReferral(); } catch (e) { toast(e.message); }
+  };
+
   async function loadParentsToday() {
     let d;
     try { d = await api('GET', '/api/admin/parents/today'); } catch (e) { return; }
@@ -467,7 +546,7 @@
     'login.success': 'ログイン', 'login.failed': 'ログイン失敗', 'setup.owner_created': '初期セットアップ',
     'user.created': 'ユーザー作成', 'user.updated': 'ユーザー編集', 'user.sessions_revoked': '強制ログアウト',
     'user.password_changed_self': 'パスワード変更（本人）', 'room.capacity_changed': '定員の変更',
-    'presence.disconnected': '接続の切断', 'settings.study_photos': '見守り写真の設定', 'private.invited': '個別通話の呼び出し', 'private.started': '個別通話を開始', 'private.ended': '個別通話を終了', 'class.started': '授業（通話）を開始', 'class.ended': '授業（通話）を終了', 'presence.disconnected_and_revoked': '切断＋ログアウト', 'parent.meeting_on': '保護者会の予定', 'parent.meeting_off': '保護者会の取り消し', 'mendan.allowed': '面談ブースを許可', 'mendan.removed': '面談ブースの許可を外す',
+    'presence.disconnected': '接続の切断', 'settings.study_photos': '見守り写真の設定', 'private.invited': '個別通話の呼び出し', 'private.started': '個別通話を開始', 'private.ended': '個別通話を終了', 'class.started': '授業（通話）を開始', 'class.ended': '授業（通話）を終了', 'presence.disconnected_and_revoked': '切断＋ログアウト', 'parent.meeting_on': '保護者会の予定', 'parent.meeting_off': '保護者会の取り消し', 'mendan.allowed': '面談ブースを許可', 'trial.started': '体験を開始', 'trial.enrolled': '体験から入塾', 'referral.set': '紹介者を登録', 'referral.config': '友だち紹介の設定', 'mendan.removed': '面談ブースの許可を外す',
   };
   async function loadLogs() {
     let logs;

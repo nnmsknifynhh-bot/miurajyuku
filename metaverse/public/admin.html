@@ -67,6 +67,15 @@
           <div class="gb-row"><select id="md-user"></select><button type="button" class="btn small" id="md-add">許可する</button></div>
           <div id="md-list"></div>
         </div>
+        <div class="gb-box">
+          <b>🤝 友だち紹介・体験</b>
+          <div class="gb-row"><label class="gb-check"><input type="checkbox" id="rf-trial">招待リンクからの体験を受けつける</label><span>体験</span><input type="number" id="rf-days" min="1" max="30" style="width:4.5em"><span>日間</span></div>
+          <div class="gb-row"><span>🎉 友だち紹介ウィーク</span><input type="date" id="rf-wstart"><span>〜</span><input type="date" id="rf-wend"><span>この間の体験</span><input type="number" id="rf-wdays" min="1" max="30" style="width:4.5em"><span>日間</span></div>
+          <div class="gb-row"><button type="button" class="btn small" id="rf-save">保存する</button><button type="button" class="btn small secondary" id="rf-wclear">紹介ウィークを消す</button><span class="muted" id="rf-state"></span></div>
+          <small class="muted">生徒はメニューの「🤝 友だちを招待」、保護者は「🏠 わが子」から招待リンクを送れます。体験中は記録が残らず、ほかの生徒の名前は見えません（招待した子は見えます）。入塾したら「入塾にする」を押すと、アバターのまま生徒のアカウントになります。<br>ごほうび：生徒の紹介＝2人におそろいの🐥、7日間2人とも🔥で💫＋30ポイント。保護者の紹介＝母達の木に🌷＋50ポイント。</small>
+          <div id="rf-trials"></div>
+          <div id="rf-list"></div>
+        </div>
         <p><b id="pv-title"></b></p>
         <div class="table-wrap"><table class="logs"><thead><tr><th>保護者</th><th>お子さん</th><th>来た時刻</th><th>いま</th></tr></thead><tbody id="pv-body"></tbody></table></div>
       </div>
@@ -144,6 +153,16 @@
       <button type="button" class="btn" id="fa-make">👪 招待コードを作る</button>
       <pre class="cred" id="fa-code" hidden></pre>
       <div class="dialog-actions"><button type="button" class="btn secondary" id="fa-copy" hidden>コピー</button><button type="button" class="btn secondary" id="fa-close">とじる</button></div>
+    </div>
+  </dialog>
+
+  <!-- 🤝 紹介してくれた人を登録 -->
+  <dialog id="ref-dialog">
+    <div class="dialog-body">
+      <h2 id="ref-title">紹介してくれた人</h2>
+      <p class="muted">体験なしで入塾した生徒に、紹介してくれた生徒・保護者を登録します。登録すると、ごほうびがわたされます（1回だけ）。</p>
+      <select id="ref-select"></select>
+      <div class="dialog-actions"><button type="button" class="btn secondary" id="ref-cancel">やめる</button><button type="button" class="btn" id="ref-save">登録する</button></div>
     </div>
   </dialog>
 
