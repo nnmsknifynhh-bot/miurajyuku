@@ -15,6 +15,7 @@
   let mapCanvas = null;
   const isStaff = () => !!(state.user && (state.user.role === 'owner' || state.user.role === 'teacher'));
   const isParent = () => !!(state.user && state.user.role === 'parent');
+  const isOwner = () => !!(state.user && state.user.role === 'owner');
   // 生徒と同じルールで動く人（生徒・保護者会の日の保護者）
   const studentLike = () => !!(state.user && (state.user.role === 'student' || (state.user.role === 'parent' && state.meeting)));
 
@@ -172,6 +173,7 @@
       { const mine = state.testQueue && state.testQueue.booths.find(b => b.userId === d.me.id); state.testBooth = mine ? mine.seat : null; }
       buildReactions(); updateAll(); refreshWeek(true); refreshFun(true); renderTest();
       if (isParent()) parentInit(d.visit);
+      updateOverviewBtn();
     });
     // ── 保護者 ──
     socket.on('visit-over', ({ message }) => showVisitOver(message));
@@ -317,7 +319,7 @@
     });
   }
   function standUp() {
-    if (state.overview) { state.overview = false; state.zoom = autoZoom(); }
+    exitOverview();
     if (!state.me.seat) return;
     state.me.seat = null;
     state.socket.emit('stand');
@@ -422,13 +424,29 @@
     if (!$('#sofa-dialog').open) $('#sofa-dialog').showModal();
   }
   let pquizAuto = false;
-  function parentSeated() {
+  // 塾全体を見わたす（保護者はソファにすわったとき・オーナーは「見わたす」ボタン）
+  function enterOverview() {
     state.overview = true;
     // 塾全体が入る大きさ（スマホのたて画面では高さに合わせ、横は指でずらして見る）
     const fitW = innerWidth / (SM.W * T), fitH = (innerHeight - 200) / (SM.H * T);
     state.zoom = clampZoom(Math.min(fitH, fitW * 2.2));
     state.view = { x: state.me.x, y: SM.H * T / 2 };
-    toast('塾の中全体を見わたせます。指でずらす・2本指でひろげると近くが見られます', 5000);
+    toast(matchMedia('(pointer: coarse)').matches ? '塾の中全体を見わたせます。指でずらす・2本指でひろげると近くが見られます' : '塾の中全体を見わたせます。ドラッグでずらす・ホイールで大きさを変えられます', 5000);
+    updateOverviewBtn();
+  }
+  function exitOverview() {
+    if (!state.overview) return;
+    state.overview = false; state.zoom = autoZoom(); updateOverviewBtn();
+  }
+  function updateOverviewBtn() {
+    const b = $('#btn-overview');
+    b.hidden = !isOwner();
+    b.classList.toggle('on', !!state.overview);
+    $('#overview-label').textContent = state.overview ? 'もどる' : '見わたす';
+  }
+  $('#btn-overview').onclick = () => (state.overview ? exitOverview() : enterOverview());
+  function parentSeated() {
+    enterOverview();
     if (!pquizAuto) { pquizAuto = true; setTimeout(() => openPquiz(true), 1200); }
   }
   function showVisitOver(message) {
@@ -1157,7 +1175,7 @@
   const KEYMAP = { ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down', ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right' };
   window.addEventListener('keydown', (e) => {
     if (!state.me || e.target.closest('input, dialog')) return;
-    if (KEYMAP[e.code]) { state.keys.add(KEYMAP[e.code]); e.preventDefault(); }
+    if (KEYMAP[e.code]) { state.keys.add(KEYMAP[e.code]); e.preventDefault(); if (!isParent()) exitOverview(); }
     else if (e.code === 'Space') { e.preventDefault(); toggleSit(); }
     else if (e.code === 'KeyH' && state.user.role === 'student') $('#btn-hand').click();
   });
@@ -1172,7 +1190,7 @@
   }
   window.addEventListener('resize', resize);
   function autoZoom() { return clampZoom(Math.max(innerWidth, innerHeight) / (24 * T)); }
-  const clampZoom = (z) => Math.max(isParent() ? 0.15 : 0.6, Math.min(2.6, z)); // 保護者は塾全体を見わたせるように小さくできる
+  const clampZoom = (z) => Math.max(isParent() || isOwner() ? 0.15 : 0.6, Math.min(2.6, z)); // 保護者は塾全体を見わたせるように小さくできる
   const screenToWorld = (sx, sy) => ({ x: (sx - innerWidth / 2) / state.zoom + state.cam.x, y: (sy - innerHeight / 2) / state.zoom + state.cam.y });
 
   const pointers = new Map();
@@ -1242,7 +1260,7 @@
     knob.style.transform = `translate(${dx}px, ${dy}px)`;
     state.joy = { x: dx / max, y: dy / max };
   };
-  joy.addEventListener('pointerdown', (e) => { joyId = e.pointerId; joy.setPointerCapture(e.pointerId); joyMove(e); });
+  joy.addEventListener('pointerdown', (e) => { if (!isParent()) exitOverview(); joyId = e.pointerId; joy.setPointerCapture(e.pointerId); joyMove(e); });
   joy.addEventListener('pointermove', (e) => { if (e.pointerId === joyId) joyMove(e); });
   const joyEnd = (e) => { if (e.pointerId !== joyId) return; joyId = null; state.joy = { x: 0, y: 0 }; knob.style.transform = ''; };
   joy.addEventListener('pointerup', joyEnd); joy.addEventListener('pointercancel', joyEnd);
