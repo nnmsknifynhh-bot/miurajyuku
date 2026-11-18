@@ -325,7 +325,8 @@ function attach(httpServer) {
 
     // 保護者：1日1回・10分まで（同じ日に10分をすぎたら入れない）
     let visit = null;
-    if (user.role === 'parent') {
+    if (user.role === 'parent' && parents.meetingOn()) { parents.recordVisit(user.id); visit = { endsAt: null, meeting: true }; }
+    else if (user.role === 'parent') {
       visit = parents.startVisit(user.id);
       if (visit.error) { socket.emit('visit-over', { message: visit.error }); socket.disconnect(true); return; }
     }
@@ -372,7 +373,7 @@ function attach(httpServer) {
 
     socket.emit('init', {
       me: { ...pub(p), bday: !!p.bday }, users: [...online.values()].filter(o => o !== p).map(o => pubFor(o, p)), rooms: roomCounts(), reactions: user.role === 'parent' ? PARENT_REACTIONS : REACTIONS,
-      visit: visit ? { endsAt: visit.endsAt, again: visit.again } : null,
+      visit: visit ? { endsAt: visit.endsAt, again: visit.again, meeting: !!visit.meeting } : null,
       classes: classState(), classCall: livekit.enabled, testQueue: user.role === 'parent' ? null : testState(),
     });
     if (gap && p.room === gap.room && Date.now() - gap.at <= STUDY_GAP_MS) socket.emit('study-resumed', { minutes: gapMinutes, seat: p.seat });
@@ -397,7 +398,7 @@ function attach(httpServer) {
       p.lastMoveAt = t;
       if (Math.hypot(x - p.x, y - p.y) > T * 4) return reject('移動が速すぎます');
       if (!SM.isWalkable(Math.floor(x / T), Math.floor(y / T))) return reject(null);
-      if (p.user.role === 'parent' && (SM.zoneAtPx(x, y) || {}).id !== 'lobby') return reject('保護者の方はロビーだけです');
+      if (p.user.role === 'parent' && !parents.meetingOn() && (SM.zoneAtPx(x, y) || {}).id !== 'lobby') return reject('保護者の方はロビーだけです');
       const newRoom = roomIdAt(x, y);
       if (newRoom && newRoom !== p.room) {
         const err = entryError(p, newRoom);
@@ -473,7 +474,7 @@ function attach(httpServer) {
     socket.on('reaction', (kind) => {
       if (!(p.user.role === 'parent' ? PARENT_REACTIONS : REACTIONS).includes(kind)) return;
       // 生徒のスタンプは、先生・オーナーに話しかけられているとき（近く・個別通話中・授業中の教室）だけ
-      if (p.user.role === 'student' && !studentChatAllowed(p)) return;
+      if ((p.user.role === 'student' || (p.user.role === 'parent' && p.room)) && !studentChatAllowed(p)) return; // 保護者会で教室にいる保護者も同じ
       const t = Date.now();
       if (t - p.lastReactionAt < 1200) return;
       p.lastReactionAt = t;
@@ -641,9 +642,9 @@ function attach(httpServer) {
     socket.on('study-topic', (d, ack) => {
       if (typeof ack !== 'function') ack = () => {};
       const text = String((d && d.text) || '').replace(/[\u0000-\u001f\u007f<>]/g, '').trim().slice(0, 24);
-      if (p.user.role === 'parent') return ack({ ok: false, error: '保護者の方は、あいさつスタンプを使ってください' });
-      // 生徒の吹き出しは、先生・オーナーと話すとき（近くにいる・個別通話中）だけ
-      if (text && p.user.role === 'student' && !studentChatAllowed(p)) {
+      if (p.user.role === 'parent' && !parents.meetingOn()) return ack({ ok: false, error: '保護者の方は、あいさつスタンプを使ってください' });
+      // 生徒の吹き出しは、先生・オーナーと話すとき（近くにいる・個別通話中）だけ（保護者会の保護者も同じ）
+      if (text && (p.user.role === 'student' || p.user.role === 'parent') && !studentChatAllowed(p)) {
         return ack({ ok: false, error: p.room && classes.has(p.room) ? '授業中は、先生がOKを出したときだけ吹き出しを使えます' : '吹き出しは、先生と話すときだけ使えます。先生に近くに来てもらってね' });
       }
       p.topic = text || null;
@@ -789,7 +790,7 @@ function attach(httpServer) {
   setInterval(() => {
     const t = Date.now();
     for (const p of [...online.values()]) {
-      if (p.user.role === 'parent' && p.visitEndsAt && t >= p.visitEndsAt) kickPresence(p, '今日の訪問はここまでです。また明日お待ちしています（1日1回・10分）');
+      if (p.user.role === 'parent' && p.visitEndsAt && t >= p.visitEndsAt && !parents.meetingOn()) kickPresence(p, '今日の訪問はここまでです。また明日お待ちしています（1日1回・10分）');
     }
   }, Number(process.env.PARENT_CHECK_MS || 5000)).unref();
 
@@ -1043,10 +1044,18 @@ function presence() {
 function _reset() { online.clear(); lastPos.clear(); lastOffline.clear(); calls.clear(); studyPhotos.clear(); }
 
 // 母達の木が変わったら、みんなの画面を更新
+// 保護者会のオン・オフ（オンにした瞬間から教室へ。オフにしたら、いる保護者は退室）
+function parentMeetingChanged(on) {
+  for (const p of [...online.values()]) {
+    if (p.user.role !== 'parent') continue;
+    if (on) { parents.recordVisit(p.id); p.visitEndsAt = null; p.socket.emit('parent-meeting', { on: true }); p.socket.emit('me-updated'); }
+    else kickPresence(p, '保護者会はおわりました。ご参加ありがとうございました');
+  }
+}
 function refreshMoms() { if (io) io.emit('moms-updated', parents.momsTree()); }
 
 module.exports = {
-  shownToday, refreshMoms,
+  shownToday, refreshMoms, parentMeetingChanged,
   isQuickRejoin, refreshGanbari, refreshBirthday, refreshAllGanbari, _online: online,
   storeStudyPhoto, getStudyPhoto, studyPhotoTimes, canViewStudyPhotos, setStudyPhotosFeature, studyPhotosEnabled,
   attach, kick, refreshUser, refreshRooms, presence, roomCounts, classState, endClass, endCallOf, REACTIONS, _reset };

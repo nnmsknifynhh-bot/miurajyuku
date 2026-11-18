@@ -393,6 +393,17 @@ admin.delete('/users/:id/parents/:parentId', requireOwner, (req, res) => {
   res.json({ ok: true });
 });
 // 保護者の毎日の問題（英単語・数学・理科・社会。漢字は漢字テストの問題を使う）
+// 今日来た保護者（オーナーだけ）・保護者会のオン/オフ
+admin.get('/parents/today', requireOwner, (req, res) => {
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.day || '')) ? String(req.query.day) : ganbari.jst().day;
+  res.json({ day, meeting: parents.meetingOn(), visits: parents.visitsOn(day).map(v => ({ ...v, online: realtime._online.has(v.id) })) });
+});
+admin.post('/parent-meeting', requireOwner, (req, res) => {
+  const on = !!(req.body && req.body.on);
+  parents.setMeeting(on, req.user.id);
+  realtime.parentMeetingChanged(on);
+  res.json({ ok: true, meeting: on });
+});
 admin.get('/parent-questions', requireOwner, (req, res) => res.json({ subjects: parents.SUBJECTS, questions: parents.listQuestions() }));
 admin.post('/parent-questions/bulk', requireOwner, (req, res) => {
   const rows = Array.isArray(req.body.rows) ? req.body.rows.slice(0, 2000) : [];

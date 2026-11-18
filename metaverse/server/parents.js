@@ -1,6 +1,6 @@
 // 保護者：招待コードで登録・ロビーで1日1回10分・毎日5問の4択・見たよスタンプ・母達の木
 const crypto = require('crypto');
-const { db, now, audit } = require('./db');
+const { db, now, audit, getSetting, setSetting } = require('./db');
 const G = require('./ganbari');
 
 // ───────── users の role に 'parent' を足す（古いデータは表を作り直す・1回だけ） ─────────
@@ -90,6 +90,21 @@ function startVisit(userId, nowMs = Date.now()) {
   }
   db.prepare('INSERT INTO parent_visits (user_id, day, started_at) VALUES (?, ?, ?)').run(userId, day, nowMs);
   return { startedAt: nowMs, endsAt: nowMs + VISIT_MS, again: false };
+}
+// 保護者会：オーナーがオンにした日だけ（日がかわると自動でオフ）。保護者も中学生と同じルールで全部の教室へ
+function meetingOn(nowMs = Date.now()) { return getSetting('parent_meeting', '') === G.jst(new Date(nowMs)).day; }
+function setMeeting(on, actorId) {
+  setSetting('parent_meeting', on ? G.jst().day : '');
+  if (actorId) audit(actorId, on ? 'parent.meeting_on' : 'parent.meeting_off', null, null);
+}
+// 保護者会の日：来たことだけ記録する（10分・1日1回の制限はなし）
+function recordVisit(userId, nowMs = Date.now()) {
+  db.prepare('INSERT OR IGNORE INTO parent_visits (user_id, day, started_at) VALUES (?, ?, ?)').run(userId, G.jst(new Date(nowMs)).day, nowMs);
+}
+// オーナー用：その日に来た保護者
+function visitsOn(day) {
+  return db.prepare(`SELECT v.user_id AS id, v.started_at AS startedAt, u.display_name AS name, u.login_id AS loginId FROM parent_visits v JOIN users u ON u.id = v.user_id
+    WHERE v.day = ? ORDER BY v.started_at`).all(day).map(r => ({ ...r, children: childrenOf(r.id).map(k => k.name) }));
 }
 function visitEndsAt(userId, nowMs = Date.now()) {
   const r = db.prepare('SELECT started_at FROM parent_visits WHERE user_id = ? AND day = ?').get(userId, G.jst(new Date(nowMs)).day);
@@ -208,6 +223,6 @@ function momsTree(date = new Date()) {
 
 module.exports = {
   VISIT_MS, SUBJECTS, STAMPS, createInvite, inviteStudent, useInvite, childrenOf, parentsOf, unlink, childIds, normCode,
-  startVisit, visitEndsAt, visitStreak, subjectOf, todayQuiz, answerQuiz, quizPoints, addQuestions, listQuestions, deleteQuestion,
+  startVisit, visitEndsAt, meetingOn, setMeeting, recordVisit, visitsOn, visitStreak, subjectOf, todayQuiz, answerQuiz, quizPoints, addQuestions, listQuestions, deleteQuestion,
   sendCheer, cheersSentToday, takeCheers, momsTree,
 };

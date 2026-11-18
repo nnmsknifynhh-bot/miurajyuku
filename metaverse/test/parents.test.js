@@ -160,6 +160,16 @@ test('見たよスタンプ：わが子にだけ・1日1回・花が咲く・子
   assert.equal(f.moms.flowers, before.moms.flowers + 1);
 });
 
+test('オーナーは今日来た保護者がわかる（オーナーだけ）', async () => {
+  const r = await http('GET', '/api/admin/parents/today', null, owner);
+  assert.equal(r.status, 200);
+  const names = r.data.visits.map(v => v.name);
+  assert.ok(names.includes('キッドの母') && names.includes('アザーの母'), names.join());
+  assert.deepEqual(r.data.visits.find(v => v.name === 'キッドの母').children, ['kidくん']);
+  assert.equal(r.data.meeting, false);
+  assert.equal((await http('GET', '/api/admin/parents/today', null, U.kid.cookie)).status, 403);
+});
+
 test('10分（テストでは1.5秒）で自動退室・その日はもう入れない・🔥は毎日来たら数える', async () => {
   await sleep(4000); // 5秒ごとの見回りで退室
   assert.ok(U.mama.c.events.some(e => e.ev === 'kicked'), U.mama.c.events.map(e => e.ev).join());
@@ -171,3 +181,30 @@ test('10分（テストでは1.5秒）で自動退室・その日はもう入れ
   require('../server/db.js').db.prepare('INSERT INTO parent_visits (user_id, day, started_at) VALUES (?, ?, ?)').run(U.mama.id, G.addDays(G.jst().day, -1), Date.now() - 86400000);
   assert.equal(P.visitStreak(U.mama.id), 2);
 });
+
+test('保護者会：オンの日は中学生と同じルールで教室へ・時間制限なし・オフで退室', async () => {
+  const z = SM.ZONES.find(v => v.id === 'study');
+  assert.equal((await http('POST', '/api/admin/parent-meeting', { on: true }, U.kid.cookie)).status, 403);
+  assert.equal((await http('POST', '/api/admin/parent-meeting', { on: true }, owner)).status, 200);
+  // 10分をすぎた日でも、保護者会の日は入れる
+  const c = await connect(U.mama2.cookie);
+  assert.ok(c.init && c.init.visit.meeting, c.events.map(e => e.ev).join());
+  const ok = await walk(c, z.x1 + 1, z.y1 + 1);
+  assert.ok(ok, c.rejected.join());
+  // 高校生自習室は中学生と同じで入れない
+  const P2 = require('../server/permissions.js');
+  assert.equal(P2.canEnterRoom({ role: 'parent' }, { id: 'class3', type: 'study' }), false);
+  assert.equal(P2.canEnterRoom({ role: 'parent' }, { id: 'class1', type: 'study' }), true);
+  assert.equal(P2.canEnterRoom({ role: 'parent' }, { id: 'class2', type: 'classroom' }), true);
+  // 自習室では、先生がいないとスタンプは出せない（生徒と同じ）
+  const before = U.other.c.events.filter(e => e.ev === 'reaction').length;
+  c.s.emit('reaction', '👋'); await sleep(150);
+  assert.equal(U.other.c.events.filter(e => e.ev === 'reaction').length, before);
+  await sleep(2500); // 1.5秒をすぎても退室しない
+  assert.ok(!c.events.some(e => e.ev === 'kicked'));
+  assert.equal((await http('POST', '/api/admin/parent-meeting', { on: false }, owner)).status, 200);
+  await sleep(200);
+  const k = c.events.find(e => e.ev === 'kicked');
+  assert.match(k.d.reason, /保護者会/);
+});
+

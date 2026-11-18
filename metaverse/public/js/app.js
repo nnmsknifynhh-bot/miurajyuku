@@ -15,6 +15,8 @@
   let mapCanvas = null;
   const isStaff = () => !!(state.user && (state.user.role === 'owner' || state.user.role === 'teacher'));
   const isParent = () => !!(state.user && state.user.role === 'parent');
+  // 生徒と同じルールで動く人（生徒・保護者会の日の保護者）
+  const studentLike = () => !!(state.user && (state.user.role === 'student' || (state.user.role === 'parent' && state.meeting)));
 
   // ───────── 起動 ─────────
   (async function init() {
@@ -171,6 +173,7 @@
     });
     // ── 保護者 ──
     socket.on('visit-over', ({ message }) => showVisitOver(message));
+    socket.on('parent-meeting', ({ on }) => { setMeeting(!!on); if (on) { visitEndsAt = 0; toast('👪 保護者会がはじまりました。教室や自習室にも入れます', 6000); } });
     socket.on('moms-updated', (m) => { if (state.gb && state.gb.forest) state.gb.forest.moms = m; });
     // 生徒：おうちの人からの「見たよ」スタンプ（次に入ったとき1回だけ）
     socket.on('cheer', ({ stamps }) => {
@@ -246,7 +249,7 @@
       return state.user.role === 'teacher' ? `${z.name}には入れません（担当の教室ではありません）` : `${z.name}には入れません`;
     }
     const c = state.counts[z.id];
-    if (state.user.role === 'student' && c && c.students >= c.capacity) return `${z.name}は満員です（定員${c.capacity}人）`;
+    if (studentLike() && c && c.students >= c.capacity) return `${z.name}は満員です（定員${c.capacity}人）`;
     return null;
   }
   const tileAllowed = (tx, ty) => !zoneBlockReason(SM.zoneAt(tx, ty));
@@ -297,7 +300,7 @@
       Object.assign(state.me, { x: res.x, y: res.y, dir: res.dir, seat: SM.seatId(tx, ty), moving: false });
       state.lastSentKey = Math.round(res.x) + ',' + Math.round(res.y) + ',' + res.dir + ',false';
       updateAll();
-      if (isParent()) parentSeated();
+      if (isParent() && SM.tileAt(tx, ty) === 'O') parentSeated();
     });
   }
   function standUp() {
@@ -316,7 +319,7 @@
     let best = null, bd = Infinity;
     for (let y = cy - 1; y <= cy + 1; y++) for (let x = cx - 1; x <= cx + 1; x++) {
       if (!SM.isSeat(x, y) || occ.has(SM.seatId(x, y))) continue;
-      if (SM.isBoothSeat(SM.seatId(x, y)) && state.testBooth !== SM.seatId(x, y) && state.user.role === 'student') continue; // ブースは呼ばれたときだけ
+      if (SM.isBoothSeat(SM.seatId(x, y)) && state.testBooth !== SM.seatId(x, y) && studentLike()) continue; // ブースは呼ばれたときだけ
       const c = SM.tileCenter(x, y), d = Math.hypot(c.x - me.x, c.y - me.y);
       if (d < bd && d < T * 1.4) { bd = d; best = { x, y }; }
     }
@@ -364,19 +367,28 @@
   // ───────── 保護者：ロビーのソファ・見わたし・毎日5問・わが子 ─────────
   let visitTimer = null, visitEndsAt = 0;
   function parentInit(visit) {
+    setMeeting(!!(visit && visit.meeting));
     if (visit && visit.endsAt) visitEndsAt = visit.endsAt;
     clearInterval(visitTimer);
     const tick = () => {
       const left = Math.max(0, visitEndsAt - Date.now()), m = Math.floor(left / 60000), s = Math.floor(left / 1000) % 60;
-      const chip = $('#visit-chip'); chip.hidden = !visitEndsAt;
+      const chip = $('#visit-chip');
+      if (state.meeting) { chip.hidden = false; chip.textContent = '👪 今日は保護者会'; chip.classList.remove('warn'); return; }
+      chip.hidden = !visitEndsAt;
       chip.textContent = `⏳ のこり ${m}:${String(s).padStart(2, '0')}・🔥${(state.me && state.me.streak) || 1}日目`;
       chip.classList.toggle('warn', left < 60000);
     };
     tick(); visitTimer = setInterval(tick, 1000);
     refreshPquizLabel();
-    if (visit && visit.again) toast('おかえりなさい。今日の訪問の残り時間からつづきます', 4000);
+    if (state.meeting) toast('👪 今日は保護者会です。生徒と同じルールで、教室や自習室にも入れます', 6000);
+    else if (visit && visit.again) toast('おかえりなさい。今日の訪問の残り時間からつづきます', 4000);
     else toast('ようこそ！ 保護者の方はロビーで過ごします（1日1回・10分）', 4500);
     if (!state.me.seat) setTimeout(openSofaPicker, 400); else parentSeated();
+  }
+  function setMeeting(on) {
+    state.meeting = on;
+    document.body.classList.toggle('is-meeting', on);
+    updateAll();
   }
   function openSofaPicker() {
     const map = $('#sofa-map'); map.textContent = '';
@@ -677,7 +689,7 @@
   };
   setInterval(() => {
     const me = state.me;
-    const watching = state.ready && me && state.user && state.user.role === 'student' && SM.isStudyRoom(me.room) && !me.seat
+    const watching = state.ready && me && studentLike() && SM.isStudyRoom(me.room) && !me.seat
       && !state.pathSeat && document.visibilityState === 'visible' && !document.querySelector('dialog[open]');
     if (!watching) { standingSince = 0; return; } // すわった・歩いて席へ向かっている・ほかの画面を開いている・アプリを見ていないときは数えない
     if (!standingSince) { standingSince = Date.now(); return; }
@@ -730,7 +742,7 @@
   // 生徒が1時間に2回以上、吹き出しやスタンプを開いたら忠告する（この端末の記録で数える）
   const CHAT_LIMIT = 2, CHAT_WINDOW = 60 * 60 * 1000;
   function chatWarning() {
-    if (!state.user || state.user.role !== 'student') return null;
+    if (!studentLike()) return null;
     const key = 'juku-chat-opens-' + state.user.id, now = Date.now();
     let list = [];
     try { list = JSON.parse(localStorage.getItem(key) || '[]').filter(t => typeof t === 'number' && now - t < CHAT_WINDOW); } catch (e) { list = []; }
@@ -751,13 +763,13 @@
     return false;
   }
   function openTopic() {
-    if (state.user.role === 'student' && !state.me.topic && $('#btn-topic').hidden) {
+    if (studentLike() && !state.me.topic && $('#btn-topic').hidden) {
       return toast('💬 吹き出しは、先生と話すときだけ使えます。先生に近くに来てもらってね', 5000);
     }
     const warn = chatWarning();
     $('#topic-warn').textContent = warn || ''; $('#topic-warn').hidden = !warn;
     const chips = $('#topic-chips'); chips.textContent = '';
-    const student = state.user.role === 'student';
+    const student = studentLike();
     $('#topic-title').textContent = student && SM.isStudyRoom(state.me.room) ? '✏️ なにを勉強する？' : '💬 吹き出しに書く';
     let saved = '';
     try { saved = localStorage.getItem('juku-topic-' + state.user.id) || ''; } catch (e) {}
@@ -832,13 +844,13 @@
   // 生徒の「吹き出し」「スタンプ」は、先生・オーナーに話しかけられたとき（近くに来た・個別通話中）だけ出す。
   // スタンプは授業中の教室でも使える（サーバーでも同じようにたしかめる）
   function updateTalkButtons() {
-    if (!state.user || state.user.role !== 'student' || !state.me) return;
+    if (!studentLike() || !state.me) return;
     // 授業中の教室では、先生が「スタンプ・吹き出しOK」にしたときだけ
     const cls = state.me.room && state.classes && state.classes[state.me.room];
     const inCall = !!(state.pc && state.pc.active());
     const talk = inCall || (cls ? !!cls.allowChat : talkingWithStaff());
     const topicOn = talk || !!state.me.topic;
-    const reactOn = talk;
+    const reactOn = talk || (isParent() && !state.me.room); // 保護者はロビーではいつでもあいさつできる
     if ($('#btn-topic').hidden === topicOn) $('#btn-topic').hidden = !topicOn;
     if ($('#btn-react').hidden === reactOn) { $('#btn-react').hidden = !reactOn; if (!reactOn) $('#react-pop').hidden = true; }
     if (talk && !state.talkHinted) { state.talkHinted = true; toast(cls && !inCall ? '😊 先生がスタンプ・吹き出しをOKにしました' : '👋 先生が話しかけています。吹き出しやスタンプで返事ができます', 4000); }
@@ -1080,7 +1092,7 @@
     const items = [...state.rooms, { id: 'lobby', name: 'ロビー', type: 'lobby', canEnter: true }];
     for (const r of items) {
       const c = state.counts[r.id];
-      const full = c && state.user.role === 'student' && c.students >= c.capacity && here !== r.id;
+      const full = c && studentLike() && c.students >= c.capacity && here !== r.id;
       const ok = r.canEnter && !full;
       const card = el('div', 'room-card' + (ok ? '' : ' locked') + (here === r.id ? ' here' : ''));
       const info = el('div');
@@ -1096,7 +1108,7 @@
   }
 
   function goToRoom(r, tries = 0) {
-    if (r.type === 'classroom' && state.user.role !== 'student') {
+    if (r.type === 'classroom' && !studentLike()) {
       const pod = SM.PODIUM[r.id];
       if (walkTo(pod.x, pod.y, false)) toast(`${r.name}の教壇へ向かいます`);
       return;

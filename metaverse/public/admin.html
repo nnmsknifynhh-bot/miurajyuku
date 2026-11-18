@@ -53,6 +53,15 @@
     <section id="tab-status" class="tab" hidden>
       <p class="lead">いま入室している人（5秒ごとに自動更新）。<span class="muted" id="status-note"></span></p>
       <div id="status-rooms" class="room-grid"></div>
+      <div id="parent-box" hidden>
+        <h3 class="sec">👪 保護者</h3>
+        <div class="gb-box">
+          <div class="gb-row"><b id="pm-state"></b><button type="button" class="btn small" id="pm-toggle"></button></div>
+          <small class="muted">保護者会をオンにすると、その日だけ保護者も中学生と同じルールで教室・自習室・テストの教室に入れます（10分・1日1回の制限もなし）。日がかわると自動でオフになります。オフにすると、入室中の保護者は退室します。</small>
+        </div>
+        <p><b id="pv-title"></b></p>
+        <div class="table-wrap"><table class="logs"><thead><tr><th>保護者</th><th>お子さん</th><th>来た時刻</th><th>いま</th></tr></thead><tbody id="pv-body"></tbody></table></div>
+      </div>
       <h3 class="sec">接続中のユーザー</h3>
       <div class="table-wrap"><table class="logs"><thead><tr><th>名前</th><th>役割</th><th>場所</th><th>状態</th><th>端末</th><th>接続時刻</th><th id="ip-col">IP</th><th></th></tr></thead><tbody id="status-body"></tbody></table></div>
     </section>

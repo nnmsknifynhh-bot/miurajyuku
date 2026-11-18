@@ -40,7 +40,11 @@ function can(user, key) {
 // その部屋に入れるか（第2段階のリアルタイム入室でもこの関数で判定する）
 function canEnterRoom(user, room) {
   if (!user || !room) return false;
-  if (user.role === 'parent') return false; // 保護者はロビーだけ
+  if (user.role === 'parent') {
+    // ふだんはロビーだけ。保護者会の日は、中学生と同じルールで教室・自習室・テストの教室に入れる
+    if (!require('./parents').meetingOn()) return false;
+    return room.type === 'study' ? room.id !== 'class3' : true;
+  }
   if (room.type === 'study') {
     // 生徒：高校生は高校生自習室（class3）、それ以外の生徒は自習室（study）。先生・オーナーはどちらにも入れる
     if (user.role !== 'student') return true;

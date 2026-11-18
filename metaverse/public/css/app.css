@@ -252,8 +252,8 @@ body:not(.is-student) .me-menu .student-only { display: none; }
 .fun-card .dialog-body { text-align: center; }
 /* 保護者 */
 body:not(.is-parent) .parent-only { display: none !important; }
-body.is-parent .not-parent { display: none !important; }
-body.is-parent #btn-react.student-only, body.is-parent #menu-shop.student-only { display: flex !important; }
+body.is-parent:not(.is-meeting) .not-parent { display: none !important; }
+body.is-parent #btn-react.student-only:not([hidden]) { display: flex !important; }
 body.is-parent #menu-shop.student-only { display: block !important; }
 .family-kid { border: 2px solid var(--line); border-radius: 14px; padding: 10px 12px; display: grid; gap: 6px; margin-bottom: 8px; }
 .family-kid h3 { margin: 0; font-size: 17px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }

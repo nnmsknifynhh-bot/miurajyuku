@@ -331,6 +331,7 @@
     const isOwner = me.role === 'owner';
     $('#status-note').textContent = isOwner ? '不審な接続は「切断」で止められます。' : '（接続の切断はオーナーのみ）';
     $('#ip-col').hidden = !isOwner;
+    if (isOwner) loadParentsToday();
     const box = $('#status-rooms'); box.textContent = '';
     for (const [id, r] of Object.entries(data.rooms)) {
       const card = el('div', 'room-box');
@@ -382,6 +383,31 @@
     }
     if (!data.users.length) { const tr = el('tr'); const td = el('td', 'empty', 'いま接続している人はいません'); td.colSpan = 8; tr.append(td); body.append(tr); }
   }
+  // 今日来た保護者・保護者会
+  let pmOn = false;
+  async function loadParentsToday() {
+    let d;
+    try { d = await api('GET', '/api/admin/parents/today'); } catch (e) { return; }
+    $('#parent-box').hidden = false;
+    pmOn = d.meeting;
+    $('#pm-state').textContent = d.meeting ? '🎉 今日は保護者会です（保護者も全部の教室に入れます）' : '保護者会：オフ（保護者はロビーだけ・1日1回10分）';
+    $('#pm-toggle').textContent = d.meeting ? '保護者会をおわる' : '保護者会をはじめる';
+    $('#pm-toggle').className = 'btn small' + (d.meeting ? ' danger' : '');
+    $('#pv-title').textContent = `今日来た保護者：${d.visits.length}人`;
+    const body = $('#pv-body'); body.textContent = '';
+    for (const v of d.visits) {
+      const tr = el('tr');
+      [v.name, v.children.join('・') || '—', new Date(v.startedAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tokyo' }), v.online ? '🟢 入室中' : ''].forEach(x => tr.append(el('td', null, x)));
+      body.append(tr);
+    }
+    if (!d.visits.length) { const tr = el('tr'); const td = el('td', 'empty', '今日はまだ来ていません'); td.colSpan = 4; tr.append(td); body.append(tr); }
+  }
+  $('#pm-toggle').onclick = async () => {
+    const on = !pmOn;
+    if (!confirm(on ? '保護者会をはじめますか？\n今日だけ、保護者も教室・自習室・テストの教室に入れるようになります。' : '保護者会をおわりますか？\n入室中の保護者は退室します。')) return;
+    try { await api('POST', '/api/admin/parent-meeting', { on }); toast(on ? '保護者会をはじめました' : '保護者会をおわりました'); loadParentsToday(); } catch (e) { toast(e.message); }
+  };
+
   async function disconnect(u, revoke) {
     const msg = revoke ? `${u.name} さんの接続を切り、すべての端末からログアウトさせますか？\n（もう一度ログインすれば入れます。入れなくするには「ユーザー」タブで無効にしてください）`
       : `${u.name} さんの接続を切りますか？（再ログインせずにページを開き直すと再接続できます）`;
@@ -395,7 +421,7 @@
     'login.success': 'ログイン', 'login.failed': 'ログイン失敗', 'setup.owner_created': '初期セットアップ',
     'user.created': 'ユーザー作成', 'user.updated': 'ユーザー編集', 'user.sessions_revoked': '強制ログアウト',
     'user.password_changed_self': 'パスワード変更（本人）', 'room.capacity_changed': '定員の変更',
-    'presence.disconnected': '接続の切断', 'settings.study_photos': '見守り写真の設定', 'private.invited': '個別通話の呼び出し', 'private.started': '個別通話を開始', 'private.ended': '個別通話を終了', 'class.started': '授業（通話）を開始', 'class.ended': '授業（通話）を終了', 'presence.disconnected_and_revoked': '切断＋ログアウト',
+    'presence.disconnected': '接続の切断', 'settings.study_photos': '見守り写真の設定', 'private.invited': '個別通話の呼び出し', 'private.started': '個別通話を開始', 'private.ended': '個別通話を終了', 'class.started': '授業（通話）を開始', 'class.ended': '授業（通話）を終了', 'presence.disconnected_and_revoked': '切断＋ログアウト', 'parent.meeting_on': '保護者会をはじめる', 'parent.meeting_off': '保護者会をおわる',
   };
   async function loadLogs() {
     let logs;
