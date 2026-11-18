@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 
 // 部屋の初期データ（座席数はマップから計算）
 const ROOM_SEED = [
-  { id: 'class1', name: '教室1', type: 'classroom', sort: 1 },
+  { id: 'class1', name: 'スピーキング・ライティング教室', type: 'study', sort: 1 }, // 教室1をテストの教室に
   { id: 'class2', name: '教室2', type: 'classroom', sort: 2 },
   { id: 'class3', name: '高校生自習室', type: 'study', sort: 3 }, // 教室3を高校生自習室（カフェ風）に改装
   { id: 'study', name: '自習室', type: 'study', sort: 4 },
@@ -92,6 +92,14 @@ for (const r of ROOM_SEED) {
   const max = SchoolMap.seatCount(r.id);
   const def = r.type === 'study' ? Math.min(30, max) : max;
   insertRoom.run(r.id, r.name, r.type, def, max, r.sort);
+}
+// すでに「教室1」として保存されているデータを、スピーキング・ライティング教室に切りかえる（1回だけ）
+{
+  const r1 = db.prepare("SELECT type FROM rooms WHERE id = 'class1'").get();
+  if (r1 && r1.type === 'classroom') {
+    const max = SchoolMap.seatCount('class1');
+    db.prepare("UPDATE rooms SET type = 'study', name = 'スピーキング・ライティング教室', capacity = ?, max_capacity = ? WHERE id = 'class1'").run(max, max);
+  }
 }
 // すでに「教室3」として保存されているデータを、高校生自習室に切りかえる（1回だけ）
 {

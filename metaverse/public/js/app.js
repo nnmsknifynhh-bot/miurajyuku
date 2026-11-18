@@ -94,6 +94,21 @@
     socket.on('student-late', ({ name, weekday, time }) => { toast(`⏰ ${name}さんがまだ来ていません（${weekday}曜 ${time}〜の予定）`, 9000); chime(); });
     socket.on('study-minute', () => { if (state.user && state.user.role === 'student') { refreshWeek(); refreshFun(); } });
     // 季節のお楽しみ
+    // ── スピーキング・ライティングテストの順番待ち ──
+    socket.on('test-queue', (q) => { state.testQueue = q; renderTest(); });
+    socket.on('test-notice', ({ text }) => { if (!(state.me && state.me.room === 'class1')) { toast(text, 5000); chime(0.1); } });
+    socket.on('test-called', ({ seat, name, by }) => {
+      state.testBooth = seat;
+      const [x, y] = seat.split(',').map(Number);
+      toast(`🎤 順番が来ました！ ${by}先生が呼んでいます。${name}へ移動します`, 6000); chime(0.2);
+      walkTo(x, y, true);
+    });
+    socket.on('test-finished', ({ by }) => {
+      state.testBooth = null; if (state.me) state.me.seat = null;
+      toast(`🎤 テストおつかれさま！（${by}先生）席にもどります`, 5000);
+      goNearSeat();
+      renderTest();
+    });
     socket.on('fun-event', (d) => {
       if (d.kind === 'asa') toast(`🌅 早起きスタンプ！ +${d.points}ポイント（ぜんぶで${d.stamps}こ）`, 6000);
       refreshFun(true);
@@ -148,7 +163,9 @@
       state.counts = d.rooms; state.reactions = d.reactions;
       state.classes = d.classes || {}; state.classCall = !!d.classCall;
       state.path = []; state.pathSeat = null; state.ready = true;
-      buildReactions(); updateAll(); refreshWeek(true); refreshFun(true);
+      state.testQueue = d.testQueue || null;
+      { const mine = state.testQueue && state.testQueue.booths.find(b => b.userId === d.me.id); state.testBooth = mine ? mine.seat : null; }
+      buildReactions(); updateAll(); refreshWeek(true); refreshFun(true); renderTest();
     });
     socket.on('class-state', (c) => { state.classes = c; state.call.sync(); });
     socket.on('class-ended', ({ room, reason }) => {
@@ -286,6 +303,7 @@
     let best = null, bd = Infinity;
     for (let y = cy - 1; y <= cy + 1; y++) for (let x = cx - 1; x <= cx + 1; x++) {
       if (!SM.isSeat(x, y) || occ.has(SM.seatId(x, y))) continue;
+      if (SM.isBoothSeat(SM.seatId(x, y)) && state.testBooth !== SM.seatId(x, y) && state.user.role === 'student') continue; // ブースは呼ばれたときだけ
       const c = SM.tileCenter(x, y), d = Math.hypot(c.x - me.x, c.y - me.y);
       if (d < bd && d < T * 1.4) { bd = d; best = { x, y }; }
     }
@@ -301,7 +319,7 @@
   let standingSince = 0;
   function studySeats() {
     const z = SM.ZONES.find(v => v.id === ((state.me && SM.isStudyRoom(state.me.room)) ? state.me.room : 'study')), seats = [];
-    for (let y = z.y1; y <= z.y2; y++) for (let x = z.x1; x <= z.x2; x++) if (SM.tileAt(x, y) === 'c') seats.push({ x, y });
+    for (let y = z.y1; y <= z.y2; y++) for (let x = z.x1; x <= z.x2; x++) if (SM.tileAt(x, y) === 'c' && !SM.isBoothSeat(SM.seatId(x, y))) seats.push({ x, y });
     return seats;
   }
   function openSeatPicker() {
@@ -418,6 +436,68 @@
 
   $('#bday-close').onclick = () => { $('#bday-dialog').close(); if (state.gb && state.gb.refreshForest) state.gb.refreshForest(); };
   $('#seat-close').onclick = () => { $('#seat-dialog').close(); standingSince = Date.now(); };
+  // 近くの空いている席（テストのブースはのぞく）へ歩いてすわる
+  function goNearSeat() {
+    const me = state.me, occ = occupiedSeats();
+    if (!me) return;
+    const free = studySeats().filter(s => !occ.has(SM.seatId(s.x, s.y)))
+      .sort((a, b) => Math.hypot(SM.tileCenter(a.x, a.y).x - me.x, SM.tileCenter(a.x, a.y).y - me.y) - Math.hypot(SM.tileCenter(b.x, b.y).x - me.x, SM.tileCenter(b.x, b.y).y - me.y));
+    if (free.length) walkTo(free[0].x, free[0].y, true);
+  }
+  // ───── スピーキング・ライティングテスト：生徒の「並ぶ」ボタンと、先生の受付パネル ─────
+  function renderTest() {
+    const q = state.testQueue, me = state.me;
+    if (!me || !state.user || !q) { $('#btn-test').hidden = true; $('#test-panel').hidden = true; return; }
+    const inTest = me.room === 'class1';
+    if (state.user.role === 'student') {
+      const pos = q.queue.findIndex(x => x.id === me.id);
+      const booth = q.booths.find(b => b.userId === me.id);
+      $('#btn-test').hidden = !inTest;
+      $('#test-label').textContent = booth ? 'テスト中' : pos >= 0 ? `${pos + 1}番目` : 'テストに並ぶ';
+      $('#btn-test').classList.toggle('on', pos >= 0 || !!booth);
+      $('#btn-test').disabled = !!booth;
+    } else {
+      const canRun = state.user.role === 'owner' || (state.user.permissions && state.user.permissions.handle_students);
+      $('#test-panel').hidden = !(inTest && canRun);
+      if ($('#test-panel').hidden) return;
+      const bx = $('#test-booths'); bx.textContent = '';
+      for (const b of q.booths) {
+        const row = el('div', 'test-booth' + (b.userId ? '' : ' free'));
+        row.append(el('span', null, `${b.name}：${b.userName || '空き'}`));
+        const acts = el('span', 'acts');
+        if (b.userId) {
+          const u = state.others.get(b.userId);
+          if (u && canPrivate()) { const call = el('button', 'btn small', '🎧 通話'); call.onclick = () => state.pc.invite(u); acts.append(call); }
+          const done = el('button', 'btn small secondary', '✅ 終了');
+          done.onclick = () => state.socket.emit('test-done', { userId: b.userId }, (r) => { if (!r || !r.ok) toast((r && r.error) || 'できませんでした'); });
+          acts.append(done);
+        } else {
+          const next = el('button', 'btn small', '▶ 次の人を呼ぶ');
+          next.disabled = !q.queue.length;
+          next.onclick = () => state.socket.emit('test-next', { seat: b.seat }, (r) => { if (!r || !r.ok) toast((r && r.error) || 'できませんでした'); else toast(`${r.name}さんを呼びました`); });
+          acts.append(next);
+        }
+        row.append(acts); bx.append(row);
+      }
+      $('#test-q-count').textContent = `${q.queue.length}人`;
+      const ol = $('#test-queue'); ol.textContent = '';
+      if (!q.queue.length) ol.append(el('li', 'muted', 'まだだれも並んでいません'));
+      for (const x of q.queue) ol.append(el('li', null, x.name));
+    }
+  }
+  $('#btn-test').onclick = () => {
+    const q = state.testQueue, me = state.me;
+    if (!q || !me) return;
+    if (q.queue.some(x => x.id === me.id)) {
+      if (!confirm('テストの順番待ちをやめますか？')) return;
+      state.socket.emit('test-leave', {}, () => toast('順番待ちをやめました'));
+      return;
+    }
+    state.socket.emit('test-join', {}, (r) => {
+      if (!r || !r.ok) return toast((r && r.error) || '並べませんでした');
+      toast(`🎤 テストの順番待ちに並びました（${r.n}番目）。呼ばれるまで、席で自習していてね`, 5000);
+    });
+  };
   $('#seat-near').onclick = () => {
     $('#seat-dialog').close();
     const me = state.me, occ = occupiedSeats();
@@ -606,6 +686,7 @@
     // 自習室では挙手を使わないので「手をあげる」を隠す（吹き出しボタンはどこでも表示）
     const inStudy = !!(me && SM.isStudyRoom(me.room));
     $('#btn-hand').hidden = inStudy;
+    renderTest();
     $('#btn-topic').classList.toggle('on', !!(me && me.topic));
     $('#btn-hand').classList.toggle('hand-on', !!(me && me.hand));
   }
@@ -855,7 +936,7 @@
       const z = SM.ZONES.find(v => v.id === r.id), entry = SM.ENTRY[r.id], occ = occupiedSeats();
       const seats = [];
       for (let y = z.y1; y <= z.y2; y++) for (let x = z.x1; x <= z.x2; x++) {
-        if (SM.tileAt(x, y) === 'c' && !occ.has(SM.seatId(x, y))) seats.push({ x, y });
+        if (SM.tileAt(x, y) === 'c' && !occ.has(SM.seatId(x, y)) && !SM.isBoothSeat(SM.seatId(x, y))) seats.push({ x, y });
       }
       seats.sort((a, b) => Math.hypot(a.x - entry.x, a.y - entry.y) - Math.hypot(b.x - entry.x, b.y - entry.y));
       if (!seats.length) return toast('空いている席がありません');

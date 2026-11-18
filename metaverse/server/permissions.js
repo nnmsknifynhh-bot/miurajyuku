@@ -43,6 +43,7 @@ function canEnterRoom(user, room) {
   if (room.type === 'study') {
     // 生徒：高校生は高校生自習室（class3）、それ以外の生徒は自習室（study）。先生・オーナーはどちらにも入れる
     if (user.role !== 'student') return true;
+    if (room.id === 'class1') return true; // スピーキング・ライティング教室はだれでも
     const hs = /^高[123]$/.test(user.grade || '');
     return room.id === 'class3' ? hs : !hs;
   }

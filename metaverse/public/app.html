@@ -111,6 +111,13 @@
       <div class="dialog-actions"><button type="submit" class="btn">この3つで始める</button></div>
     </form>
   </dialog>
+  <!-- 先生：スピーキング・ライティングテストの受付（教室1にいるとき） -->
+  <aside class="test-panel" id="test-panel" hidden>
+    <h3>🎤 テストの受付</h3>
+    <div id="test-booths"></div>
+    <div class="test-q-head"><b>順番待ち</b><span id="test-q-count"></span></div>
+    <ol id="test-queue"></ol>
+  </aside>
   <div class="top-chips"><div class="week-chip" id="week-chip" hidden></div><div class="week-chip fun-chip" id="fun-chip" hidden></div></div>
 
   <!-- 🎅 がんばりサンタのプレゼント -->
@@ -236,6 +243,7 @@
     <button class="big-btn student-only" id="btn-hand"><span>✋</span><b id="hand-label">手をあげる</b></button>
     <button class="big-btn" id="btn-topic"><span>💬</span><b>吹き出し</b></button>
     <button class="big-btn student-only" id="btn-react"><span>😊</span><b>スタンプ</b></button>
+    <button class="big-btn student-only" id="btn-test" hidden><span>🎤</span><b id="test-label">テストに並ぶ</b></button>
     <button class="big-btn staff-only" id="btn-hands"><span>🙋</span><b>挙手</b><i class="count" id="hands-count" hidden>0</i></button>
     <button class="big-btn staff-only" id="btn-people"><span>👥</span><b>入室者</b></button>
   </footer>

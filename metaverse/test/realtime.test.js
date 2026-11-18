@@ -115,21 +115,22 @@ test('45人の生徒と先生3人が同時に接続し、教室1・2と高校生
 
 test('定員に達した教室には16人目の生徒が入れない（先生は定員に数えない）', async () => {
   const s = students[45];
-  const ok = await walk(s.c, 5, 10);
+  const ok = await walk(s.c, 22, 10); // 教室2（授業の教室）
   assert.equal(ok, false);
   assert.match(s.c.rejected.at(-1), /満員/);
-  assert.equal(SM.zoneAtPx(s.c.me.x, s.c.me.y)?.id === 'class1', false);
-  assert.equal(await walk(teachers.t1.c, 8, 4), true);
+  assert.equal(SM.zoneAtPx(s.c.me.x, s.c.me.y)?.id === 'class2', false);
+  assert.equal(await walk(teachers.t2.c, 25, 4), true);
   await sleep(150);
-  assert.equal(s.c.rooms.class1.students, 15);
-  assert.equal(s.c.rooms.class1.staff, 1);
+  assert.equal(s.c.rooms.class2.students, 15);
+  assert.equal(s.c.rooms.class2.staff, 1);
 });
 
 test('先生は担当外の教室に入れない', async () => {
-  const ok = await walk(teachers.t2.c, 5, 4); // class1
+  // t1 の担当だった教室1はテストの教室になったので、t1 は担当の教室なし
+  const ok = await walk(teachers.t1.c, 22, 4); // class2
   assert.equal(ok, false);
-  assert.match(teachers.t2.c.rejected.at(-1), /担当/);
-  assert.equal(await walk(teachers.t2.c, 25, 4), true); // class2
+  assert.match(teachers.t1.c.rejected.at(-1), /担当/);
+  assert.equal(await walk(teachers.t1.c, 5, 4), true, 'テストの教室（自習の部屋）には入れる');
 });
 
 test('定員を変更すると、すぐに入室制限に反映される', async () => {
@@ -155,18 +156,18 @@ test('同じ席には2人座れない', async () => {
 
 test('挙手：担当の先生とオーナーにだけ通知され、担当の先生が対応できる', async () => {
   const owner = await connect(ownerCookie);
-  const st = students[2]; // class1
+  const st = students[17]; // class2
   const notes = (c) => c.events.filter(e => e.ev === 'hand-raised').length;
   const before = { t1: notes(teachers.t1.c), t2: notes(teachers.t2.c) };
   const r = await emitAck(st.c, 'hand', { raised: true });
   assert.equal(r.ok, true);
   await sleep(100);
-  assert.equal(notes(teachers.t1.c), before.t1 + 1, '教室1の先生に通知');
-  assert.equal(notes(teachers.t2.c), before.t2, '教室2の先生には通知されない');
+  assert.equal(notes(teachers.t2.c), before.t2 + 1, '教室2の先生に通知');
+  assert.equal(notes(teachers.t1.c), before.t1, '担当でない先生には通知されない');
   assert.equal(notes(owner), 1, 'オーナーに通知');
-  const denied = await emitAck(teachers.t2.c, 'lower-hand', st.id);
+  const denied = await emitAck(teachers.t1.c, 'lower-hand', st.id);
   assert.equal(denied.ok, false);
-  const done = await emitAck(teachers.t1.c, 'lower-hand', st.id);
+  const done = await emitAck(teachers.t2.c, 'lower-hand', st.id);
   assert.equal(done.ok, true);
   await sleep(100);
   assert.ok(st.c.events.some(e => e.ev === 'hand-lowered'));
@@ -181,21 +182,21 @@ test('挙手は授業の教室の中だけ・生徒だけ', async () => {
 });
 
 test('教室から出ると挙手は自動で取り消される', async () => {
-  const st = students[3];
+  const st = students[18]; // class2
   await emitAck(st.c, 'hand', { raised: true });
-  assert.equal(await walk(st.c, 14, 16), true); // ろうかへ
+  assert.equal(await walk(st.c, 31, 16), true); // ろうかへ
   await sleep(100);
   const ev = st.c.events.filter(e => e.ev === 'user-updated' && e.data.id === st.id && e.data.hand === false);
   assert.ok(ev.length >= 1);
 });
 
 test('入室の権限を外すと、教室にいる生徒はろうかへ移動させられる', async () => {
-  const st = students[4]; // class1 にいる
+  const st = students[19]; // class2 にいる
   await http('PATCH', `/api/admin/users/${st.id}`, { permissions: { enter_classroom: false } }, ownerCookie);
   await sleep(150);
   assert.ok(st.c.events.some(e => e.ev === 'force-move'));
   assert.equal(SM.zoneAtPx(st.c.me.x, st.c.me.y).id, 'hall');
-  assert.equal(await walk(st.c, 6, 4), false); // もう入れない
+  assert.equal(await walk(st.c, 22, 4), false); // もう入れない
 });
 
 test('入室状況 API：オーナーは IP まで見られ、先生（教室管理なし）は見られない', async () => {

@@ -175,6 +175,15 @@
 
     // 黒板の文字・スクリーン表示
     g.textAlign = 'center'; g.textBaseline = 'middle';
+    // スピーキング・ライティング教室：黒板とブースの名前
+    g.fillStyle = 'rgba(255,255,255,.9)'; g.font = 'bold 12px sans-serif';
+    g.fillText('🎤 Speaking & ✏️ Writing Test', 7 * T, 0.45 * T);
+    g.fillStyle = '#7fa6d9'; g.font = 'bold 10px sans-serif'; g.fillText('スクリーン', 13 * T, 0.45 * T);
+    for (const b of SM.BOOTHS.class1) {
+      g.font = 'bold 11px sans-serif'; const w = g.measureText(b.name).width + 12;
+      rr((b.x + 0.5) * T - w / 2 - 22, (b.y - 0.5) * T - 8, w, 16, 6, 'rgba(224,123,16,.9)');
+      g.fillStyle = '#fff'; g.fillText(b.name, (b.x + 0.5) * T - 22, (b.y - 0.5) * T + 0.5);
+    }
     // カフェのカウンターのメニュー
     g.fillStyle = '#f5e6c8'; g.font = 'bold 11px sans-serif'; g.fillText('☕ Study Café', 38 * T, 1.55 * T);
     for (const z of SM.ZONES.filter(z => z.type === 'classroom')) {
@@ -206,7 +215,7 @@
       rr(cx - w / 2, cy - 12, w, 24, 8, bg);
       g.fillStyle = '#fff'; g.fillText(text, cx, cy + 1);
     };
-    sign('教室1', 15 * T, 15.5 * T, '#2f7de1'); sign('教室2', 32 * T, 15.5 * T, '#2fa36b'); sign('高校生自習室', 49 * T, 15.5 * T, '#6d4c41');
+    sign('🎤 テスト教室', 14 * T, 15.5 * T, '#2f7de1'); sign('教室2', 32 * T, 15.5 * T, '#2fa36b'); sign('高校生自習室', 49 * T, 15.5 * T, '#6d4c41');
     sign('自習室', 17 * T, 18.5 * T, '#8b6b4a'); sign('ロビー', 43 * T, 18.5 * T, '#7a6f86');
     sign('🌿 自習室　しずかに集中しよう', 17 * T, 31.3 * T, 'rgba(110,85,60,.75)');
     sign('ようこそ 三浦塾へ', 43 * T, 21.5 * T, 'rgba(120,110,135,.8)');

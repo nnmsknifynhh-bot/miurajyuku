@@ -204,8 +204,34 @@ function endCall(call, reason, actorId) {
   return true;
 }
 
+// ───── スピーキング・ライティングテストの順番待ち（教室1） ─────
+const TEST_ROOM = 'class1';
+const testQ = { queue: [], booths: Object.fromEntries(SM.BOOTHS[TEST_ROOM].map(b => [`${b.x},${b.y}`, null])), leaveTimers: new Map() };
+function boothOf(userId) { for (const [seat, id] of Object.entries(testQ.booths)) if (id === userId) return seat; return null; }
+function testState() {
+  const name = (id) => { const o = online.get(id); return o ? o.user.display_name : '（いません）'; };
+  return {
+    queue: testQ.queue.map((id, i) => ({ id, name: name(id), n: i + 1 })),
+    booths: SM.BOOTHS[TEST_ROOM].map(b => { const seat = `${b.x},${b.y}`, id = testQ.booths[seat]; return { seat, name: b.name, userId: id, userName: id ? name(id) : null }; }),
+  };
+}
+function broadcastTest() { if (io) io.emit('test-queue', testState()); }
+function leaveTest(userId) {
+  let changed = false;
+  const i = testQ.queue.indexOf(userId);
+  if (i >= 0) { testQ.queue.splice(i, 1); changed = true; }
+  const seat = boothOf(userId);
+  if (seat) { testQ.booths[seat] = null; changed = true; }
+  if (changed) broadcastTest();
+}
+// テストの順番待ちを、生徒を見られる先生・オーナーに知らせる
+function notifyStaffTest(text) {
+  for (const s of online.values()) if (canViewStudyPhotos(s.user)) s.socket.emit('test-notice', { text });
+}
+
 function setRoom(p, roomId) {
   if (p.room === roomId) return;
+  if (p.room === TEST_ROOM) leaveTest(p.id); // テストの教室を出たら、順番待ちからぬける
   if (p.hand) lowerHand(p);
   if (SM.isStudyRoom(p.room)) clearStudyPhoto(p);
   if (p.room) leaveClassRoom(p, p.room, 'moved');
@@ -327,7 +353,7 @@ function attach(httpServer) {
 
     socket.emit('init', {
       me: { ...pub(p), bday: !!p.bday }, users: [...online.values()].filter(o => o !== p).map(pub), rooms: roomCounts(), reactions: REACTIONS,
-      classes: classState(), classCall: livekit.enabled,
+      classes: classState(), classCall: livekit.enabled, testQueue: testState(),
     });
     if (gap && p.room === gap.room && Date.now() - gap.at <= STUDY_GAP_MS) socket.emit('study-resumed', { minutes: gapMinutes, seat: p.seat });
     socket.broadcast.emit('user-joined', pub(p));
@@ -378,6 +404,8 @@ function attach(httpServer) {
       if (seatRoom !== p.room) return ack({ ok: false, error: '先に部屋に入ってください' });
       const id = SM.seatId(sx, sy);
       for (const o of online.values()) if (o !== p && o.seat === id) return ack({ ok: false, error: 'その席はほかの人が使っています' });
+      // テストのブースは、先生に呼ばれた生徒だけ
+      if (SM.isBoothSeat(id) && p.user.role === 'student' && boothOf(p.id) !== id) return ack({ ok: false, error: 'テストのブースは、先生に呼ばれたらすわれます' });
       p.seat = id; p.x = c.x; p.y = c.y; p.dir = SM.seatFacing(sx, sy); p.moving = false;
       ack({ ok: true, x: p.x, y: p.y, dir: p.dir });
       socket.broadcast.emit('user-updated', { id: p.id, seat: id, x: p.x, y: p.y, dir: p.dir, moving: false });
@@ -608,6 +636,57 @@ function attach(httpServer) {
       refreshHS(p);
       ack({ ok: true, plan: p.plan });
     });
+    // ── スピーキング・ライティングテストの順番待ち ──
+    socket.on('test-join', (_d, ack) => {
+      if (typeof ack !== 'function') ack = () => {};
+      if (p.user.role !== 'student') return ack({ ok: false, error: '生徒の機能です' });
+      if (p.room !== TEST_ROOM) return ack({ ok: false, error: 'スピーキング・ライティング教室に入ってから並んでね' });
+      if (boothOf(p.id)) return ack({ ok: false, error: 'いまテストのブースにいます' });
+      if (!testQ.queue.includes(p.id)) {
+        testQ.queue.push(p.id);
+        notifyStaffTest(`🎤 ${p.user.display_name}さんがテストの順番待ちに並びました（${testQ.queue.length}人待ち）`);
+      }
+      broadcastTest();
+      ack({ ok: true, n: testQ.queue.indexOf(p.id) + 1 });
+    });
+    socket.on('test-leave', (_d, ack) => {
+      if (typeof ack !== 'function') ack = () => {};
+      leaveTest(p.id);
+      ack({ ok: true });
+    });
+    // 先生：次の人をブースへ呼ぶ
+    socket.on('test-next', (d, ack) => {
+      if (typeof ack !== 'function') ack = () => {};
+      if (!canViewStudyPhotos(p.user)) return ack({ ok: false, error: 'この操作は許可されていません' });
+      const seat = d && d.seat && d.seat in testQ.booths ? d.seat : Object.keys(testQ.booths).find(s => !testQ.booths[s]);
+      if (!seat || testQ.booths[seat]) return ack({ ok: false, error: '空いているブースがありません' });
+      const id = testQ.queue.find(uid => online.has(uid));
+      if (!id) return ack({ ok: false, error: '順番待ちの生徒がいません' });
+      testQ.queue.splice(testQ.queue.indexOf(id), 1);
+      testQ.booths[seat] = id;
+      const st = online.get(id);
+      const b = SM.BOOTHS[TEST_ROOM].find(x => `${x.x},${x.y}` === seat);
+      st.socket.emit('test-called', { seat, name: b.name, by: p.user.display_name });
+      broadcastTest();
+      ack({ ok: true, userId: id, name: st.user.display_name, seat });
+    });
+    // 先生：テストが終わった（ブースをあける）
+    socket.on('test-done', (d, ack) => {
+      if (typeof ack !== 'function') ack = () => {};
+      if (!canViewStudyPhotos(p.user)) return ack({ ok: false, error: 'この操作は許可されていません' });
+      const id = Number(d && d.userId);
+      const seat = boothOf(id);
+      if (!seat) return ack({ ok: false, error: 'ブースにいません' });
+      testQ.booths[seat] = null;
+      const st = online.get(id);
+      if (st) {
+        if (st.seat === seat) { st.seat = null; io.emit('user-updated', { id: st.id, seat: null }); }
+        st.socket.emit('test-finished', { by: p.user.display_name });
+      }
+      broadcastTest();
+      ack({ ok: true });
+    });
+
     // 先生がほかの人の吹き出しを消す（ふさわしくない内容など）
     socket.on('study-topic-clear', (targetId, ack) => {
       if (typeof ack !== 'function') ack = () => {};
@@ -662,6 +741,11 @@ function attach(httpServer) {
 
     socket.on('disconnect', () => {
       if (online.get(p.id) !== p) return;
+      // 通信が一瞬切れただけなら順番は残す（2分もどらなければぬける）
+      if (testQ.queue.includes(p.id) || boothOf(p.id)) {
+        clearTimeout(testQ.leaveTimers.get(p.id));
+        testQ.leaveTimers.set(p.id, setTimeout(() => { testQ.leaveTimers.delete(p.id); if (!online.has(p.id)) leaveTest(p.id); }, Number(process.env.TEST_LEAVE_MS || 120_000)));
+      }
       clearStudyPhoto(p);
       if (p.callId) endCall(callOf(p), `${p.user.display_name}${isStaff(p) ? '先生' : 'さん'}の接続が切れたため、個別通話を終了しました`);
       if (p.room) leaveClassRoom(p, p.room, 'disconnected');

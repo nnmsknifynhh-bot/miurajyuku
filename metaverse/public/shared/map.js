@@ -46,6 +46,9 @@
     fill(ox + 1, 13, ox + 5, 13, 'L');        // ロッカー
     set(ox + 13, 14, '_'); set(ox + 14, 14, '_'); // 出入口
   });
+  // 教室1はスピーキング・ライティングテストの教室：教壇の前にテスト用のブースを2つ（うしろの席は順番待ちの自習席）
+  const BOOTHS = { class1: [{ x: 6, y: 4, name: 'ブース1' }, { x: 11, y: 4, name: 'ブース2' }] };
+  for (const b of BOOTHS.class1) { set(b.x, b.y - 1, 'b'); set(b.x, b.y, 'c'); }
 
   // ── 高校生自習室（教室3を改装・カフェ風） ──
   {
@@ -96,7 +99,7 @@
 
   // 部屋（ゾーン）。id は DB の rooms.id と一致させる
   const ZONES = [
-    { id: 'class1', name: '教室1', type: 'classroom', x1: 1, y1: 1, x2: 16, y2: 13 },
+    { id: 'class1', name: 'スピーキング・ライティング教室', type: 'study', style: 'classroom', test: true, x1: 1, y1: 1, x2: 16, y2: 13 },
     { id: 'class2', name: '教室2', type: 'classroom', x1: 18, y1: 1, x2: 33, y2: 13 },
     { id: 'class3', name: '高校生自習室', type: 'study', style: 'cafe', x1: 35, y1: 1, x2: 50, y2: 13 },
     { id: 'hall', name: 'ろうか', type: 'hall', x1: 1, y1: 15, x2: 50, y2: 18 },
@@ -112,12 +115,15 @@
   const EXIT = { class1: { x: 14, y: 15 }, class2: { x: 31, y: 15 }, class3: { x: 48, y: 15 }, study: { x: 16, y: 18 } };
   // 教壇の立ち位置
   const PODIUM = { class1: { x: 8, y: 1 }, class2: { x: 25, y: 1 } };
+  // テストのブースの席か
+  const isBoothSeat = (seatId) => Object.values(BOOTHS).some(list => list.some(b => `${b.x},${b.y}` === seatId));
   // 自習室（自習時間を数える部屋）。study＝中学生など、class3＝高校生
   const isStudyRoom = (id) => { const z = ZONES.find(v => v.id === id); return !!(z && z.type === 'study'); };
   // 席えらびの画面での席の分け方
   const SEAT_GROUPS = {
     study: [{ label: '左がわ', x1: 1, x2: 15 }, { label: '右がわ', x1: 16, x2: 33 }],
     class3: [{ label: '窓ぎわのカウンター', y1: 1, y2: 3 }, { label: 'テーブル席', y1: 4, y2: 13 }],
+    class1: [{ label: '順番待ちの席', y1: 5, y2: 13 }],
   };
 
   const WALKABLE = new Set(['.', '_', 'p', 'r', 'm', 'c', 'S']);
@@ -175,7 +181,7 @@
   for (let y = 28; y <= 31; y++) for (let x = 40; x <= 45; x++) SPAWN.push({ x, y });
 
   return {
-    W, H, TILE, grid, ZONES, ENTRY, EXIT, PODIUM, SPAWN, classroomSeats, FOREST, isStudyRoom, SEAT_GROUPS,
+    W, H, TILE, grid, ZONES, ENTRY, EXIT, PODIUM, SPAWN, classroomSeats, FOREST, isStudyRoom, SEAT_GROUPS, BOOTHS, isBoothSeat,
     tileAt, isWalkable, isSeat, zoneAt, zoneAtPx, seatId, tileCenter, seatFacing, findPath, seatCount,
   };
 });

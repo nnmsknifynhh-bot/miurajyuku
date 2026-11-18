@@ -59,8 +59,8 @@ test('準備', async () => {
     U[k] = { id: r.data.user.id, cookie: (await http('POST', '/api/login', { loginId: k, password: 'password123' })).cookie };
   };
   await add('stu1', { role: 'student' }); await add('stu2', { role: 'student' });
-  await add('tch1', { role: 'teacher', rooms: ['class1'] });
-  await add('tch2', { role: 'teacher', rooms: ['class1'], permissions: { enter_classroom: true, handle_students: false } });
+  await add('tch1', { role: 'teacher', rooms: ['class2'] });
+  await add('tch2', { role: 'teacher', rooms: ['class2'], permissions: { enter_classroom: true, handle_students: false } });
   for (const k of Object.keys(U)) U[k].c = await connect(U[k].cookie);
 });
 
@@ -74,7 +74,7 @@ test('最初はオフ。オフのときは写真を送れない。設定を変�
 });
 
 test('自習室にいる生徒だけが送れる（教室・先生は不可）。JPEG 以外・大きすぎる写真は拒否', async () => {
-  await walk(U.stu2.c, 5, 6); // 教室1
+  await walk(U.stu2.c, 22, 6); // 教室2（授業の教室）
   assert.equal((await up(U.stu2.cookie, jpeg())).status, 400);
   assert.equal((await up(U.tch1.cookie, jpeg())).status, 400);
   assert.equal((await up(U.stu1.cookie, Buffer.from('not a jpeg at all, just text...'.repeat(10)))).status, 400);

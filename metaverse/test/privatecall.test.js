@@ -76,16 +76,16 @@ test('準備：先生（教室1・教室2）、個別通話の権限がない先
     assert.equal(r.status, 201, key);
     U[key] = { id: r.data.user.id, cookie: (await http('POST', '/api/login', { loginId: key, password: 'password123' })).cookie };
   };
-  await add('tch1', { role: 'teacher', rooms: ['class1'] });
-  await add('tch2', { role: 'teacher', rooms: ['class2'] });
-  await add('tch4', { role: 'teacher', rooms: ['class1'], permissions: { enter_classroom: true, start_class_call: true, start_private_call: false, share_screen: true, handle_students: true } });
+  await add('tch1', { role: 'teacher', rooms: ['class2'] });
+  await add('tch2', { role: 'teacher', rooms: [] }); // 担当の教室なし（教室2の生徒は担当外）
+  await add('tch4', { role: 'teacher', rooms: ['class2'], permissions: { enter_classroom: true, start_class_call: true, start_private_call: false, share_screen: true, handle_students: true } });
   for (const k of ['stu1', 'stu2', 'stu3']) await add(k, { role: 'student' });
   for (const k of Object.keys(U)) U[k].c = await connect(U[k].cookie);
-  assert.equal(await walk(U.tch1.c, 8, 1), true);
-  assert.equal(await walk(U.tch2.c, 25, 1), true);
-  assert.equal(await walk(U.tch4.c, 9, 1), true);
-  assert.equal(await walk(U.stu1.c, 2, 6), true);
-  assert.equal(await walk(U.stu2.c, 5, 6), true);
+  assert.equal(await walk(U.tch1.c, 25, 1), true);
+  assert.equal(await walk(U.tch2.c, 25, 16), true); // ろうか
+  assert.equal(await walk(U.tch4.c, 26, 1), true);
+  assert.equal(await walk(U.stu1.c, 19, 6), true);
+  assert.equal(await walk(U.stu2.c, 22, 6), true);
   assert.equal(await walk(U.stu3.c, 10, 23), true); // 自習室
 });
 
@@ -137,9 +137,9 @@ test('生徒が参加すると通話開始：2人は授業の通話から外れ�
   await sleep(100);
   assert.equal(last(U.tch1.c, 'pc-started').data.role, 'teacher');
   assert.equal(last(U.stu1.c, 'pc-started').data.role, 'student');
-  assert.ok(calls.some(c => c[0] === 'remove' && c[1] === 'miura-class-class1' && c[2] === `u-${U.tch1.id}`));
-  assert.ok(calls.some(c => c[0] === 'remove' && c[1] === 'miura-class-class1' && c[2] === `u-${U.stu1.id}`));
-  assert.equal(U.stu2.c.classes.class1.away, true);
+  assert.ok(calls.some(c => c[0] === 'remove' && c[1] === 'miura-class-class2' && c[2] === `u-${U.tch1.id}`));
+  assert.ok(calls.some(c => c[0] === 'remove' && c[1] === 'miura-class-class2' && c[2] === `u-${U.stu1.id}`));
+  assert.equal(U.stu2.c.classes.class2.away, true);
   assert.ok(U.stu2.c.events.some(e => e.ev === 'user-updated' && e.data.id === U.stu1.id && e.data.inPrivate === true));
   assert.ok(U.stu2.c.events.some(e => e.ev === 'user-updated' && e.data.id === U.stu1.id && e.data.hand === false), '挙手は自動で取り消し');
 });
@@ -173,7 +173,7 @@ test('どちらかが終了すると2人とも通話が終わり、授業に戻�
   await sleep(100);
   assert.match(last(U.tch1.c, 'pc-ended').data.reason, /stu1さんが個別通話を終了/);
   assert.ok(calls.some(c => c[0] === 'delete' && /^miura-private-/.test(c[1])));
-  assert.equal(U.stu2.c.classes.class1.away, false);
+  assert.equal(U.stu2.c.classes.class2.away, false);
   await sleep(1600);
   assert.equal((await ask(U.stu1.c, 'lk-token')).ok, true, '授業の通話に戻れる');
   assert.equal((await ask(U.stu1.c, 'pc-token', { callId })).ok, false, '終わった通話には入れない');

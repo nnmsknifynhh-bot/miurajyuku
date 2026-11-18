@@ -75,9 +75,9 @@ test('準備', async () => {
     assert.equal(r.status, 201, key);
     U[key] = { id: r.data.user.id, cookie: (await http('POST', '/api/login', { loginId: key, password: 'password123' })).cookie };
   };
-  await add('tch1', { role: 'teacher', rooms: ['class1'] });
+  await add('tch1', { role: 'teacher', rooms: ['class2'] });
   await add('tch2', { role: 'teacher', rooms: ['class2'] });
-  await add('tch3', { role: 'teacher', rooms: ['class1'], permissions: { enter_classroom: true, start_class_call: true, share_screen: false, handle_students: true, start_private_call: true, manage_classroom: false } });
+  await add('tch3', { role: 'teacher', rooms: ['class2'], permissions: { enter_classroom: true, start_class_call: true, share_screen: false, handle_students: true, start_private_call: true, manage_classroom: false } });
   await add('stu1', { role: 'student' });
   await add('stu2', { role: 'student' });
   for (const k of Object.keys(U)) U[k].c = await connect(U[k].cookie);
@@ -101,12 +101,12 @@ test('生徒は授業を始められない。先生も教室の外では始め�
 });
 
 test('先生が担当教室で授業を始めると、全員に「授業中」が伝わる', async () => {
-  assert.equal(await walk(U.tch1.c, 8, 1), true);
+  assert.equal(await walk(U.tch1.c, 25, 1), true);
   assert.equal((await ask(U.tch1.c, 'class-start')).ok, true);
   await sleep(100);
-  assert.equal(U.stu1.c.classes.class1.teacherName, 'tch1');
+  assert.equal(U.stu1.c.classes.class2.teacherName, 'tch1');
   // 同じ教室の別の先生は重ねて始められない
-  assert.equal(await walk(U.tch3.c, 9, 1), true);
+  assert.equal(await walk(U.tch3.c, 26, 1), true);
   const r = await ask(U.tch3.c, 'class-start');
   assert.equal(r.ok, false);
   assert.match(r.error, /tch1先生が授業中/);
@@ -117,7 +117,7 @@ test('トークン：授業を始めた先生だけがマイク・画面共有�
   assert.equal(t.ok, true);
   assert.equal(t.url, 'wss://test-project.livekit.cloud');
   const g = jwt(t.token).video;
-  assert.equal(g.room, 'miura-class-class1');
+  assert.equal(g.room, 'miura-class-class2');
   assert.equal(g.canPublish, true);
   assert.deepEqual(g.canPublishSources, ['microphone', 'screen_share', 'screen_share_audio']);
   assert.equal(g.canPublishData, false);
@@ -129,7 +129,7 @@ test('トークン：授業を始めた先生だけがマイク・画面共有�
 
 test('トークン：教室にいる生徒は聞くだけ。教室の外・授業のない教室では発行されない', async () => {
   assert.equal((await ask(U.stu1.c, 'lk-token')).ok, false, 'ロビーにいる生徒');
-  assert.equal(await walk(U.stu1.c, 5, 6), true);
+  assert.equal(await walk(U.stu1.c, 22, 6), true);
   const r = await ask(U.stu1.c, 'lk-token');
   assert.equal(r.ok, true);
   const g = jwt(r.token).video;
@@ -137,13 +137,13 @@ test('トークン：教室にいる生徒は聞くだけ。教室の外・授�
   assert.deepEqual(g.canPublishSources || [], []);
   assert.equal(g.canSubscribe, true);
   assert.equal(jwt(r.token).sub, `u-${U.stu1.id}`);
-  assert.equal(await walk(U.stu2.c, 22, 6), true); // class2（授業なし）
+  assert.equal(await walk(U.stu2.c, 10, 23), true); // 自習室（授業の教室ではない）
   assert.equal((await ask(U.stu2.c, 'lk-token')).ok, false);
 });
 
 test('授業中の生徒のスタンプ・吹き出しは、先生がOKにしたときだけ（最初は止めている）', async () => {
   // stu1 は授業中の class1 にいる
-  assert.equal(U.stu1.c.classes.class1.allowChat, false);
+  assert.equal(U.stu1.c.classes.class2.allowChat, false);
   const topic = await ask(U.stu1.c, 'study-topic', { text: 'わかった！' });
   assert.equal(topic.ok, false);
   assert.match(topic.error, /先生がOKを出したとき/);
@@ -151,7 +151,7 @@ test('授業中の生徒のスタンプ・吹き出しは、先生がOKにした
   assert.equal((await ask(U.tch3.c, 'class-chat', { allow: true })).ok, false, '授業をしていない先生も切りかえられない');
   assert.equal((await ask(U.tch1.c, 'class-chat', { allow: true })).ok, true);
   await sleep(80);
-  assert.equal(U.stu1.c.classes.class1.allowChat, true);
+  assert.equal(U.stu1.c.classes.class2.allowChat, true);
   assert.equal((await ask(U.stu1.c, 'study-topic', { text: 'わかった！' })).ok, true);
   const n = () => U.tch1.c.events.filter(e => e.ev === 'reaction' && e.data.id === U.stu1.id).length;
   const before = n();
@@ -175,8 +175,8 @@ test('画面共有の権限がない先生にはトークンに画面共有が�
   // 表示用の状態でも画面共有にならない
   U.tch3.c.s.emit('class-media', { mic: true, screen: true });
   await sleep(100);
-  assert.equal(U.stu1.c.classes.class1.screen, false);
-  assert.equal(U.stu1.c.classes.class1.mic, true);
+  assert.equal(U.stu1.c.classes.class2.screen, false);
+  assert.equal(U.stu1.c.classes.class2.mic, true);
   await ask(U.tch3.c, 'class-end');
 });
 
@@ -184,30 +184,30 @@ test('生徒は授業を終了できない。教室を出た生徒は LiveKit �
   assert.equal((await ask(U.tch1.c, 'class-start')).ok, true);
   assert.equal((await ask(U.stu1.c, 'class-end')).ok, false);
   calls.length = 0;
-  assert.equal(await walk(U.stu1.c, 14, 16), true); // ろうかへ
-  assert.deepEqual(calls, [['remove', 'miura-class-class1', `u-${U.stu1.id}`]]);
+  assert.equal(await walk(U.stu1.c, 31, 16), true); // ろうかへ
+  assert.deepEqual(calls, [['remove', 'miura-class-class2', `u-${U.stu1.id}`]]);
 });
 
 test('先生が教室を出ると授業は終了し、LiveKit の部屋も閉じる', async () => {
   calls.length = 0;
-  assert.equal(await walk(U.tch1.c, 14, 15), true);
+  assert.equal(await walk(U.tch1.c, 31, 15), true);
   await sleep(100);
-  assert.ok(calls.some(c => c[0] === 'delete' && c[1] === 'miura-class-class1'));
-  assert.equal(U.stu1.c.classes.class1, undefined);
+  assert.ok(calls.some(c => c[0] === 'delete' && c[1] === 'miura-class-class2'));
+  assert.equal(U.stu1.c.classes.class2, undefined);
   assert.ok(U.stu1.c.events.some(e => e.ev === 'class-ended'));
 });
 
 test('先生の通信が切れても、すぐに再接続すれば授業は続く。戻らなければ自動終了', async () => {
-  assert.equal(await walk(U.tch1.c, 8, 1), true);
+  assert.equal(await walk(U.tch1.c, 25, 1), true);
   assert.equal((await ask(U.tch1.c, 'class-start')).ok, true);
   U.tch1.c.s.disconnect();
   await sleep(200);
   U.tch1.c = await connect(U.tch1.cookie);       // 再接続（元の場所＝教室1に戻る）
   await sleep(900);
-  assert.ok(U.stu1.c.classes.class1, '授業が続いている');
+  assert.ok(U.stu1.c.classes.class2, '授業が続いている');
   U.tch1.c.s.disconnect();
   await sleep(1100);
-  assert.equal(U.stu1.c.classes.class1, undefined, '戻らなかったので終了');
+  assert.equal(U.stu1.c.classes.class2, undefined, '戻らなかったので終了');
   U.tch1.c = await connect(U.tch1.cookie);
 });
 
@@ -215,16 +215,16 @@ test('授業中に先生の通話権限を外すと授業が終了する', async
   assert.equal((await ask(U.tch1.c, 'class-start')).ok, true);
   await http('PATCH', `/api/admin/users/${U.tch1.id}`, { permissions: { enter_classroom: true, start_class_call: false } }, owner);
   await sleep(150);
-  assert.equal(U.stu1.c.classes.class1, undefined);
+  assert.equal(U.stu1.c.classes.class2, undefined);
   await http('PATCH', `/api/admin/users/${U.tch1.id}`, { permissions: { enter_classroom: true, start_class_call: true, share_screen: true } }, owner);
 });
 
 test('オーナーは管理画面から授業を終了できる。先生は終了 API を使えない', async () => {
   assert.equal((await ask(U.tch1.c, 'class-start')).ok, true);
-  assert.equal((await http('POST', '/api/admin/classes/class1/end', {}, U.tch1.cookie)).status, 403);
+  assert.equal((await http('POST', '/api/admin/classes/class2/end', {}, U.tch1.cookie)).status, 403);
   const r = await http('GET', '/api/admin/presence', null, owner);
-  assert.equal(r.data.classes.class1.teacherName, 'tch1');
-  assert.equal((await http('POST', '/api/admin/classes/class1/end', {}, owner)).status, 200);
+  assert.equal(r.data.classes.class2.teacherName, 'tch1');
+  assert.equal((await http('POST', '/api/admin/classes/class2/end', {}, owner)).status, 200);
   await sleep(100);
-  assert.equal(U.stu1.c.classes.class1, undefined);
+  assert.equal(U.stu1.c.classes.class2, undefined);
 });

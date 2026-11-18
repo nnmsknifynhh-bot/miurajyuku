@@ -51,7 +51,7 @@ let owner, stu, tch;
 test('準備', async () => {
   owner = (await http('POST', '/api/setup', { displayName: '三浦', loginId: 'owner', password: 'ownerpass1' })).cookie;
   await http('POST', '/api/admin/users', { role: 'student', displayName: 'はな', loginId: 'hana', password: 'password123' }, owner);
-  await http('POST', '/api/admin/users', { role: 'teacher', displayName: '佐藤', loginId: 'sato', password: 'password123', rooms: ['class1'] }, owner);
+  await http('POST', '/api/admin/users', { role: 'teacher', displayName: '佐藤', loginId: 'sato', password: 'password123', rooms: ['class2'] }, owner);
   stu = (await http('POST', '/api/login', { loginId: 'hana', password: 'password123' })).cookie;
   tch = (await http('POST', '/api/login', { loginId: 'sato', password: 'password123' })).cookie;
 });
@@ -110,7 +110,7 @@ test('イベントを大量に送っても、10回/秒程度までしか処理�
 test('手のあげさげを連打しても、先生への通知は3秒に1回まで', async () => {
   await sleep(2100); // レート制限の回復待ち
   const s = await connect(stu), t = await connect(tch);
-  await walk(t, 8, 1); await walk(s, 2, 6);
+  await walk(t, 25, 1); await walk(s, 19, 6); // 教室2
   const ask = (raised) => new Promise(r => s.s.emit('hand', { raised }, r));
   assert.equal((await ask(true)).ok, true);
   await ask(false);

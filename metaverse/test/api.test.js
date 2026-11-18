@@ -44,9 +44,9 @@ test('未ログインでは API を使えない', async () => {
 });
 
 test('オーナーが先生・生徒を登録できる（生徒に禁止権限は付かない）', async () => {
-  let r = await owner('POST', '/api/admin/users', { role: 'teacher', displayName: '佐藤先生', loginId: 'sato', password: 'teacherpw1', rooms: ['class1', 'bogus'] });
+  let r = await owner('POST', '/api/admin/users', { role: 'teacher', displayName: '佐藤先生', loginId: 'sato', password: 'teacherpw1', rooms: ['class2', 'bogus'] });
   assert.equal(r.status, 201); teacherId = r.data.user.id;
-  assert.deepEqual(r.data.user.rooms, ['class1']);
+  assert.deepEqual(r.data.user.rooms, ['class2']);
   assert.equal(r.data.user.permissions.start_class_call, true);
   r = await owner('POST', '/api/admin/users', { role: 'student', displayName: 'たろう', loginId: 'taro', password: 'studentpw1',
     permissions: { enter_classroom: true, start_private_call: true, manage_classroom: true, share_screen: true } });
@@ -69,12 +69,12 @@ test('生徒・先生は管理 API を使えない（サーバー側で拒否）
   assert.equal((await student('PATCH', `/api/admin/users/${studentId}`, { permissions: { manage_classroom: true } })).status, 403);
   assert.equal((await student('PATCH', '/api/admin/rooms/study', { capacity: 1 })).status, 403);
   assert.equal((await teacher('GET', '/api/admin/users')).status, 403);
-  assert.equal((await teacher('PATCH', '/api/admin/rooms/class1', { capacity: 5 })).status, 403);
+  assert.equal((await teacher('PATCH', '/api/admin/rooms/class2', { capacity: 5 })).status, 403);
 });
 
 test('入室できる教室：先生は担当教室のみ、生徒は教室と自習室（高校生自習室は高校生だけ）', async () => {
   const t = (await teacher('GET', '/api/me')).data.rooms;
-  assert.deepEqual(t.filter(r => r.canEnter).map(r => r.id), ['class1', 'class3', 'study'], '先生は担当教室と、2つの自習室');
+  assert.deepEqual(t.filter(r => r.canEnter).map(r => r.id), ['class1', 'class2', 'class3', 'study'], '先生は担当教室と、自習の部屋（テストの教室・自習室・高校生自習室）');
   const s = (await student('GET', '/api/me')).data.rooms;
   assert.deepEqual(s.filter(r => r.canEnter).map(r => r.id), ['class1', 'class2', 'study']);
 });
@@ -83,14 +83,14 @@ test('教室管理の権限を付けた先生は定員を変更できる（座�
   const r = await owner('PATCH', `/api/admin/users/${teacherId}`, { permissions: { manage_classroom: true } });
   assert.equal(r.data.user.permissions.manage_classroom, true);
   assert.equal((await teacher('PATCH', '/api/admin/rooms/study', { capacity: 20 })).status, 200);
-  assert.equal((await teacher('PATCH', '/api/admin/rooms/class1', { capacity: 16 })).status, 400);
-  assert.equal((await teacher('PATCH', '/api/admin/rooms/class1', { capacity: 0 })).status, 400);
+  assert.equal((await teacher('PATCH', '/api/admin/rooms/class2', { capacity: 16 })).status, 400);
+  assert.equal((await teacher('PATCH', '/api/admin/rooms/class2', { capacity: 0 })).status, 400);
 });
 
 test('生徒の「教室への入室」を外すと教室に入れなくなる', async () => {
   await owner('PATCH', `/api/admin/users/${studentId}`, { permissions: { enter_classroom: false } });
   const s = (await student('GET', '/api/me')).data.rooms;
-  assert.deepEqual(s.filter(r => r.canEnter).map(r => r.id), ['study']);
+  assert.deepEqual(s.filter(r => r.canEnter).map(r => r.id), ['class1', 'study'], 'テストの教室と自習室には入れる');
   await owner('PATCH', `/api/admin/users/${studentId}`, { permissions: { enter_classroom: true } });
 });
 

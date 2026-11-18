@@ -241,6 +241,14 @@ body:not(.is-student) .me-menu .student-only { display: none; }
 .top-chips { position: fixed; left: 10px; top: calc(env(safe-area-inset-top) + 64px); z-index: 12; display: grid; gap: 4px; justify-items: start; max-width: calc(100vw - 150px); pointer-events: none; }
 .top-chips .week-chip { position: static; max-width: 100%; }
 .fun-chip { border-color: #e7a3a3; background: rgba(255,246,246,.95); color: #8a2f2f; }
+.test-panel { position: fixed; right: 10px; top: calc(env(safe-area-inset-top) + 66px); z-index: 14; width: min(300px, calc(100vw - 20px)); max-height: 55dvh; overflow-y: auto; background: rgba(255,255,255,.97); border-radius: 16px; box-shadow: var(--shadow); padding: 10px 12px; }
+.test-panel h3 { margin: 0 0 6px; font-size: 15px; }
+.test-booth { display: grid; grid-template-columns: 1fr auto; gap: 4px 6px; align-items: center; border: 2px solid var(--line); border-radius: 12px; padding: 6px 8px; margin-bottom: 6px; font-size: 13px; }
+.test-booth .acts { display: flex; gap: 4px; }
+.test-booth.free { border-style: dashed; }
+.test-q-head { display: flex; justify-content: space-between; font-size: 13px; margin-top: 4px; }
+#test-queue { margin: 4px 0 0; padding-left: 22px; font-size: 14px; }
+#test-queue li { padding: 2px 0; }
 .fun-card .dialog-body { text-align: center; }
 .fun-card .dialog-actions { justify-content: center; }
 .fun-big { font-size: 72px; line-height: 1; }
