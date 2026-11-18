@@ -292,6 +292,14 @@ body.is-parent #menu-shop.student-only { display: block !important; }
 .bday-from { margin: 0; color: var(--muted); font-weight: 700; }
 .bday-card .dialog-actions { justify-content: center; }
 #shop-sub { white-space: pre-line; }
+/* 🔋 省電力画面：ほぼ黒・文字は暗め（有機ELの画面は黒いところの電気をほとんど使わない） */
+.saver { position: fixed; inset: 0; z-index: 90; background: #000; color: #8a8a8a; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.saver-box { text-align: center; transition: transform 1.5s; padding: 20px; max-width: min(86vw, 520px); }
+.saver-clock { font-size: 64px; font-weight: 300; letter-spacing: 2px; color: #6f6f6f; font-variant-numeric: tabular-nums; }
+.saver-today { font-size: 26px; font-weight: 800; margin-top: 10px; color: #9a9a9a; }
+.saver-sub { font-size: 16px; margin-top: 6px; color: #7a7a7a; }
+.saver-sub.low { color: #c46a6a; }
+.saver-hint { font-size: 12px; margin-top: 26px; color: #4f4f4f; }
 /* 保護者：のこり時間 */
 .visit-chip { background: rgba(255,240,246,.96); border-color: #f0a6c4; color: #8a2f58; }
 .visit-chip.warn { background: #ffe0e0; border-color: #e57373; color: #b71c1c; }

@@ -162,6 +162,15 @@
     </div>
   </dialog>
   <!-- 👪 保護者：今日の訪問がおわった -->
+  <!-- 🔋 省電力画面（自習中に1分さわらないと黒い画面に。タップでもどる） -->
+  <div class="saver" id="saver" hidden>
+    <div class="saver-box" id="saver-box">
+      <div class="saver-clock" id="saver-clock"></div>
+      <div class="saver-today" id="saver-today"></div>
+      <div class="saver-sub" id="saver-sub"></div>
+      <div class="saver-hint">🔋 省電力中（自習時間はそのまま数えています）・タップでもどる</div>
+    </div>
+  </div>
   <div class="visit-over" id="visit-over" hidden>
     <div class="visit-card"><div class="fun-big" id="visit-over-icon">🌸</div><h2 id="visit-over-title">今日の訪問はここまでです</h2><p id="visit-over-msg"></p><p class="muted" id="visit-over-note">保護者の方の訪問は、1日1回・10分です。また明日お待ちしています。</p><button class="btn" id="visit-retry" hidden>もう一度入る</button> <button class="btn secondary" id="visit-logout">ログアウト</button></div>
   </div>

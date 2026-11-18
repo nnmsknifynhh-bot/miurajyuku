@@ -61,7 +61,7 @@
       name.append(el('span', 'badge ' + u.role, ROLE_LABEL[u.role]));
       if (!u.isActive) name.append(el('span', 'badge off', '無効'));
       if (u.locked) name.append(el('span', 'badge off', '🔒 ロック中'));
-      const sub = [`ID: ${u.loginId}`, ...(u.role === "student" ? [`学年: ${u.grade || "未設定"}`] : []), ...(u.visitDays && u.visitDays.length ? [`📅 ${u.visitDays.map(i => '日月火水木金土'[i]).join('・')} ${u.visitTime}〜`] : []), ...(u.birthday ? [`🎂 ${Number(u.birthday.slice(0, 2))}月${Number(u.birthday.slice(3))}日${u.birthdayPublic ? '' : '（先生だけ）'}`] : []), `ログイン中の端末: ${u.activeSessions}`];
+      const sub = [`ID: ${u.loginId}`, ...(u.role === "student" ? [`学年: ${u.grade || "未設定"}`] : []), ...(u.classDays && u.classDays.length ? [`🏫 授業 ${u.classDays.map(i => '日月火水木金土'[i]).join('・')}`] : []), ...(u.visitDays && u.visitDays.length ? [`📅 ${u.visitDays.map(i => '日月火水木金土'[i]).join('・')} ${u.visitTime}〜`] : []), ...(u.birthday ? [`🎂 ${Number(u.birthday.slice(0, 2))}月${Number(u.birthday.slice(3))}日${u.birthdayPublic ? '' : '（先生だけ）'}`] : []), `ログイン中の端末: ${u.activeSessions}`];
       if (u.role === 'teacher') sub.push('担当: ' + (u.rooms.length ? u.rooms.map(roomName).join('・') : 'なし'));
       info.append(name, el('div', 'sub', sub.join('　')));
       const actions = el('div', 'actions');
@@ -146,6 +146,13 @@
       lab.append(cb, document.createTextNode(w)); vbox.append(lab);
     });
     $('#f-vtime').value = u && u.visitTime ? u.visitTime : '';
+    // 授業の曜日
+    const cbox = $('#f-cdays'); cbox.textContent = '';
+    ['日', '月', '火', '水', '木', '金', '土'].forEach((w, i) => {
+      const lab = el('label'); const cb = el('input'); cb.type = 'checkbox'; cb.value = String(i);
+      cb.checked = !!(u && u.classDays && u.classDays.includes(i));
+      lab.append(cb, document.createTextNode(w)); cbox.append(lab);
+    });
     const syncVisit = () => { $('#visit-field').hidden = currentRole() !== 'student' || !/^高[123]$/.test($('#f-grade').value); };
     $('#f-grade').onchange = syncVisit; syncVisit();
     $('#user-dialog').showModal();
@@ -155,6 +162,7 @@
     $('#grade-field').hidden = role !== 'student';
     $('#perms-field').hidden = role === 'parent';
     $('#bday-field').hidden = role !== 'student';
+    $('#class-field').hidden = role !== 'student';
     $('#visit-field').hidden = role !== 'student' || !/^高[123]$/.test(($('#f-grade') || {}).value || '');
     const isOwner = role === 'owner';
     $('#rooms-field').hidden = role !== 'teacher';
@@ -199,6 +207,7 @@
       if (!!m !== !!d) { $('#user-error').textContent = '誕生日は月と日の両方を選んでください（登録しないときは両方「—」）'; return; }
       body.birthday = m ? `${m}-${d}` : null;
       body.birthdayPublic = $('#f-bpublic').checked;
+      body.classDays = [...document.querySelectorAll('#f-cdays input:checked')].map(cb => Number(cb.value));
       if (/^高[123]$/.test(body.grade || '')) {
         const days = [...document.querySelectorAll('#f-vdays input:checked')].map(cb => Number(cb.value));
         const t = $('#f-vtime').value;

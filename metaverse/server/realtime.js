@@ -884,6 +884,7 @@ function refreshUser(userId) {
   const hadScreen = can(p.user, 'share_screen');
   p.user = { ...u, sessionTokenHash: p.tokenHash };
   refreshBirthday(p); // 誕生日の登録・見せ方が変わったとき
+  if (u.role === 'student') { const s = ganbari.streak(p.id); if (s !== p.streak) { p.streak = s; io.emit('user-updated', { id: p.id, streak: s }); } } // 授業の曜日が変わったとき
   refreshHS(p);
   // 授業中に通話・画面共有の権限が外されたら授業を終了する
   for (const [roomId, c] of classes) {

@@ -72,6 +72,7 @@ function publicUser(u) {
     isActive: u.is_active, permissions: u.permissions, rooms: u.rooms, grade: u.grade || null,
     birthday: u.birthday || null, birthdayPublic: u.birthday_public === undefined ? true : !!u.birthday_public,
     visitDays: u.visit_days ? u.visit_days.split(',').map(Number) : [], visitTime: u.visit_time || null,
+    classDays: u.class_days ? u.class_days.split(',').map(Number) : [],
   };
 }
 function listRooms(user) {
@@ -482,12 +483,14 @@ admin.post('/users', requireOwner, (req, res) => {
   if (birthday === undefined) return bad(res, '誕生日が正しくありません');
   const visit = role === 'student' ? ganbari.normVisit(b.visitDays, b.visitTime) : { days: null, time: null };
   if (!visit) return bad(res, '来る曜日と時刻が正しくありません');
+  const classDays = role === 'student' ? ganbari.normClassDays(b.classDays) : null;
+  if (classDays === undefined) return bad(res, '授業の曜日が正しくありません');
   const id = transaction(() => {
     const r = db.prepare('INSERT INTO users (login_id, display_name, role, password_hash, avatar_color, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(loginId, displayName, role, auth.hashPassword(b.password), color, now(), now());
     const id = Number(r.lastInsertRowid);
     if (grade) db.prepare('UPDATE users SET grade = ? WHERE id = ?').run(grade, id);
-    if (role === 'student') db.prepare('UPDATE users SET birthday = ?, birthday_public = ?, visit_days = ?, visit_time = ? WHERE id = ?').run(birthday, b.birthdayPublic === false ? 0 : 1, visit.days, visit.time, id);
+    if (role === 'student') db.prepare('UPDATE users SET birthday = ?, birthday_public = ?, visit_days = ?, visit_time = ?, class_days = ? WHERE id = ?').run(birthday, b.birthdayPublic === false ? 0 : 1, visit.days, visit.time, classDays, id);
     applyPermissionsAndRooms(id, role, b.permissions, b.rooms);
     return id;
   });
@@ -529,6 +532,12 @@ admin.patch('/users/:id', requireOwner, (req, res) => {
       const v = ganbari.normVisit(b.visitDays, b.visitTime);
       if (!v) return '来る曜日と時刻が正しくありません（曜日をえらんだら時刻も入れてください）';
       db.prepare('UPDATE users SET visit_days = ?, visit_time = ? WHERE id = ?').run(v.days, v.time, id); changes.push('visit');
+    }
+    if (b.classDays !== undefined) {
+      if (target.role !== 'student') return '授業の曜日は生徒だけに設定できます';
+      const cd = ganbari.normClassDays(b.classDays);
+      if (cd === undefined) return '授業の曜日が正しくありません';
+      db.prepare('UPDATE users SET class_days = ? WHERE id = ?').run(cd, id); changes.push('classDays');
     }
     if (b.avatarColor !== undefined) {
       if (!RE_COLOR.test(b.avatarColor)) return '色の指定が正しくありません';

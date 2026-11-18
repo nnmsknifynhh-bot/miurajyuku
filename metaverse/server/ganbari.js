@@ -71,6 +71,13 @@ if (!db.prepare('PRAGMA table_info(users)').all().some(c => c.name === 'visit_da
   db.exec('ALTER TABLE users ADD COLUMN visit_days TEXT');
   db.exec('ALTER TABLE users ADD COLUMN visit_time TEXT');
 }
+// 生徒ごとの授業の曜日（例 '2,5'＝火・金）。その曜日は🔥がとぎれない（自習すれば1日に数える）
+if (!db.prepare('PRAGMA table_info(users)').all().some(c => c.name === 'class_days')) db.exec('ALTER TABLE users ADD COLUMN class_days TEXT');
+function normClassDays(v) {
+  if (v == null || (Array.isArray(v) && !v.length)) return null;
+  if (!Array.isArray(v) || !v.every(d => Number.isInteger(d) && d >= 0 && d <= 6)) return undefined;
+  return [...new Set(v)].sort().join(',');
+}
 db.exec(`CREATE TABLE IF NOT EXISTS study_plans (user_id INTEGER NOT NULL, day TEXT NOT NULL, items TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (user_id, day))`);
 db.exec(`CREATE TABLE IF NOT EXISTS late_alerts (user_id INTEGER NOT NULL, day TEXT NOT NULL, sent_at TEXT NOT NULL, PRIMARY KEY (user_id, day))`);
 // お楽しみ（朝活など）でもらったボーナスポイント。reason は同じものを二重にもらわないための印
@@ -493,7 +500,10 @@ function streak(userId, date = new Date()) {
   const ok = new Set(rows.filter(r => r.m >= min).map(r => r.day));
   // 数えない曜日（お休みの曜日）は、とばしてつなげる。その日に自習していれば1日に数える
   const md = meetingDays();
-  const off = (d) => !ruleFor(d, c).on || md.has(d); // 保護者会の日もとばしてつなげる
+  const cu = db.prepare('SELECT class_days FROM users WHERE id = ?').get(userId);
+  const classDays = new Set(cu && cu.class_days ? cu.class_days.split(',').map(Number) : []);
+  // 保護者会の日・その生徒の授業の曜日も、とばしてつなげる
+  const off = (d) => !ruleFor(d, c).on || md.has(d) || classDays.has(weekdayOf(d));
   let day = today;
   if (!ok.has(day)) day = addDays(day, -1);
   let n = 0;
@@ -912,7 +922,7 @@ function celebrateBirthday(userId, date = new Date()) {
 }
 
 module.exports = {
-  itemById, meetingDays, addMeetingDay, removeMeetingDay, RE_DAY,
+  itemById, normClassDays, meetingDays, addMeetingDay, removeMeetingDay, RE_DAY,
   setPlan, planOf, normVisit, lateStudents,
   HS_GRADES, isHS, hsWeeks, titleOf, TITLES, mondayOf,
   normBirthday, birthdayInfo, celebrateBirthday,

@@ -1479,6 +1479,7 @@
 
   let last = performance.now();
   function loop(now) {
+    if (saver.on) { setTimeout(() => requestAnimationFrame(loop), 1000); return; } // 省電力中は地図をかかない
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     update(dt);
@@ -1489,6 +1490,62 @@
     }
     render(now);
     requestAnimationFrame(loop);
+  }
+
+  // ───────── 🔋 省電力画面・電池のお知らせ ─────────
+  const SAVER_IDLE_MS = Number(localStorage.getItem('juku-saver-ms')) || 60_000;
+  const saver = { on: false, lastInput: Date.now(), battery: null };
+  const fmtHM = (m) => (m >= 60 ? `${Math.floor(m / 60)}時間${m % 60 ? (m % 60) + '分' : ''}` : `${m}分`);
+  ['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(ev => addEventListener(ev, () => {
+    saver.lastInput = Date.now();
+    if (saver.on) exitSaver();
+  }, { capture: true, passive: true }));
+  function saverAllowed() {
+    const me = state.me;
+    if (!state.ready || !me || !studentLike() || !SM.isStudyRoom(me.room) || !me.seat) return false;
+    if (document.querySelector('dialog[open]') || !$('#visit-over').hidden) return false;
+    if (state.pc && state.pc.active()) return false;
+    if (talkingWithStaff()) return false; // 先生が話しかけに来たら、元の画面
+    return true;
+  }
+  function enterSaver() {
+    saver.on = true; $('#saver').hidden = false; updateSaver();
+  }
+  function exitSaver() {
+    saver.on = false; $('#saver').hidden = true; saver.lastInput = Date.now();
+  }
+  function updateSaver() {
+    if (!saver.on) return;
+    const now = new Date(), me = state.me || {};
+    $('#saver-clock').textContent = now.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+    $('#saver-today').textContent = `📖 今日 ${fmtHM(me.today || 0)}`;
+    const b = saver.battery, low = b && !b.charging && b.level < 0.2;
+    $('#saver-sub').textContent = (me.streak >= 1 ? `🔥${me.streak}${me.hs ? '週' : '日'}連続` : '') + (b ? `　🔋${Math.round(b.level * 100)}%${b.charging ? '（充電中）' : ''}` : '') + (low ? '　充電してね' : '');
+    $('#saver-sub').classList.toggle('low', !!low);
+    // 同じ場所に文字を出し続けないよう、1分ごとに少し動かす
+    const k = now.getMinutes();
+    $('#saver-box').style.transform = `translate(${((k * 37) % 61) - 30}px, ${((k * 53) % 121) - 60}px)`;
+  }
+  setInterval(() => {
+    if (!saver.on && saverAllowed() && Date.now() - saver.lastInput > SAVER_IDLE_MS) enterSaver();
+    else if (saver.on && !saverAllowed()) exitSaver();
+    else updateSaver();
+  }, 1000);
+  $('#saver').addEventListener('click', exitSaver);
+  // 電池が20%を切ったら「充電してね」（Android の Chrome など、電池の残りを読めるブラウザだけ）
+  if (navigator.getBattery) {
+    navigator.getBattery().then((b) => {
+      saver.battery = b;
+      let warned = false;
+      const check = () => {
+        if (b.charging || b.level >= 0.2) { warned = false; return; }
+        if (warned || !state.user || state.user.role !== 'student') return;
+        warned = true;
+        toast(`🔌 電池がのこり${Math.round(b.level * 100)}%です。充電しながら勉強しよう`, 8000);
+      };
+      b.addEventListener('levelchange', check); b.addEventListener('chargingchange', check);
+      setTimeout(check, 3000);
+    }).catch(() => {});
   }
 
   window.__world = { state, walkTo, goToRoom };

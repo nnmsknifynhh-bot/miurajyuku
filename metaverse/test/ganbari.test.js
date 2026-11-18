@@ -66,6 +66,22 @@ test('勉強時間（全部）：ポイントの時間帯の外・上限のあ�
   db.prepare('DELETE FROM study_days WHERE user_id = ? AND day >= ?').run(U.b1.id, day);
 });
 
+test('授業の曜日：その曜日は🔥がとぎれない（管理画面で生徒ごとに登録）', async () => {
+  const base0 = G.addDays(T2(), 60);
+  // base0 から3日間：1日目と3日目だけ60分以上。2日目が授業の曜日なら、とぎれずに2日
+  const d = [0, 1, 2].map(i => G.addDays(base0, i));
+  for (const day of [d[0], d[2]]) db.prepare('INSERT OR REPLACE INTO study_days (user_id, day, auto_min, all_min) VALUES (?, ?, 0, 90)').run(U.b1.id, day);
+  assert.equal(G.streak(U.b1.id, at(d[2], '23:00')), 1, '授業の曜日がないと、2日目でとぎれる');
+  const wd = new Date(d[1] + 'T00:00:00Z').getUTCDay();
+  assert.equal((await http('PATCH', `/api/admin/users/${U.b1.id}`, { classDays: [9] }, owner)).status, 400);
+  const r = await http('PATCH', `/api/admin/users/${U.b1.id}`, { classDays: [wd] }, owner);
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.deepEqual(r.data.user.classDays, [wd]);
+  assert.equal(G.streak(U.b1.id, at(d[2], '23:00')), 2, '授業の曜日はとばしてつなげる');
+  await http('PATCH', `/api/admin/users/${U.b1.id}`, { classDays: [] }, owner);
+  db.prepare('DELETE FROM study_days WHERE user_id = ? AND day >= ?').run(U.b1.id, base0);
+});
+
 test('自習時間：数える時間帯・1日の上限・カメラの条件はオーナーが決められる', () => {
   const day = T2();
   assert.equal(G.setConfig({ window: { start: '18:00', end: '22:00' }, dailyCap: 10, requireCamera: true }), null);
