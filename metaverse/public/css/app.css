@@ -241,14 +241,6 @@ body:not(.is-student) .me-menu .student-only { display: none; }
 .top-chips { position: fixed; left: 10px; top: calc(env(safe-area-inset-top) + 64px); z-index: 12; display: grid; gap: 4px; justify-items: start; max-width: calc(100vw - 150px); pointer-events: none; }
 .top-chips .week-chip { position: static; max-width: 100%; }
 .fun-chip { border-color: #e7a3a3; background: rgba(255,246,246,.95); color: #8a2f2f; }
-.ny-show { position: fixed; inset: 0; z-index: 60; background: radial-gradient(ellipse at bottom, rgba(20,24,60,.88), rgba(5,6,20,.94)); display: grid; place-items: center; animation: nyfade .8s ease-out; }
-.ny-show canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-.ny-text { position: relative; text-align: center; color: #fff; text-shadow: 0 0 18px rgba(255,210,120,.9); display: grid; gap: 6px; padding: 0 16px; }
-.ny-text b { font-size: clamp(32px, 9vw, 64px); font-weight: 900; letter-spacing: .02em; color: #ffe08a; font-family: Georgia, 'Times New Roman', serif; font-style: italic; }
-.ny-text span { font-size: clamp(36px, 11vw, 72px); font-weight: 900; }
-.ny-text small { font-size: clamp(18px, 5vw, 28px); font-weight: 800; }
-@keyframes nyfade { from { opacity: 0; } to { opacity: 1; } }
-.ny-show.out { transition: opacity 1s; opacity: 0; }
 .fun-card .dialog-body { text-align: center; }
 .fun-card .dialog-actions { justify-content: center; }
 .fun-big { font-size: 72px; line-height: 1; }
@@ -258,10 +250,6 @@ body:not(.is-student) .me-menu .student-only { display: none; }
 .fun-badge { margin: 0; background: #fff8e1; border: 2px dashed #f0b429; border-radius: 12px; padding: 8px; font-weight: 800; }
 .santa-card { background: linear-gradient(160deg, #fff5f5, #eaf7ee); }
 .santa-card h2 { color: #c62828; }
-.newyear-card { background: linear-gradient(170deg, #fff3e0, #ffe0e6); }
-.newyear-card h2 { color: #c0392b; }
-.shop-badges { display: flex; flex-wrap: wrap; gap: 6px; }
-.shop-badges span { background: #fff8e1; border: 1px solid #f0d58a; border-radius: 999px; padding: 4px 10px; font-size: 13px; font-weight: 700; }
 .bday-card { background: linear-gradient(160deg, #fff7e0, #ffe3ec); }
 .bday-card .dialog-body { text-align: center; }
 .bday-cake { font-size: 64px; line-height: 1; }

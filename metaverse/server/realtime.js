@@ -327,7 +327,7 @@ function attach(httpServer) {
 
     socket.emit('init', {
       me: { ...pub(p), bday: !!p.bday }, users: [...online.values()].filter(o => o !== p).map(pub), rooms: roomCounts(), reactions: REACTIONS,
-      classes: classState(), classCall: livekit.enabled, newYearShow: !!ganbari.getConfig().fun.toshikoshi,
+      classes: classState(), classCall: livekit.enabled,
     });
     if (gap && p.room === gap.room && Date.now() - gap.at <= STUDY_GAP_MS) socket.emit('study-resumed', { minutes: gapMinutes, seat: p.seat });
     socket.broadcast.emit('user-joined', pub(p));
@@ -707,11 +707,6 @@ function attach(httpServer) {
         const p = online.get(r.id);
         if (p) p.socket.emit('fun-event', { kind: 'asa', stamps: r.stamps, points: r.points });
       }
-      // 🎆 年越し自習：年が明けた瞬間（0:00〜0:10）に自習室にいた生徒にバッジ
-      // 23:50〜0:10 に自習室にずっといて、0:10 にもいた生徒にバッジ
-      const present = [...online.values()].filter(p => p.user.role === 'student' && SM.isStudyRoom(p.room) && !p.away).map(p => p.id);
-      const ty = fun.toshikoshiTick(present);
-      for (const id of ty.awarded) { const p = online.get(id); if (p) p.socket.emit('fun-event', { kind: 'newyear', year: ty.year }); }
       for (const p of online.values()) { updateToday(p); refreshBirthday(p); refreshHS(p); } // 日付が変わったときも 0 にもどる
       // 決めた曜日・時刻を過ぎても来ていない高校生を、先生に知らせる
       for (const s of ganbari.lateStudents(new Set(online.keys()))) notify.studentLate(s, online).catch(e => console.error('遅れの通知に失敗:', e.message));

@@ -248,10 +248,9 @@
 
     // ═════ 季節のお楽しみ ═════
     const f = c.fun || {};
-    const funSec = section('🎉 季節のお楽しみ', 'がんばりサンタ・年越し自習・朝活チャレンジのオン/オフと条件です。');
+    const funSec = section('🎉 季節のお楽しみ', 'がんばりサンタ・朝活チャレンジのオン/オフと条件です。');
     const fSanta = check('🎅 がんばりサンタ（11/1〜30 にがんばった生徒に、12/1〜7 にプレゼント箱）', f.santa !== false);
     const fSantaDays = numInput(f.santaDays || 10, 1, 30);
-    const fNy = check('🎆 年越し自習（12/31 23:50〜1/1 0:10 まで自習室にいた生徒に、0:10 に記念バッジ。0:00 ちょうどに全員の画面で花火）', f.toshikoshi !== false);
     const fAsa = check('🌅 朝活チャレンジ（朝の自習で早起きスタンプとポイント）', f.asakatsu !== false);
     const fAsaMin = numInput(f.asakatsuMinutes || 30, 1, 120), fAsaPt = numInput(f.asakatsuPoints ?? 3, 0, 100);
     const fAsaS = timeInput(f.asakatsuStart || '06:00'), fAsaE = timeInput(f.asakatsuEnd || '07:30');
@@ -259,8 +258,8 @@
     const fg1 = el('div', 'gb-grid'); fg1.append(field('がんばりサンタ：自習した日の数', fSantaDays, '「自習した日」は、学年ごとの連続自習🔥の最低時間（中1 45分・中2 60分・中3 90分など）以上の日です'));
     const fg2 = el('div', 'gb-grid'); fg2.append(field('朝活の時間帯', fAsaRow), field('朝活：スタンプがもらえる朝の自習時間（分）', fAsaMin, 'この時間帯に、自習時間として数えられた分'), field('朝活：スタンプ1こでもらえるポイント', fAsaPt));
     const saveFun = el('button', 'btn', 'お楽しみを保存する');
-    saveFun.onclick = () => save({ fun: { santa: fSanta[1].checked, santaDays: Number(fSantaDays.value), toshikoshi: fNy[1].checked, asakatsu: fAsa[1].checked, asakatsuMinutes: Number(fAsaMin.value), asakatsuPoints: Number(fAsaPt.value), asakatsuStart: fAsaS.value, asakatsuEnd: fAsaE.value === '23:59' ? '23:59' : fAsaE.value } }, 'お楽しみを保存しました');
-    funSec.append(fSanta[0], fg1, fNy[0], fAsa[0], fg2, el('p', 'muted', '朝活は、「自習時間の数え方」で数える時間帯に朝活の時間帯が入っているときだけ数えます。'), saveFun);
+    saveFun.onclick = () => save({ fun: { santa: fSanta[1].checked, santaDays: Number(fSantaDays.value), asakatsu: fAsa[1].checked, asakatsuMinutes: Number(fAsaMin.value), asakatsuPoints: Number(fAsaPt.value), asakatsuStart: fAsaS.value, asakatsuEnd: fAsaE.value === '23:59' ? '23:59' : fAsaE.value } }, 'お楽しみを保存しました');
+    funSec.append(fSanta[0], fg1, fAsa[0], fg2, el('p', 'muted', '朝活は、「自習時間の数え方」で数える時間帯に朝活の時間帯が入っているときだけ数えます。'), saveFun);
 
     // ═════ 誕生日 ═════
     const bdSec = section('🎂 誕生日のお祝い', '誕生日は「ユーザー」タブの生徒の編集で登録します（月・日だけ）。誕生日に入室すると、お祝いカードが出て「🎂 バースデーケーキの帽子」をプレゼントします。その日は名札が金色になり🎂がつき、学年の木にもケーキが飾られます（「先生だけ」にした生徒は、先生・オーナーにだけ🎂が見えます）。先生には入室のお知らせで「今日は誕生日です」と届きます。');

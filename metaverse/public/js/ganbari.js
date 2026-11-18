@@ -26,11 +26,6 @@
         + (me.hs ? `・今週 ${me.hs.week.sessions}/${me.hs.week.need}回（達成で+${me.hs.bonus}pt）` : '')
         + (me.hs && me.hs.title ? `\n🎓 称号：${me.hs.title.name || 'まだなし'}（合計${me.hs.title.hours}時間）` + (me.hs.title.next ? `・あと${me.hs.title.next.hoursLeft}時間で「${me.hs.title.next.name}」` : '・最高の称号です！') : '') + (me.rules.today && !me.rules.today.on ? `・今日（${me.rules.today.weekday}曜）は自習時間を数えない日です` : '');
       document.querySelectorAll('#shop-tabs button').forEach(b => b.classList.toggle('on', b.dataset.slot === g.shopSlot));
-      // バッジ（年越し自習・早起きなど）
-      const bd = $('#shop-badges'); bd.textContent = '';
-      const badges = (me.fun && me.fun.badges) || [];
-      if (badges.length) { bd.append(el('b', null, '🏅 バッジ：')); for (const b of badges) bd.append(el('span', null, `${b.emoji} ${b.label}`)); }
-      bd.hidden = !badges.length;
       // 着せかえ期間の外は、見る・買う・着ることができない
       const open = me.dressup.open;
       const closed = $('#shop-closed');

@@ -50,7 +50,6 @@
         <button data-slot="head">🎩 帽子</button><button data-slot="clothes">👕 洋服</button><button data-slot="face">👓 眼鏡</button><button data-slot="hand">🪄 杖・剣</button><button data-slot="pet">🐱 ペット</button><button data-slot="costume">🐻 着ぐるみ</button>
       </div>
       <div class="shop-items" id="shop-items"></div>
-      <div class="shop-badges" id="shop-badges" hidden></div>
       <p class="muted">ポイントは自習室での自習時間でたまります。ポイントと買ったアイテムは、新しい年度になってもそのまま使えます。着ぐるみを着ているあいだは、帽子と洋服は見えません。</p>
       <div class="dialog-actions"><button class="btn secondary" id="shop-close">とじる</button></div>
     </div>
@@ -124,18 +123,6 @@
     </div>
   </dialog>
 
-  <!-- 🎆 年が明けた瞬間の花火（1/1 0:00 のときだけ） -->
-  <div class="ny-show" id="ny-show" hidden><canvas id="ny-canvas"></canvas><div class="ny-text"><b>A Happy New Year!</b><span id="ny-year"></span><small>あけましておめでとう！</small></div></div>
-  <!-- 🎆 年越し自習 -->
-  <dialog id="newyear-dialog" class="fun-card newyear-card">
-    <div class="dialog-body">
-      <div class="fun-big">🌅</div>
-      <h2 id="newyear-title">あけましておめでとう！</h2>
-      <p class="fun-msg">0:10まで勉強しながら年を越したね。<br>今年もいっしょにがんばろう！</p>
-      <p class="fun-badge">🎍 バッジ「年越し自習」をもらいました</p>
-      <div class="dialog-actions"><button type="button" class="btn" id="newyear-close">今年もよろしく！</button></div>
-    </div>
-  </dialog>
 
   <!-- 誕生日のお祝いカード -->
   <dialog id="bday-dialog" class="bday-card">

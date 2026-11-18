@@ -1,4 +1,4 @@
-// 季節のお楽しみ：がんばりサンタ・年越し自習・朝活チャレンジ・バッジ
+// 季節のお楽しみ：がんばりサンタ・朝活チャレンジ
 process.env.DB_PATH = ':memory:';
 const test = require('node:test');
 const assert = require('node:assert');
@@ -43,25 +43,6 @@ test('がんばりサンタ：11/1〜30に学年の最低時間（中2は60分�
   assert.match(G.buy(U.bbb.id, 'x_reindeer'), /買えません/, 'お店では買えない');
 });
 
-test('年越し自習：23:50〜0:10に自習室にいて（20分のうち18分以上）、0:10にもいる生徒にバッジ', () => {
-  const tick = (ids, day, hm) => F.toshikoshiTick(ids, at(day, hm));
-  const minutes = [];
-  for (let m = 50; m < 60; m++) minutes.push([`${Y}-12-31`, `23:${m}`]);
-  for (let m = 0; m < 10; m++) minutes.push([`${Y + 1}-01-01`, `00:0${m}`]);
-  assert.deepEqual(tick([U.aaa.id], `${Y}-12-31`, '23:49'), { year: null, awarded: [] }, '23:50より前は数えない');
-  minutes.forEach(([d, hm], i) => {
-    const ids = [U.aaa.id];
-    if (i >= 5) ids.push(U.bbb.id); // bbb は 23:55 から（15分だけ）
-    assert.deepEqual(tick(ids, d, hm).awarded, [], '0:10までは、まだあげない');
-  });
-  const r = tick([U.aaa.id, U.bbb.id], `${Y + 1}-01-01`, '00:10');
-  assert.deepEqual(r.awarded, [U.aaa.id], 'ずっといた aaa だけ');
-  assert.equal(r.year, Y + 1);
-  assert.deepEqual(tick([U.aaa.id], `${Y + 1}-01-01`, '00:11').awarded, [], '2回目はなし');
-  assert.ok(F.badgesOf(U.aaa.id).some(b => b.label.includes('年越し自習')));
-  assert.ok(!F.badgesOf(U.bbb.id).some(b => b.label.includes('年越し自習')));
-});
-
 test('朝活：6:00〜7:30に数えた時間が30分になった日にスタンプと3ポイント（バッジはなし）', () => {
   const before = G.points(U.bbb.id).earned;
   let got = [];
@@ -83,8 +64,7 @@ test('オーナーはお楽しみのオン/オフと条件を変えられる。�
   await http('PATCH', '/api/admin/ganbari/config', { fun: { santa: true, asakatsu: true } }, owner);
 });
 
-test('生徒の画面用のまとめ（バッジつき）', async () => {
+test('生徒の画面用のまとめ', async () => {
   const me = (await http('GET', '/api/me/ganbari', null, U.aaa.cookie)).data;
-  assert.ok(me.fun && Array.isArray(me.fun.badges));
-  assert.ok(me.fun.badges.length >= 1);
+  assert.ok(me.fun && 'santa' in me.fun && 'morning' in me.fun);
 });
