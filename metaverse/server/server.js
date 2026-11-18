@@ -146,6 +146,8 @@ app.get('/api/me', auth.requireAuth, (req, res) => {
   res.json({
     user: publicUser(req.user), rooms: listRooms(req.user),
     features: { classCall: livekit.enabled, studyPhotos: realtime.studyPhotosEnabled() },
+    // 保護者会の時間は、生徒は入れない
+    closed: req.user.role === 'student' && parents.meetingOn() ? `今は保護者会です。${parents.getMeeting().end}から入れます` : null,
   });
 });
 
@@ -396,13 +398,26 @@ admin.delete('/users/:id/parents/:parentId', requireOwner, (req, res) => {
 // 今日来た保護者（オーナーだけ）・保護者会のオン/オフ
 admin.get('/parents/today', requireOwner, (req, res) => {
   const day = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.day || '')) ? String(req.query.day) : ganbari.jst().day;
-  res.json({ day, meeting: parents.meetingOn(), visits: parents.visitsOn(day).map(v => ({ ...v, online: realtime._online.has(v.id) })) });
+  res.json({ day, meeting: parents.getMeeting(), meetingOn: parents.meetingOn(), visits: parents.visitsOn(day).map(v => ({ ...v, online: realtime._online.has(v.id) })) });
 });
+// 保護者会の予定 { day, start, end }／{ cancel:true }（取り消す・いますぐおわる）
 admin.post('/parent-meeting', requireOwner, (req, res) => {
-  const on = !!(req.body && req.body.on);
-  parents.setMeeting(on, req.user.id);
-  realtime.parentMeetingChanged(on);
-  res.json({ ok: true, meeting: on });
+  const b = req.body || {};
+  let r;
+  if (b.cancel) { if (parents.meetingOn()) parents.endMeetingNow(req.user.id); else parents.setMeeting(null, req.user.id); r = { ok: true }; }
+  else r = parents.setMeeting({ day: b.day, start: b.start, end: b.end }, req.user.id);
+  if (r && r.error) return bad(res, r.error);
+  realtime.parentMeetingChanged();
+  res.json({ ok: true, meeting: parents.getMeeting(), meetingOn: parents.meetingOn() });
+});
+// 面談ブースに入れる人（その日だけ）
+admin.get('/mendan', requireOwner, (req, res) => res.json({ allowed: parents.mendanList() }));
+admin.post('/mendan/:id', requireOwner, (req, res) => {
+  const on = !(req.body && req.body.allow === false);
+  const r = parents.allowMendan(Number(req.params.id), on, req.user.id);
+  if (r.error) return bad(res, r.error);
+  realtime.mendanChanged(Number(req.params.id));
+  res.json({ ok: true, allowed: parents.mendanList() });
 });
 admin.get('/parent-questions', requireOwner, (req, res) => res.json({ subjects: parents.SUBJECTS, questions: parents.listQuestions() }));
 admin.post('/parent-questions/bulk', requireOwner, (req, res) => {

@@ -40,8 +40,14 @@ function can(user, key) {
 // その部屋に入れるか（第2段階のリアルタイム入室でもこの関数で判定する）
 function canEnterRoom(user, room) {
   if (!user || !room) return false;
+  // 面談ブース：オーナーと担当の先生、オーナーがその日に許可した保護者・生徒だけ
+  if (room.id === 'mendan') {
+    if (user.role === 'owner') return true;
+    if (user.role === 'teacher') return can(user, 'enter_classroom') && user.rooms.includes(room.id);
+    return require('./parents').mendanAllowed(user.id);
+  }
   if (user.role === 'parent') {
-    // ふだんはロビーだけ。保護者会の日は、中学生と同じルールで教室・自習室・テストの教室に入れる
+    // ふだんはロビーだけ。保護者会の時間は、中学生と同じルールで教室・自習室・テストの教室に入れる
     if (!require('./parents').meetingOn()) return false;
     return room.type === 'study' ? room.id !== 'class3' : true;
   }

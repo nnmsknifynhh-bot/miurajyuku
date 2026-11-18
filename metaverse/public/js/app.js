@@ -31,6 +31,7 @@
     state.zoom = autoZoom();
     if (matchMedia('(pointer: coarse)').matches) $('#joystick').hidden = false;
     resize();
+    if (state.closed) { showVisitOver(state.closed); return; } // 保護者会の時間は入れない
     // 生徒は、入室の前に漢字の読みテスト（必要なときだけ）
     if (u.role === 'student') {
       try { if ((await api('GET', '/api/quiz/status')).required) await runQuiz(); } catch (e) { /* テストなしで入室 */ }
@@ -74,6 +75,7 @@
     const data = await api('GET', '/api/me');
     state.user = data.user; state.rooms = data.rooms;
     state.studyPhotos = !!(data.features && data.features.studyPhotos);
+    state.closed = data.closed || null;
     $('#menu-admin').hidden = !(data.user.role === 'owner' || data.user.permissions.manage_classroom);
   }
 
@@ -173,7 +175,17 @@
     });
     // ── 保護者 ──
     socket.on('visit-over', ({ message }) => showVisitOver(message));
-    socket.on('parent-meeting', ({ on }) => { setMeeting(!!on); if (on) { visitEndsAt = 0; toast('👪 保護者会がはじまりました。教室や自習室にも入れます', 6000); } });
+    socket.on('meeting-closed', ({ message }) => { state.ready = false; showVisitOver(message); });
+    socket.on('meeting-soon', ({ start, end }) => { toast(`📣 まもなく保護者会です（${start}〜${end}）。${start}になったら一度退室します。${end}からまた入れます`, 12000); chime(0.2); });
+    socket.on('parent-meeting', ({ on }) => {
+      setMeeting(!!on);
+      if (on) { visitEndsAt = 0; toast('👪 保護者会がはじまりました。教室や自習室にも入れます', 6000); }
+      else toast('👪 保護者会はおわりました。ロビーにもどります', 5000);
+    });
+    socket.on('mendan', ({ allowed }) => {
+      if (allowed) { if (isParent()) { state.mendan = true; visitEndsAt = 0; } toast('🗣 面談ブースに入れるようになりました（ロビーの左下）', 6000); chime(0.15); }
+      else { state.mendan = false; toast('面談ブースの許可がおわりました', 4000); }
+    });
     socket.on('moms-updated', (m) => { if (state.gb && state.gb.forest) state.gb.forest.moms = m; });
     // 生徒：おうちの人からの「見たよ」スタンプ（次に入ったとき1回だけ）
     socket.on('cheer', ({ stamps }) => {
@@ -224,7 +236,7 @@
     socket.on('kicked', ({ reason }) => {
       state.ready = false;
       state.call.leave(); state.pc.leave(); state.sc.stop();
-      if (isParent()) { showVisitOver(reason); return; }
+      if (isParent() || /保護者会/.test(reason || '')) { showVisitOver(reason); return; }
       alert(reason || '接続が切断されました');
       location.replace('/');
     });
@@ -276,6 +288,7 @@
 
   function walkTo(tx, ty, seat, autoRoom) {
     const me = state.me;
+    if (seat && SM.tileAt(tx, ty) === 'O' && state.user.role === 'student') { toast('ソファは保護者の方の席です'); seat = false; }
     const reason = zoneBlockReason(SM.zoneAt(tx, ty));
     if (reason) { blockToast(reason); return false; }
     if (leavingWhileTeaching(SM.tileCenter(tx, ty).x, SM.tileCenter(tx, ty).y)) return false;
@@ -319,6 +332,7 @@
     let best = null, bd = Infinity;
     for (let y = cy - 1; y <= cy + 1; y++) for (let x = cx - 1; x <= cx + 1; x++) {
       if (!SM.isSeat(x, y) || occ.has(SM.seatId(x, y))) continue;
+      if (SM.tileAt(x, y) === 'O' && state.user.role === 'student') continue; // ソファは保護者の席
       if (SM.isBoothSeat(SM.seatId(x, y)) && state.testBooth !== SM.seatId(x, y) && studentLike()) continue; // ブースは呼ばれたときだけ
       const c = SM.tileCenter(x, y), d = Math.hypot(c.x - me.x, c.y - me.y);
       if (d < bd && d < T * 1.4) { bd = d; best = { x, y }; }
@@ -367,13 +381,14 @@
   // ───────── 保護者：ロビーのソファ・見わたし・毎日5問・わが子 ─────────
   let visitTimer = null, visitEndsAt = 0;
   function parentInit(visit) {
+    state.mendan = !!(visit && visit.mendan);
     setMeeting(!!(visit && visit.meeting));
     if (visit && visit.endsAt) visitEndsAt = visit.endsAt;
     clearInterval(visitTimer);
     const tick = () => {
       const left = Math.max(0, visitEndsAt - Date.now()), m = Math.floor(left / 60000), s = Math.floor(left / 1000) % 60;
       const chip = $('#visit-chip');
-      if (state.meeting) { chip.hidden = false; chip.textContent = '👪 今日は保護者会'; chip.classList.remove('warn'); return; }
+      if (state.meeting || state.mendan) { chip.hidden = false; chip.textContent = state.meeting ? '👪 保護者会' : '🗣 面談ブースに入れます（左下）'; chip.classList.remove('warn'); return; }
       chip.hidden = !visitEndsAt;
       chip.textContent = `⏳ のこり ${m}:${String(s).padStart(2, '0')}・🔥${(state.me && state.me.streak) || 1}日目`;
       chip.classList.toggle('warn', left < 60000);
@@ -419,10 +434,15 @@
   function showVisitOver(message) {
     clearInterval(visitTimer);
     state.ready = false;
+    if (!isParent()) { // 生徒：保護者会の時間
+      $('#visit-over-icon').textContent = '👪'; $('#visit-over-title').textContent = '今は保護者会の時間です';
+      $('#visit-over-note').textContent = '時間になったら「もう一度入る」を押してください。'; $('#visit-retry').hidden = false;
+    }
     $('#visit-over-msg').textContent = message || '';
     document.querySelectorAll('dialog[open]').forEach(d => d.close());
     $('#visit-over').hidden = false;
   }
+  $('#visit-retry').onclick = () => location.reload();
   $('#visit-logout').onclick = async () => { try { await api('POST', '/api/logout'); } catch (e) {} location.replace('/'); };
 
   // 毎日5問（日替わりの教科・1問正解で1ポイント）

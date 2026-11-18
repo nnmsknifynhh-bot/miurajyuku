@@ -56,8 +56,16 @@
       <div id="parent-box" hidden>
         <h3 class="sec">👪 保護者</h3>
         <div class="gb-box">
-          <div class="gb-row"><b id="pm-state"></b><button type="button" class="btn small" id="pm-toggle"></button></div>
-          <small class="muted">保護者会をオンにすると、その日だけ保護者も中学生と同じルールで教室・自習室・テストの教室に入れます（10分・1日1回の制限もなし）。日がかわると自動でオフになります。オフにすると、入室中の保護者は退室します。</small>
+          <b>👪 保護者会</b>
+          <p id="pm-state"></p>
+          <div class="gb-row"><input type="date" id="pm-day"><input type="time" id="pm-start" value="19:00"><span>〜</span><input type="time" id="pm-end" value="20:00"><button type="button" class="btn small" id="pm-save">予定を入れる</button><button type="button" class="btn small danger" id="pm-cancel" hidden>取り消す</button></div>
+          <small class="muted">その時間だけ、保護者は中学生と同じルールで教室・自習室・テストの教室に入れます（10分・1日1回の制限なし）。生徒は入室できません（5分前にお知らせして、時刻になったら退室）。保護者会の日は、生徒の🔥・がんばりサンタの日数・高校生の週の回数がとぎれないようにします。</small>
+        </div>
+        <div class="gb-box">
+          <b>🗣 面談ブース（ロビーの左下）</b>
+          <small class="muted">ここで許可した保護者・生徒だけが入れます（今日だけ有効・明日には自動で外れます）。先生は「ユーザー」の編集で、担当する教室に「面談ブース」をチェックすると入れます。通話・画面共有は教室2と同じで、先生かオーナーが「面談の通話を始める」を押します。面談ブースでは生徒・保護者もマイクで話せます。許可された保護者は、その日は10分の制限がありません。</small>
+          <div class="gb-row"><select id="md-user"></select><button type="button" class="btn small" id="md-add">許可する</button></div>
+          <div id="md-list"></div>
         </div>
         <p><b id="pv-title"></b></p>
         <div class="table-wrap"><table class="logs"><thead><tr><th>保護者</th><th>お子さん</th><th>来た時刻</th><th>いま</th></tr></thead><tbody id="pv-body"></tbody></table></div>

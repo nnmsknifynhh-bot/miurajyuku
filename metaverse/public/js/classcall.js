@@ -65,9 +65,10 @@
         render(); return;
       }
       if (desiredRoom() !== roomId) { room.disconnect(); cs.connecting = false; render(); return; }
-      Object.assign(cs, { room, joinedRoom: roomId, connecting: false, publisher: res.publisher, canScreen: res.canScreen && canShareScreen });
+      Object.assign(cs, { room, joinedRoom: roomId, connecting: false, publisher: res.publisher, teacher: !!res.teacher, canScreen: res.canScreen && canShareScreen });
       cs.audioBlocked = !room.canPlaybackAudio;
-      if (cs.publisher) await setMic(cs.restoreMic !== false);
+      if (cs.teacher) await setMic(cs.restoreMic !== false);
+      else if (cs.publisher) await setMic(cs.restoreMic === true); // 面談ブース：生徒・保護者は自分でマイクをONにする
       render();
     }
 
@@ -140,7 +141,7 @@
       }
       reportMedia(); render();
     }
-    function reportMedia() { socket.emit('class-media', { mic: cs.micOn, screen: cs.screenOn }); }
+    function reportMedia() { if (cs.teacher) socket.emit('class-media', { mic: cs.micOn, screen: cs.screenOn }); }
 
     async function startClass() {
       const res = await ask('class-start');
@@ -148,7 +149,7 @@
       toast('授業を始めました。教室にいる生徒にあなたの声が届きます');
     }
     async function endClass() {
-      if (!confirm('授業（通話・画面共有）を終わりますか？')) return;
+      if (!confirm('通話・画面共有を終わりますか？')) return;
       const res = await ask('class-end');
       if (!res || !res.ok) toast((res && res.error) || '終了できませんでした');
     }
@@ -182,7 +183,9 @@
       const roomInfo = st.rooms.find(r => r.id === st.me.room);
       const cls = st.classes[st.me.room];
       const u = st.user;
-      const mayStart = u.role !== 'student' && u.permissions.start_class_call && roomInfo && roomInfo.type === 'classroom' && roomInfo.canEnter;
+      const mendan = st.me.room === 'mendan';
+      const word = mendan ? '面談' : '授業';
+      const mayStart = (u.role === 'owner' || u.role === 'teacher') && u.permissions.start_class_call && roomInfo && roomInfo.type === 'classroom' && roomInfo.canEnter;
 
       if (!cls) {
         if (!mayStart) { bar.hidden = true; return; }
@@ -191,7 +194,7 @@
           bar.append(el('span', 'cb-note', '通話サーバー（LiveKit）が未設定のため、授業の通話は使えません'));
           return;
         }
-        const b = el('button', 'cb-btn primary', '📢 授業を始める（声・画面共有）');
+        const b = el('button', 'cb-btn primary', mendan ? '📢 面談の通話を始める（声・画面共有）' : '📢 授業を始める（声・画面共有）');
         b.onclick = startClass;
         bar.append(b);
         return;
@@ -199,7 +202,7 @@
 
       bar.hidden = false;
       const isTeacher = cls.teacherId === st.me.id;
-      const head = el('span', 'cb-live', isTeacher ? '🔴 授業中' : `🎙 授業中：${cls.teacherName}先生`);
+      const head = el('span', 'cb-live', isTeacher ? `🔴 ${word}中` : `🎙 ${word}中：${cls.teacherName}先生`);
       const mins = Math.floor((Date.now() - cls.startedAt) / 60000);
       head.append(el('small', null, ` ${mins}分`));
       bar.append(head);
@@ -214,12 +217,17 @@
           const b = el('button', 'cb-btn primary pulse', '🔊 タップして音声をきく');
           b.onclick = async () => { try { await cs.room.startAudio(); } catch (e) {} cs.audioBlocked = !cs.room.canPlaybackAudio; render(); };
           bar.append(b);
-        } else if (!isTeacher && !cls.away) {
+        } else if (!isTeacher && !cls.away && !cs.publisher) {
           bar.append(el('span', 'cb-note ok', cls.mic ? '🔊 先生の声がきこえます' : '🔇 先生のマイクはOFFです'));
         }
       }
 
       if (cs.room && cs.poor) bar.append(el('span', 'cb-note warn', '⚠️ 通信が不安定です。Wi-Fi の近くへ移動してみてね'));
+      if (cs.room && cs.publisher && !isTeacher) { // 面談ブース：生徒・保護者も話せる
+        const mic = el('button', 'cb-btn' + (cs.micOn ? ' on' : ' off'), cs.micOn ? '🎤 マイクON（話せます）' : '🔇 マイクOFF（タップで話す）');
+        mic.onclick = () => setMic(!cs.micOn);
+        bar.append(mic);
+      }
       if (isTeacher && cs.room) {
         const mic = el('button', 'cb-btn' + (cs.micOn ? ' on' : ' off'), cs.micOn ? '🎤 マイクON' : '🔇 マイクOFF');
         mic.onclick = () => setMic(!cs.micOn);
@@ -233,16 +241,16 @@
         }
       }
       // 生徒のスタンプ・吹き出し（授業中は先生が許可したときだけ）
-      if (isTeacher || u.role === 'owner') {
+      if ((isTeacher || u.role === 'owner') && !mendan) {
         const chat = el('button', 'cb-btn' + (cls.allowChat ? ' on' : ' off'), cls.allowChat ? '😊 スタンプ・吹き出しOK' : '🤐 スタンプ・吹き出し止め中');
         chat.title = 'タップで切りかえ';
         chat.onclick = () => socket.emit('class-chat', { allow: !cls.allowChat }, (r) => { if (r && !r.ok) toast(r.error); else toast(r.allowChat ? '生徒がスタンプ・吹き出しを使えるようにしました' : '生徒のスタンプ・吹き出しを止めました'); });
         bar.append(chat);
-      } else if (u.role === 'student') {
+      } else if (u.role === 'student' && !mendan) {
         bar.append(el('span', 'cb-note', cls.allowChat ? '😊 スタンプ・吹き出しOK' : '🤐 スタンプ・吹き出しは先生がOKを出したときだけ'));
       }
       if (isTeacher || u.role === 'owner') {
-        const end = el('button', 'cb-btn danger', '授業を終わる');
+        const end = el('button', 'cb-btn danger', `${word}を終わる`);
         end.onclick = endClass;
         bar.append(end);
       }

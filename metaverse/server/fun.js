@@ -35,7 +35,9 @@ function santaStatus(userId, date = new Date()) {
   const year = t.year;
   const rows = db.prepare('SELECT day, COALESCE(manual_min, auto_min) AS m FROM study_days WHERE user_id = ? AND day >= ? AND day <= ?').all(userId, `${year}-11-01`, `${year}-11-30`);
   const min = G.streakMinFor(userId); // 中1 45分・中2 60分・中3 90分 など
-  const days = rows.filter(r => r.m >= min).length;
+  const okDays = new Set(rows.filter(r => r.m >= min).map(r => r.day));
+  for (const d of G.meetingDays()) if (d >= `${year}-11-01` && d <= `${year}-11-30` && d <= t.day) okDays.add(d); // 保護者会の日は1日に数える
+  const days = okDays.size;
   const opened = db.prepare('SELECT item FROM santa_gifts WHERE user_id = ? AND year = ?').get(userId, year);
   return { year, phase: inCount ? 'count' : 'gift', days, need: f.santaDays, minMinutes: min, eligible: days >= f.santaDays, opened: opened ? opened.item : null };
 }

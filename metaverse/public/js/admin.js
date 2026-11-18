@@ -384,15 +384,16 @@
     if (!data.users.length) { const tr = el('tr'); const td = el('td', 'empty', 'いま接続している人はいません'); td.colSpan = 8; tr.append(td); body.append(tr); }
   }
   // 今日来た保護者・保護者会
-  let pmOn = false;
+  let pmLoaded = false, mdLoaded = 0;
   async function loadParentsToday() {
     let d;
     try { d = await api('GET', '/api/admin/parents/today'); } catch (e) { return; }
     $('#parent-box').hidden = false;
-    pmOn = d.meeting;
-    $('#pm-state').textContent = d.meeting ? '🎉 今日は保護者会です（保護者も全部の教室に入れます）' : '保護者会：オフ（保護者はロビーだけ・1日1回10分）';
-    $('#pm-toggle').textContent = d.meeting ? '保護者会をおわる' : '保護者会をはじめる';
-    $('#pm-toggle').className = 'btn small' + (d.meeting ? ' danger' : '');
+    const m = d.meeting, fmtDay = (x) => `${Number(x.slice(5, 7))}月${Number(x.slice(8))}日`;
+    $('#pm-state').textContent = d.meetingOn ? `🎉 いま保護者会中です（${m.start}〜${m.end}）。生徒は入れません` : m ? `予定：${fmtDay(m.day)} ${m.start}〜${m.end}` : '予定はありません（保護者はロビーだけ・1日1回10分）';
+    $('#pm-cancel').hidden = !m; $('#pm-cancel').textContent = d.meetingOn ? 'いますぐおわる' : '取り消す';
+    if (!pmLoaded) { pmLoaded = true; const t = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10); $('#pm-day').value = m ? m.day : t; if (m) { $('#pm-start').value = m.start; $('#pm-end').value = m.end; } }
+    loadMendan();
     $('#pv-title').textContent = `今日来た保護者：${d.visits.length}人`;
     const body = $('#pv-body'); body.textContent = '';
     for (const v of d.visits) {
@@ -402,10 +403,46 @@
     }
     if (!d.visits.length) { const tr = el('tr'); const td = el('td', 'empty', '今日はまだ来ていません'); td.colSpan = 4; tr.append(td); body.append(tr); }
   }
-  $('#pm-toggle').onclick = async () => {
-    const on = !pmOn;
-    if (!confirm(on ? '保護者会をはじめますか？\n今日だけ、保護者も教室・自習室・テストの教室に入れるようになります。' : '保護者会をおわりますか？\n入室中の保護者は退室します。')) return;
-    try { await api('POST', '/api/admin/parent-meeting', { on }); toast(on ? '保護者会をはじめました' : '保護者会をおわりました'); loadParentsToday(); } catch (e) { toast(e.message); }
+  $('#pm-save').onclick = async () => {
+    const body = { day: $('#pm-day').value, start: $('#pm-start').value, end: $('#pm-end').value };
+    if (!confirm(`${body.day} ${body.start}〜${body.end} に保護者会の予定を入れますか？\nその時間は、生徒は入室できなくなります。`)) return;
+    try { await api('POST', '/api/admin/parent-meeting', body); toast('保護者会の予定を入れました'); loadParentsToday(); } catch (e) { toast(e.message); }
+  };
+  $('#pm-cancel').onclick = async () => {
+    if (!confirm('保護者会を取り消し（おわり）ますか？\n入室中の保護者は退室します。')) return;
+    try { await api('POST', '/api/admin/parent-meeting', { cancel: true }); toast('保護者会を取り消しました'); loadParentsToday(); } catch (e) { toast(e.message); }
+  };
+  // 面談ブースに入れる人
+  async function loadMendan() {
+    let d;
+    try { d = await api('GET', '/api/admin/mendan'); } catch (e) { return; }
+    // えらぶリスト（生徒・保護者）は1分に1回だけ作り直す（選んでいる途中に消えないように）
+    if (Date.now() - mdLoaded > 60000) {
+      mdLoaded = Date.now();
+      try {
+        const all = (await api('GET', '/api/admin/users')).users.filter(u => u.isActive && (u.role === 'student' || u.role === 'parent'));
+        const sel = $('#md-user'), cur = sel.value; sel.textContent = '';
+        sel.append(Object.assign(el('option', null, '— 生徒・保護者をえらぶ —'), { value: '' }));
+        for (const u of all.sort((a, b) => (a.role > b.role ? 1 : a.role < b.role ? -1 : a.displayName.localeCompare(b.displayName, 'ja')))) {
+          const o = el('option', null, `${u.role === 'parent' ? '保護者' : '生徒'}：${u.displayName}${u.grade ? `（${u.grade}）` : ''}`); o.value = u.id; sel.append(o);
+        }
+        sel.value = cur;
+      } catch (e) { /* 次の更新で */ }
+    }
+    const list = $('#md-list'); list.textContent = '';
+    if (!d.allowed.length) list.append(el('p', 'muted', '今日はまだだれも許可していません'));
+    for (const u of d.allowed) {
+      const row = el('div', 'gb-row');
+      row.append(el('span', null, `${u.role === 'parent' ? '👪 保護者' : '🧑‍🎓 生徒'}：${u.name}${u.children.length ? `（${u.children.join('・')}の保護者）` : ''}`));
+      const b = el('button', 'btn small secondary', '外す');
+      b.onclick = async () => { try { await api('POST', `/api/admin/mendan/${u.id}`, { allow: false }); loadMendan(); } catch (e) { toast(e.message); } };
+      row.append(b); list.append(row);
+    }
+  }
+  $('#md-add').onclick = async () => {
+    const id = $('#md-user').value;
+    if (!id) return toast('生徒か保護者をえらんでください');
+    try { await api('POST', `/api/admin/mendan/${id}`, { allow: true }); toast('面談ブースに入れるようにしました（今日だけ）'); loadMendan(); } catch (e) { toast(e.message); }
   };
 
   async function disconnect(u, revoke) {
@@ -421,7 +458,7 @@
     'login.success': 'ログイン', 'login.failed': 'ログイン失敗', 'setup.owner_created': '初期セットアップ',
     'user.created': 'ユーザー作成', 'user.updated': 'ユーザー編集', 'user.sessions_revoked': '強制ログアウト',
     'user.password_changed_self': 'パスワード変更（本人）', 'room.capacity_changed': '定員の変更',
-    'presence.disconnected': '接続の切断', 'settings.study_photos': '見守り写真の設定', 'private.invited': '個別通話の呼び出し', 'private.started': '個別通話を開始', 'private.ended': '個別通話を終了', 'class.started': '授業（通話）を開始', 'class.ended': '授業（通話）を終了', 'presence.disconnected_and_revoked': '切断＋ログアウト', 'parent.meeting_on': '保護者会をはじめる', 'parent.meeting_off': '保護者会をおわる',
+    'presence.disconnected': '接続の切断', 'settings.study_photos': '見守り写真の設定', 'private.invited': '個別通話の呼び出し', 'private.started': '個別通話を開始', 'private.ended': '個別通話を終了', 'class.started': '授業（通話）を開始', 'class.ended': '授業（通話）を終了', 'presence.disconnected_and_revoked': '切断＋ログアウト', 'parent.meeting_on': '保護者会の予定', 'parent.meeting_off': '保護者会の取り消し', 'mendan.allowed': '面談ブースを許可', 'mendan.removed': '面談ブースの許可を外す',
   };
   async function loadLogs() {
     let logs;

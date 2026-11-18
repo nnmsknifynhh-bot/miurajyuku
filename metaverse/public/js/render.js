@@ -196,7 +196,7 @@
     }
     // カフェのカウンターのメニュー
     g.fillStyle = '#f5e6c8'; g.font = 'bold 11px sans-serif'; g.fillText('☕ Study Café', 38 * T, 1.55 * T);
-    for (const z of SM.ZONES.filter(z => z.type === 'classroom')) {
+    for (const z of SM.ZONES.filter(z => z.type === 'classroom' && !z.private)) {
       g.fillStyle = 'rgba(255,255,255,.85)'; g.font = 'bold 12px sans-serif';
       g.fillText('きょうも いっしょに がんばろう！', (z.x1 + 6) * T, 0.45 * T);
       g.fillStyle = '#7fa6d9'; g.font = 'bold 10px sans-serif';
@@ -229,6 +229,7 @@
     sign('自習室', 17 * T, 18.5 * T, '#8b6b4a'); sign('ロビー', 43 * T, 18.5 * T, '#7a6f86');
     sign('🌿 自習室　しずかに集中しよう', 17 * T, 31.3 * T, 'rgba(110,85,60,.75)');
     sign('ようこそ 三浦塾へ', 42 * T, 21.5 * T, 'rgba(120,110,135,.8)');
+    sign('🗣 面談ブース', 37 * T, 25.5 * T, 'rgba(47,125,225,.85)');
     sign('☕ 高校生自習室　自分のペースで、しっかり集中', 42 * T, 12.4 * T, 'rgba(93,58,34,.8)');
     g.textAlign = 'start'; g.textBaseline = 'alphabetic';
     return cv;
@@ -689,7 +690,7 @@
     // ロビー：大きな飾り（入口の両側）と横断幕
     put(ctx, d.big, 40.5 * T, 21 * T, 40); put(ctx, d.big, 45.5 * T, 21 * T, 40);
     d.items.forEach((e, i) => put(ctx, e, (37 + i) * T, 22.4 * T + Math.sin(t * 2 + i) * 1.5, 22));
-    d.items.forEach((e, i) => put(ctx, e, (37 + i) * T, 25.2 * T + Math.sin(t * 2 + i + 1) * 1.5, 22));
+    d.items.forEach((e, i) => put(ctx, e, (41 + i) * T, 25.2 * T + Math.sin(t * 2 + i + 1) * 1.5, 22));
     sign(d.banner, 43 * T, 27 * T);
     // ろうか：飾りの列（上の壁ぞい）
     for (let x = 3, i = 0; x <= 48; x += 3, i++) put(ctx, d.garland[i % d.garland.length], x * T, 15.25 * T + Math.sin(t * 1.5 + i) * 1.2, 16);

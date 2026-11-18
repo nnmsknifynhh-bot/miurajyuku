@@ -93,7 +93,7 @@
   fill(42, H - 1, 43, H - 1, 'G');           // 正面玄関
   fill(40, 28, 45, 31, 'm');
   fill(36, 23, 38, 23, 'k');                 // 受付
-  fill(35, 26, 35, 31, 'B');                 // 下駄箱
+  fill(35, 21, 35, 22, 'B');                 // 下駄箱
   // 母達の木と、まわりのソファ3つ（2人がけ）。保護者はロビーのここにすわる
   fill(46, 21, 50, 24, 'r');
   set(48, 23, 'Y'); set(49, 23, 'Y');
@@ -104,7 +104,16 @@
   ];
   for (const s of SOFAS) for (const [x, y] of s.seats) set(x, y, 'O');
   const MOM_TREE = { x: 48, y: 23 };
-  [[35, 20], [50, 20], [50, 32], [36, 32]].forEach(([x, y]) => set(x, y, 'P'));
+  [[35, 20], [50, 20], [50, 32]].forEach(([x, y]) => set(x, y, 'P'));
+  // 面談ブース（ロビーの左下・かべで仕切る）。オーナーが許可した保護者・生徒だけ入れる。教室2と同じ通話・画面共有
+  fill(35, 26, 39, 26, '#'); fill(39, 26, 39, 32, '#');
+  fill(36, 26, 37, 26, 'V');                 // 画面共有用のスクリーン
+  set(39, 30, '_');                          // 入口（ロビーの玄関マット側）
+  fill(35, 27, 38, 27, 'p');                 // 先生の立ち位置
+  set(36, 29, 'D'); set(37, 29, 'D');        // 机
+  set(36, 28, 'c'); set(37, 28, 'c');        // 先生側の席（下向き）
+  set(36, 30, 'c'); set(37, 30, 'c');        // 保護者・生徒の席（上向き）
+  set(35, 32, 'P'); set(38, 32, 'P');
 
   // 部屋（ゾーン）。id は DB の rooms.id と一致させる
   const ZONES = [
@@ -113,17 +122,18 @@
     { id: 'class3', name: '高校生自習室', type: 'study', style: 'cafe', x1: 35, y1: 1, x2: 50, y2: 13 },
     { id: 'hall', name: 'ろうか', type: 'hall', x1: 1, y1: 15, x2: 50, y2: 18 },
     { id: 'study', name: '自習室', type: 'study', x1: 1, y1: 20, x2: 33, y2: 32 },
+    { id: 'mendan', name: '面談ブース', type: 'classroom', private: true, x1: 35, y1: 27, x2: 38, y2: 32 }, // ロビーより先に書く（ロビーの中にあるため）
     { id: 'lobby', name: 'ロビー', type: 'lobby', x1: 35, y1: 20, x2: 50, y2: 32 },
   ];
   // 各部屋の「到着地点」（部屋選択メニューから移動するとき）
   const ENTRY = {
     class1: { x: 14, y: 13 }, class2: { x: 31, y: 13 }, class3: { x: 48, y: 13 },
-    study: { x: 16, y: 21 }, lobby: { x: 42, y: 26 }, hall: { x: 25, y: 16 },
+    study: { x: 16, y: 21 }, lobby: { x: 42, y: 26 }, hall: { x: 25, y: 16 }, mendan: { x: 38, y: 30 },
   };
   // 部屋から出されたときの移動先（扉の外の廊下）
-  const EXIT = { class1: { x: 14, y: 15 }, class2: { x: 31, y: 15 }, class3: { x: 48, y: 15 }, study: { x: 16, y: 18 } };
+  const EXIT = { class1: { x: 14, y: 15 }, class2: { x: 31, y: 15 }, class3: { x: 48, y: 15 }, study: { x: 16, y: 18 }, mendan: { x: 40, y: 30 } };
   // 教壇の立ち位置
-  const PODIUM = { class1: { x: 8, y: 1 }, class2: { x: 25, y: 1 } };
+  const PODIUM = { class1: { x: 8, y: 1 }, class2: { x: 25, y: 1 }, mendan: { x: 38, y: 27 } };
   // テストのブースの席か
   const isBoothSeat = (seatId) => Object.values(BOOTHS).some(list => list.some(b => `${b.x},${b.y}` === seatId));
   // 自習室（自習時間を数える部屋）。study＝中学生など、class3＝高校生
@@ -150,6 +160,7 @@
     const up = tileAt(tx, ty - 1), down = tileAt(tx, ty + 1);
     if (up === 'D' || up === 'b' || up === 'q') return 'up';
     if (down === 'D' || down === 'b' || down === 'q') return 'down';
+    if (tileAt(tx, ty - 1) === 'p' || tileAt(tx, ty - 1) === '#') return 'down';
     return 'down';
   };
 

@@ -323,10 +323,17 @@ function attach(httpServer) {
       kickPresence(old, '別の端末（またはタブ）で入室したため、こちらは切断しました');
     }
 
-    // 保護者：1日1回・10分まで（同じ日に10分をすぎたら入れない）
+    // 保護者会の時間は、生徒は入れない
+    if (user.role === 'student' && parents.meetingOn()) {
+      socket.emit('meeting-closed', { message: meetingClosedMessage() });
+      socket.disconnect(true); return;
+    }
+    // 保護者：1日1回・10分まで（同じ日に10分をすぎたら入れない）。保護者会の時間・面談の許可がある日は制限なし
     let visit = null;
-    if (user.role === 'parent' && parents.meetingOn()) { parents.recordVisit(user.id); visit = { endsAt: null, meeting: true }; }
-    else if (user.role === 'parent') {
+    if (user.role === 'parent' && (parents.meetingOn() || parents.mendanAllowed(user.id))) {
+      parents.recordVisit(user.id);
+      visit = { endsAt: null, meeting: parents.meetingOn(), mendan: parents.mendanAllowed(user.id) };
+    } else if (user.role === 'parent') {
       visit = parents.startVisit(user.id);
       if (visit.error) { socket.emit('visit-over', { message: visit.error }); socket.disconnect(true); return; }
     }
@@ -373,7 +380,7 @@ function attach(httpServer) {
 
     socket.emit('init', {
       me: { ...pub(p), bday: !!p.bday }, users: [...online.values()].filter(o => o !== p).map(o => pubFor(o, p)), rooms: roomCounts(), reactions: user.role === 'parent' ? PARENT_REACTIONS : REACTIONS,
-      visit: visit ? { endsAt: visit.endsAt, again: visit.again, meeting: !!visit.meeting } : null,
+      visit: visit ? { endsAt: visit.endsAt, again: visit.again, meeting: !!visit.meeting, mendan: !!visit.mendan } : null,
       classes: classState(), classCall: livekit.enabled, testQueue: user.role === 'parent' ? null : testState(),
     });
     if (gap && p.room === gap.room && Date.now() - gap.at <= STUDY_GAP_MS) socket.emit('study-resumed', { minutes: gapMinutes, seat: p.seat });
@@ -398,7 +405,7 @@ function attach(httpServer) {
       p.lastMoveAt = t;
       if (Math.hypot(x - p.x, y - p.y) > T * 4) return reject('移動が速すぎます');
       if (!SM.isWalkable(Math.floor(x / T), Math.floor(y / T))) return reject(null);
-      if (p.user.role === 'parent' && !parents.meetingOn() && (SM.zoneAtPx(x, y) || {}).id !== 'lobby') return reject('保護者の方はロビーだけです');
+      if (p.user.role === 'parent' && !parents.meetingOn() && !['lobby', 'mendan'].includes((SM.zoneAtPx(x, y) || {}).id)) return reject('保護者の方はロビーだけです');
       const newRoom = roomIdAt(x, y);
       if (newRoom && newRoom !== p.room) {
         const err = entryError(p, newRoom);
@@ -428,6 +435,8 @@ function attach(httpServer) {
       if (seatRoom !== p.room) return ack({ ok: false, error: '先に部屋に入ってください' });
       const id = SM.seatId(sx, sy);
       for (const o of online.values()) if (o !== p && o.seat === id) return ack({ ok: false, error: 'その席はほかの人が使っています' });
+      // ロビーのソファは保護者の席
+      if (SM.tileAt(sx, sy) === 'O' && p.user.role === 'student') return ack({ ok: false, error: 'ソファは保護者の方の席です' });
       // テストのブースは、先生に呼ばれた生徒だけ
       if (SM.isBoothSeat(id) && p.user.role === 'student' && boothOf(p.id) !== id) return ack({ ok: false, error: 'テストのブースは、先生に呼ばれたらすわれます' });
       p.seat = id; p.x = c.x; p.y = c.y; p.dir = SM.seatFacing(sx, sy); p.moving = false;
@@ -522,11 +531,12 @@ function attach(httpServer) {
       lastTokenAt = Date.now();
       const isTeacher = c.teacherId === p.id;
       const canScreen = isTeacher && can(p.user, 'share_screen');
+      const talk = isTeacher || p.room === 'mendan'; // 面談ブースは全員が話せる（画面共有は先生だけ）
       try {
         const token = await livekit.makeToken({
-          userId: p.id, name: p.user.display_name, role: p.user.role, room: livekit.lkRoomName(p.room), mic: isTeacher, screen: canScreen,
+          userId: p.id, name: p.user.display_name, role: p.user.role, room: livekit.lkRoomName(p.room), mic: talk, screen: canScreen,
         });
-        ack({ ok: true, url: livekit.url, token, room: p.room, publisher: isTeacher, canScreen });
+        ack({ ok: true, url: livekit.url, token, room: p.room, publisher: talk, teacher: isTeacher, canScreen });
       } catch (e) {
         ack({ ok: false, error: '通話の準備に失敗しました' });
       }
@@ -786,11 +796,12 @@ function attach(httpServer) {
 
   setInterval(flushMoves, 100).unref();
 
-  // 保護者は10分で自動で退室（1日1回）
+  // 保護者は10分で自動で退室（1日1回）・保護者会のはじまり／おわり
   setInterval(() => {
+    meetingTick();
     const t = Date.now();
     for (const p of [...online.values()]) {
-      if (p.user.role === 'parent' && p.visitEndsAt && t >= p.visitEndsAt && !parents.meetingOn()) kickPresence(p, '今日の訪問はここまでです。また明日お待ちしています（1日1回・10分）');
+      if (p.user.role === 'parent' && p.visitEndsAt && t >= p.visitEndsAt && !parents.meetingOn() && !parents.mendanAllowed(p.id)) kickPresence(p, '今日の訪問はここまでです。また明日お待ちしています（1日1回・10分）');
     }
   }, Number(process.env.PARENT_CHECK_MS || 5000)).unref();
 
@@ -926,6 +937,7 @@ function refreshBirthday(p) {
 // 授業中の教室では、先生が「スタンプ・吹き出しOK」にしているときだけ（個別通話中は別）。それ以外は先生と話しているときだけ
 function studentChatAllowed(p) {
   if (inActiveCall(p)) return true;
+  if (p.room === 'mendan') return true; // 面談ブースでは自由に
   const c = p.room && classes.get(p.room);
   if (c) return !!c.allowChat;
   return talkingWithStaff(p);
@@ -1044,18 +1056,58 @@ function presence() {
 function _reset() { online.clear(); lastPos.clear(); lastOffline.clear(); calls.clear(); studyPhotos.clear(); }
 
 // 母達の木が変わったら、みんなの画面を更新
-// 保護者会のオン・オフ（オンにした瞬間から教室へ。オフにしたら、いる保護者は退室）
-function parentMeetingChanged(on) {
-  for (const p of [...online.values()]) {
-    if (p.user.role !== 'parent') continue;
-    if (on) { parents.recordVisit(p.id); p.visitEndsAt = null; p.socket.emit('parent-meeting', { on: true }); p.socket.emit('me-updated'); }
-    else kickPresence(p, '保護者会はおわりました。ご参加ありがとうございました');
+// ── 保護者会（予定の時刻で自動で始まり・終わる） ──
+function meetingClosedMessage() {
+  const m = parents.getMeeting();
+  return `今は保護者会です。${m ? m.end : 'おわったら'}から入れます`;
+}
+let meetingWasOn = false;
+const soonNotified = new Set();
+function meetingTick() {
+  if (!io) return;
+  const phase = parents.meetingPhase(), m = parents.getMeeting();
+  if (phase === 'soon' && m) { // はじまる5分前：入室中の生徒に知らせる
+    const key = `${m.day} ${m.start}`;
+    for (const p of online.values()) {
+      if (p.user.role !== 'student' || soonNotified.has(key + ':' + p.id)) continue;
+      soonNotified.add(key + ':' + p.id);
+      p.socket.emit('meeting-soon', { start: m.start, end: m.end });
+    }
   }
+  const on = phase === 'on';
+  if (on === meetingWasOn) return;
+  meetingWasOn = on;
+  for (const p of [...online.values()]) {
+    if (on && p.user.role === 'student') {
+      p.socket.emit('meeting-closed', { message: `保護者会の時間になりました。${m.end}から入れます` });
+      kickPresence(p, `保護者会の時間になりました。${m.end}から入れます`);
+    } else if (on && p.user.role === 'parent') {
+      parents.recordVisit(p.id); p.visitEndsAt = null;
+      p.socket.emit('parent-meeting', { on: true }); p.socket.emit('me-updated');
+    } else if (!on && p.user.role === 'parent') {
+      if (parents.mendanAllowed(p.id)) { // 面談の許可がある人は、ロビーにもどるだけ
+        p.socket.emit('parent-meeting', { on: false }); p.socket.emit('me-updated');
+        if (p.room && p.room !== 'mendan') forceOut(p, '保護者会はおわりました。ロビーにもどります');
+      } else kickPresence(p, '保護者会はおわりました。ご参加ありがとうございました');
+    }
+  }
+}
+// 管理画面で予定を変えたとき：すぐ反映
+function parentMeetingChanged() { meetingTick(); }
+// 面談ブースの許可が変わったとき
+function mendanChanged(userId) {
+  const p = online.get(Number(userId));
+  if (!p) return;
+  const ok = parents.mendanAllowed(p.id);
+  if (p.user.role === 'parent' && ok) { parents.recordVisit(p.id); p.visitEndsAt = null; }
+  p.socket.emit('mendan', { allowed: ok });
+  p.socket.emit('me-updated');
+  if (!ok && p.room === 'mendan') forceOut(p, '面談ブースの許可がなくなったため、ロビーにもどりました');
 }
 function refreshMoms() { if (io) io.emit('moms-updated', parents.momsTree()); }
 
 module.exports = {
-  shownToday, refreshMoms, parentMeetingChanged,
+  shownToday, refreshMoms, parentMeetingChanged, mendanChanged,
   isQuickRejoin, refreshGanbari, refreshBirthday, refreshAllGanbari, _online: online,
   storeStudyPhoto, getStudyPhoto, studyPhotoTimes, canViewStudyPhotos, setStudyPhotosFeature, studyPhotosEnabled,
   attach, kick, refreshUser, refreshRooms, presence, roomCounts, classState, endClass, endCallOf, REACTIONS, _reset };

@@ -92,6 +92,10 @@ function jst(d = new Date()) {
 const addDays = (day, n) => { const d = new Date(day + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 const addYears = (day, n) => { const [y, m, d] = day.split('-'); return `${Number(y) + n}-${m}-${d}`; };
 const RE_DAY = /^\d{4}-\d{2}-\d{2}$/;
+// 保護者会の日（生徒が入れない時間がある日）：🔥がとぎれない・サンタの日数・高校生の週の回数に入れる
+function meetingDays() { try { return new Set(JSON.parse(getSetting('parent_meeting_days', '[]'))); } catch (e) { return new Set(); } }
+function addMeetingDay(day) { const s = meetingDays(); s.add(day); setSetting('parent_meeting_days', JSON.stringify([...s].sort().slice(-100))); }
+function removeMeetingDay(day) { const s = meetingDays(); if (s.delete(day)) setSetting('parent_meeting_days', JSON.stringify([...s].sort())); }
 const RE_HM = /^([01]\d|2[0-3]):[0-5]\d$|^24:00$/;
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
 const weekdayOf = (day) => new Date(day + 'T00:00:00Z').getUTCDay();
@@ -474,7 +478,8 @@ function streak(userId, date = new Date()) {
     .all(userId, today, addDays(today, -400));
   const ok = new Set(rows.filter(r => r.m >= min).map(r => r.day));
   // 数えない曜日（お休みの曜日）は、とばしてつなげる。その日に自習していれば1日に数える
-  const off = (d) => !ruleFor(d, c).on;
+  const md = meetingDays();
+  const off = (d) => !ruleFor(d, c).on || md.has(d); // 保護者会の日もとばしてつなげる
   let day = today;
   if (!ok.has(day)) day = addDays(day, -1);
   let n = 0;
@@ -788,6 +793,13 @@ function hsWeeks(userId, date = new Date(), c = getConfig()) {
     v.minutes += r.m; if (r.m >= hs.sessionMinutes) v.sessions++;
     byWeek.set(w, v);
   }
+  // 保護者会の日（自習できなかった日）は、1回分に数える
+  const done = new Set(rows.filter(r => r.m >= hs.sessionMinutes).map(r => r.day));
+  for (const d of meetingDays()) {
+    if (d < mondayOf(c.pointsFrom) || d > today || done.has(d)) continue;
+    const w = mondayOf(d), v = byWeek.get(w) || { sessions: 0, minutes: 0 };
+    v.sessions++; byWeek.set(w, v);
+  }
   const ok = (w) => (byWeek.get(w) || { sessions: 0 }).sessions >= hs.sessionsPerWeek;
   let achievedWeeks = 0;
   for (const w of byWeek.keys()) if (ok(w)) achievedWeeks++;
@@ -886,7 +898,7 @@ function celebrateBirthday(userId, date = new Date()) {
 }
 
 module.exports = {
-  itemById,
+  itemById, meetingDays, addMeetingDay, removeMeetingDay, RE_DAY,
   setPlan, planOf, normVisit, lateStudents,
   HS_GRADES, isHS, hsWeeks, titleOf, TITLES, mondayOf,
   normBirthday, birthdayInfo, celebrateBirthday,

@@ -86,6 +86,7 @@ const ROOM_SEED = [
   { id: 'class2', name: '教室2', type: 'classroom', sort: 2 },
   { id: 'class3', name: '高校生自習室', type: 'study', sort: 3 }, // 教室3を高校生自習室（カフェ風）に改装
   { id: 'study', name: '自習室', type: 'study', sort: 4 },
+  { id: 'mendan', name: '面談ブース', type: 'classroom', sort: 5 }, // ロビーの面談ブース（オーナーが許可した人だけ）
 ];
 const insertRoom = db.prepare('INSERT OR IGNORE INTO rooms (id, name, type, capacity, max_capacity, sort_order) VALUES (?, ?, ?, ?, ?, ?)');
 for (const r of ROOM_SEED) {

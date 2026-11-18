@@ -92,10 +92,69 @@ function startVisit(userId, nowMs = Date.now()) {
   return { startedAt: nowMs, endsAt: nowMs + VISIT_MS, again: false };
 }
 // 保護者会：オーナーがオンにした日だけ（日がかわると自動でオフ）。保護者も中学生と同じルールで全部の教室へ
-function meetingOn(nowMs = Date.now()) { return getSetting('parent_meeting', '') === G.jst(new Date(nowMs)).day; }
-function setMeeting(on, actorId) {
-  setSetting('parent_meeting', on ? G.jst().day : '');
-  if (actorId) audit(actorId, on ? 'parent.meeting_on' : 'parent.meeting_off', null, null);
+// 保護者会の予定 { day:'YYYY-MM-DD', start:'19:00', end:'20:00' }（日本時間）。その時間だけ保護者は全部の教室へ、生徒は入室できない
+const RE_HM = /^([01]\d|2[0-3]):[0-5]\d$/;
+function getMeeting(nowMs = Date.now()) {
+  let m = null;
+  try { m = JSON.parse(getSetting('parent_meeting', 'null')); } catch (e) { m = null; }
+  if (!m || typeof m !== 'object' || !G.RE_DAY.test(m.day || '') || !RE_HM.test(m.start || '') || !RE_HM.test(m.end || '')) return null;
+  if (m.day < G.jst(new Date(nowMs)).day) return null; // 終わった日の予定は消えたことにする
+  return m;
+}
+function meetingPhase(nowMs = Date.now()) {
+  const m = getMeeting(nowMs), t = G.jst(new Date(nowMs));
+  if (!m || m.day !== t.day) return null;
+  if (t.hm >= m.start && t.hm < m.end) return 'on';
+  const soon = new Date(`${m.day}T${m.start}:00+09:00`).getTime() - 5 * 60000;
+  if (nowMs >= soon && t.hm < m.start) return 'soon';
+  return null;
+}
+function meetingOn(nowMs = Date.now()) { return meetingPhase(nowMs) === 'on'; }
+function setMeeting(v, actorId) {
+  const old = getMeeting();
+  if (!v) {
+    // 始まる前に取り消したら、その日は🔥を守る日からも外す
+    if (old && !meetingOn() && (old.day > G.jst().day || G.jst().hm < old.start)) G.removeMeetingDay(old.day);
+    setSetting('parent_meeting', 'null');
+    if (actorId) audit(actorId, 'parent.meeting_off', null, null);
+    return { ok: true, meeting: null };
+  }
+  const day = String(v.day || ''), start = String(v.start || ''), end = String(v.end || '');
+  if (!G.RE_DAY.test(day) || day < G.jst().day) return { error: '日にちは今日より後にしてください' };
+  if (!RE_HM.test(start) || !RE_HM.test(end) || start >= end) return { error: '時刻は「はじまり」より「おわり」をあとにしてください' };
+  if (old && old.day !== day) G.removeMeetingDay(old.day);
+  setSetting('parent_meeting', JSON.stringify({ day, start, end }));
+  G.addMeetingDay(day);
+  if (actorId) audit(actorId, 'parent.meeting_on', null, { day, start, end });
+  return { ok: true, meeting: { day, start, end } };
+}
+// 保護者会を今すぐおわる（その日の🔥を守る日はそのまま）
+function endMeetingNow(actorId) {
+  const m = getMeeting();
+  if (!m) return;
+  const t = G.jst();
+  if (m.day === t.day && t.hm >= m.start) setSetting('parent_meeting', JSON.stringify({ ...m, end: t.hm > m.start ? t.hm : m.start }));
+  else return setMeeting(null, actorId);
+  if (actorId) audit(actorId, 'parent.meeting_off', null, null);
+}
+
+// ───────── 面談ブース：オーナーが許可した保護者・生徒だけ（許可はその日だけ） ─────────
+db.exec(`CREATE TABLE IF NOT EXISTS mendan_allow (user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, day TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (user_id, day))`);
+function mendanAllowed(userId, nowMs = Date.now()) {
+  return !!db.prepare('SELECT 1 FROM mendan_allow WHERE user_id = ? AND day = ?').get(userId, G.jst(new Date(nowMs)).day);
+}
+function allowMendan(userId, on, actorId) {
+  const u = db.prepare("SELECT id, role FROM users WHERE id = ? AND role IN ('student', 'parent')").get(userId);
+  if (!u) return { error: '生徒か保護者をえらんでください' };
+  const day = G.jst().day;
+  if (on) db.prepare('INSERT OR IGNORE INTO mendan_allow (user_id, day, created_at) VALUES (?, ?, ?)').run(userId, day, now());
+  else db.prepare('DELETE FROM mendan_allow WHERE user_id = ? AND day = ?').run(userId, day);
+  if (actorId) audit(actorId, on ? 'mendan.allowed' : 'mendan.removed', String(userId), null);
+  return { ok: true };
+}
+function mendanList() {
+  return db.prepare(`SELECT u.id, u.display_name AS name, u.role, u.grade FROM mendan_allow m JOIN users u ON u.id = m.user_id WHERE m.day = ? ORDER BY u.role, u.display_name`).all(G.jst().day)
+    .map(r => ({ ...r, children: r.role === 'parent' ? childrenOf(r.id).map(k => k.name) : [] }));
 }
 // 保護者会の日：来たことだけ記録する（10分・1日1回の制限はなし）
 function recordVisit(userId, nowMs = Date.now()) {
@@ -223,6 +282,6 @@ function momsTree(date = new Date()) {
 
 module.exports = {
   VISIT_MS, SUBJECTS, STAMPS, createInvite, inviteStudent, useInvite, childrenOf, parentsOf, unlink, childIds, normCode,
-  startVisit, visitEndsAt, meetingOn, setMeeting, recordVisit, visitsOn, visitStreak, subjectOf, todayQuiz, answerQuiz, quizPoints, addQuestions, listQuestions, deleteQuestion,
+  startVisit, visitEndsAt, meetingOn, meetingPhase, getMeeting, setMeeting, endMeetingNow, mendanAllowed, allowMendan, mendanList, recordVisit, visitsOn, visitStreak, subjectOf, todayQuiz, answerQuiz, quizPoints, addQuestions, listQuestions, deleteQuestion,
   sendCheer, cheersSentToday, takeCheers, momsTree,
 };

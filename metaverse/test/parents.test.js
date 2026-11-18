@@ -26,9 +26,10 @@ function connect(cookie) {
     sockets.push(s);
     const c = { s, me: null, init: null, events: [], rejected: [] };
     s.onAny((ev, d) => c.events.push({ ev, d }));
-    s.on('move-rejected', (d) => c.rejected.push(d && d.reason));
+    s.on('move-rejected', (d) => { c.rejected.push(d && d.reason); if (d && c.me) { c.me.x = d.x; c.me.y = d.y; } });
     s.on('init', (d) => { c.me = d.me; c.init = d; resolve(c); });
     s.on('visit-over', () => resolve(c));
+    s.on('meeting-closed', () => resolve(c));
     s.on('connect_error', reject);
   });
 }
@@ -36,7 +37,7 @@ async function walk(c, tx, ty) {
   const path = SM.findPath(Math.floor(c.me.x / T), Math.floor(c.me.y / T), tx, ty);
   if (!path) return false;
   const before = c.rejected.length;
-  for (const st of path) { const p = SM.tileCenter(st.x, st.y); c.s.emit('move', { x: p.x, y: p.y, dir: 'up' }); await sleep(20); c.me.x = p.x; c.me.y = p.y; }
+  for (const st of path) { const p = SM.tileCenter(st.x, st.y); c.s.emit('move', { x: p.x, y: p.y, dir: 'up' }); await sleep(30); c.me.x = p.x; c.me.y = p.y; }
   await sleep(100);
   return c.rejected.length === before;
 }
@@ -166,7 +167,7 @@ test('オーナーは今日来た保護者がわかる（オーナーだけ）',
   const names = r.data.visits.map(v => v.name);
   assert.ok(names.includes('キッドの母') && names.includes('アザーの母'), names.join());
   assert.deepEqual(r.data.visits.find(v => v.name === 'キッドの母').children, ['kidくん']);
-  assert.equal(r.data.meeting, false);
+  assert.equal(r.data.meeting, null);
   assert.equal((await http('GET', '/api/admin/parents/today', null, U.kid.cookie)).status, 403);
 });
 
@@ -182,29 +183,80 @@ test('10分（テストでは1.5秒）で自動退室・その日はもう入れ
   assert.equal(P.visitStreak(U.mama.id), 2);
 });
 
-test('保護者会：オンの日は中学生と同じルールで教室へ・時間制限なし・オフで退室', async () => {
+const G = require('../server/ganbari.js');
+const hmPlus = (min) => { const d = new Date(Date.now() + 9 * 3600000 + min * 60000); return d.toISOString().slice(11, 16); };
+
+test('ロビーのソファに生徒はすわれない', async () => {
+  const c = U.kid.c2 || (U.kid.c2 = await connect(U.kid.cookie));
+  const [sx, sy] = SM.SOFAS[2].seats[0];
+  await walk(c, sx, sy + 1);
+  await walk(c, sx, sy);
+  const r = await ask(c, 'sit', SM.seatId(sx, sy));
+  assert.equal(r.ok, false);
+  assert.match(r.error, /ソファ/);
+});
+
+test('面談ブース：オーナーが許可した人だけ（今日だけ）・許可された保護者は10分の制限なし', async () => {
+  const c = U.kid.c2;
+  const [dx, dy] = [SM.ENTRY.mendan.x, SM.ENTRY.mendan.y];
+  assert.equal(await walk(c, dx, dy), false); // 許可がないと入れない
+  { const o = require('../server/realtime.js')._online.get(U.kid.id); c.me.x = o.x; c.me.y = o.y; }
+  assert.equal((await http('POST', `/api/admin/mendan/${U.kid.id}`, { allow: true }, U.kid.cookie)).status, 403);
+  const r = await http('POST', `/api/admin/mendan/${U.kid.id}`, { allow: true }, owner);
+  assert.equal(r.status, 200);
+  assert.ok(r.data.allowed.some(u => u.id === U.kid.id));
+  await sleep(100);
+  assert.ok(c.events.some(e => e.ev === 'mendan' && e.d.allowed));
+  assert.ok(await walk(c, dx, dy), c.rejected.join());
+  { const o = require('../server/realtime.js')._online.get(U.kid.id); assert.equal(o.room, 'mendan', JSON.stringify([o.x / 32, o.y / 32, c.me.x / 32, c.me.y / 32, c.rejected])); }
+  // 許可を外すとロビーへもどされる
+  await http('POST', `/api/admin/mendan/${U.kid.id}`, { allow: false }, owner);
+  await sleep(150);
+  assert.ok(c.events.some(e => e.ev === 'force-move'));
+  // 10分をすぎた保護者も、面談の許可があれば入れて、ブースに入れる
+  await http('POST', `/api/admin/mendan/${U.mama.id}`, { allow: true }, owner);
+  const m = await connect(U.mama.cookie);
+  assert.ok(m.init && m.init.visit.mendan, m.events.map(e => e.ev).join());
+  assert.ok(await walk(m, dx, dy), m.rejected.join());
+  await http('POST', `/api/admin/mendan/${U.mama.id}`, { allow: false }, owner);
+  m.s.disconnect();
+});
+
+test('保護者会：時間中は保護者も教室へ・生徒は入れない・🔥はとぎれない', async () => {
   const z = SM.ZONES.find(v => v.id === 'study');
-  assert.equal((await http('POST', '/api/admin/parent-meeting', { on: true }, U.kid.cookie)).status, 403);
-  assert.equal((await http('POST', '/api/admin/parent-meeting', { on: true }, owner)).status, 200);
-  // 10分をすぎた日でも、保護者会の日は入れる
+  const body = { day: G.jst().day, start: hmPlus(0), end: hmPlus(60) };
+  assert.equal((await http('POST', '/api/admin/parent-meeting', body, U.kid.cookie)).status, 403);
+  assert.equal((await http('POST', '/api/admin/parent-meeting', { ...body, start: '20:00', end: '19:00' }, owner)).status, 400);
+  const r = await http('POST', '/api/admin/parent-meeting', body, owner);
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.meetingOn, true);
+  await sleep(200);
+  // 入室中の生徒は退室・新しく入ろうとしても入れない
+  assert.ok(U.other.c.events.some(e => e.ev === 'meeting-closed'));
+  const st = await connect(U.other.cookie);
+  assert.equal(st.init, null);
+  assert.match(st.events.find(e => e.ev === 'meeting-closed').d.message, /保護者会です。.*から入れます/);
+  assert.ok((await http('GET', '/api/me', null, U.other.cookie)).data.closed);
+  // 10分をすぎた日でも、保護者会の時間は入れる
   const c = await connect(U.mama2.cookie);
   assert.ok(c.init && c.init.visit.meeting, c.events.map(e => e.ev).join());
-  const ok = await walk(c, z.x1 + 1, z.y1 + 1);
-  assert.ok(ok, c.rejected.join());
-  // 高校生自習室は中学生と同じで入れない
+  assert.ok(await walk(c, z.x1 + 1, z.y1 + 1), c.rejected.join());
   const P2 = require('../server/permissions.js');
   assert.equal(P2.canEnterRoom({ role: 'parent' }, { id: 'class3', type: 'study' }), false);
   assert.equal(P2.canEnterRoom({ role: 'parent' }, { id: 'class1', type: 'study' }), true);
   assert.equal(P2.canEnterRoom({ role: 'parent' }, { id: 'class2', type: 'classroom' }), true);
-  // 自習室では、先生がいないとスタンプは出せない（生徒と同じ）
-  const before = U.other.c.events.filter(e => e.ev === 'reaction').length;
-  c.s.emit('reaction', '👋'); await sleep(150);
-  assert.equal(U.other.c.events.filter(e => e.ev === 'reaction').length, before);
   await sleep(2500); // 1.5秒をすぎても退室しない
   assert.ok(!c.events.some(e => e.ev === 'kicked'));
-  assert.equal((await http('POST', '/api/admin/parent-meeting', { on: false }, owner)).status, 200);
-  await sleep(200);
+  // 🔥：保護者会の日（今日）は、自習できなくてもとぎれない
+  const D = require('../server/db.js').db, today = G.jst().day;
+  D.prepare('INSERT OR REPLACE INTO study_days (user_id, day, auto_min) VALUES (?, ?, ?)').run(U.other.id, G.addDays(today, -1), 120);
+  D.prepare('INSERT OR REPLACE INTO study_days (user_id, day, auto_min) VALUES (?, ?, ?)').run(U.other.id, G.addDays(today, -2), 120);
+  assert.equal(G.streak(U.other.id, new Date(Date.now() + 86400000)), 2); // あした見ても2日（今日でとぎれない）
+  // いますぐおわる → 保護者は退室
+  assert.equal((await http('POST', '/api/admin/parent-meeting', { cancel: true }, owner)).status, 200);
+  await sleep(300);
   const k = c.events.find(e => e.ev === 'kicked');
   assert.match(k.d.reason, /保護者会/);
+  assert.ok(G.meetingDays().has(today)); // 始まったあとにおわったので、🔥を守る日はそのまま
+  assert.ok((await connect(U.other.cookie)).init); // 生徒はまた入れる
 });
-
