@@ -47,6 +47,25 @@ test('自習時間：条件を満たす生徒だけ1分ずつ数える', () => {
   assert.equal(G.dayTotal(U.a1.id, day), 1);
 });
 
+test('勉強時間（全部）：ポイントの時間帯の外・上限のあとも数えて表示・🔥に使う（ポイントにはならない）', () => {
+  const day = G.addDays(T2(), 40);
+  assert.equal(G.setConfig({ window: { start: '18:00', end: '22:00' }, dailyCap: 10 }), null);
+  const o = new Map([[1, fake(U.b1)]]);
+  const r = G.tick(o, { date: at(day, '07:00') });
+  assert.deepEqual(r, [], 'ポイントにはならない');
+  assert.deepEqual(r.counted, [U.b1.id], '勉強時間には数える');
+  for (let m = 0; m < 12; m++) G.tick(o, { date: at(day, `19:${String(m).padStart(2, '0')}`) });
+  assert.equal(G.dayTotal(U.b1.id, day), 10, 'ポイントになる時間は上限まで');
+  assert.equal(G.dayAll(U.b1.id, day), 13, '全部の時間は 朝1分＋夜12分');
+  // 🔥：最低時間（中2は60分）を、時間帯の外の自習で満たしても続く
+  const d1 = G.addDays(day, 1), d2 = G.addDays(day, 2);
+  for (const d of [d1, d2]) for (let m = 0; m < 60; m++) G.tick(o, { date: at(d, `06:${String(m).padStart(2, '0')}`) });
+  assert.equal(G.dayTotal(U.b1.id, d1), 0);
+  assert.equal(G.streak(U.b1.id, at(d2, '23:00')), 2);
+  // 前の設定にもどす
+  db.prepare('DELETE FROM study_days WHERE user_id = ? AND day >= ?').run(U.b1.id, day);
+});
+
 test('自習時間：数える時間帯・1日の上限・カメラの条件はオーナーが決められる', () => {
   const day = T2();
   assert.equal(G.setConfig({ window: { start: '18:00', end: '22:00' }, dailyCap: 10, requireCamera: true }), null);

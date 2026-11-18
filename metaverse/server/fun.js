@@ -33,7 +33,7 @@ function santaStatus(userId, date = new Date()) {
   const inGift = m >= '12-01' && m <= '12-07';
   if (!inCount && !inGift) return null;
   const year = t.year;
-  const rows = db.prepare('SELECT day, COALESCE(manual_min, auto_min) AS m FROM study_days WHERE user_id = ? AND day >= ? AND day <= ?').all(userId, `${year}-11-01`, `${year}-11-30`);
+  const rows = db.prepare('SELECT day, MAX(all_min, COALESCE(manual_min, auto_min)) AS m FROM study_days WHERE user_id = ? AND day >= ? AND day <= ?').all(userId, `${year}-11-01`, `${year}-11-30`);
   const min = G.streakMinFor(userId); // 中1 45分・中2 60分・中3 90分 など
   const okDays = new Set(rows.filter(r => r.m >= min).map(r => r.day));
   for (const d of G.meetingDays()) if (d >= `${year}-11-01` && d <= `${year}-11-30` && d <= t.day) okDays.add(d); // 保護者会の日は1日に数える

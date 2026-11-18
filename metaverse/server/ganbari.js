@@ -384,7 +384,24 @@ function allTerms(c = getConfig()) {
 }
 
 // ───────── 自習時間 ─────────
+// ポイントになる時間（時間帯の中・1日の上限まで）
 const totalExpr = 'COALESCE(manual_min, auto_min)';
+// 勉強時間（全部）：時間帯の外・上限をこえた分もふくむ。🔥・がんばりサンタ・表示・保護者の画面に使う
+const allExpr = 'MAX(all_min, COALESCE(manual_min, auto_min))';
+{ // 「勉強時間（全部）」の列を足す（1回だけ）
+  const cols = db.prepare('PRAGMA table_info(study_days)').all().map(c => c.name);
+  if (!cols.includes('all_min')) db.exec('ALTER TABLE study_days ADD COLUMN all_min INTEGER NOT NULL DEFAULT 0');
+}
+function dayAll(userId, day) {
+  const r = db.prepare(`SELECT ${allExpr} AS m FROM study_days WHERE user_id = ? AND day = ?`).get(userId, day);
+  return r ? r.m : 0;
+}
+function allBetween(userId, from, to) {
+  return db.prepare(`SELECT COALESCE(SUM(${allExpr}), 0) AS m FROM study_days WHERE user_id = ? AND day BETWEEN ? AND ?`).get(userId, from, to).m;
+}
+// 1分を記録する。point=true ならポイントになる時間にも足す（勉強時間（全部）はいつも足す）
+const upMinute = () => db.prepare(`INSERT INTO study_days (user_id, day, auto_min, all_min) VALUES (?, ?, ?, 1)
+  ON CONFLICT(user_id, day) DO UPDATE SET all_min = MAX(all_min, auto_min) + 1, auto_min = auto_min + excluded.auto_min`);
 function dayTotal(userId, day) {
   const r = db.prepare(`SELECT ${totalExpr} AS m FROM study_days WHERE user_id = ? AND day = ?`).get(userId, day);
   return r ? r.m : 0;
@@ -393,7 +410,7 @@ function minutesBetween(userId, from, to) {
   return db.prepare(`SELECT COALESCE(SUM(${totalExpr}), 0) AS m FROM study_days WHERE user_id = ? AND day BETWEEN ? AND ?`).get(userId, from, to).m;
 }
 function daysBetween(userId, from, to) {
-  return db.prepare(`SELECT day, auto_min AS auto, manual_min AS manual, ${totalExpr} AS total FROM study_days WHERE user_id = ? AND day BETWEEN ? AND ? ORDER BY day`).all(userId, from, to);
+  return db.prepare(`SELECT day, auto_min AS auto, manual_min AS manual, ${totalExpr} AS total, ${allExpr} AS "all" FROM study_days WHERE user_id = ? AND day BETWEEN ? AND ? ORDER BY day`).all(userId, from, to);
 }
 function setManual(userId, day, minutes, actorId) {
   if (!RE_DAY.test(day)) return '日付が正しくありません';
@@ -415,10 +432,9 @@ function tick(online, opt = {}) {
   const t = jst(opt.date || new Date());
   const rules = { jh: ruleFor(t.day, c), hs: ruleFor(t.day, c, 'hs') };
   const open = (r) => r.on && r.windows.some(w => t.hm >= w.start && t.hm < w.end);
-  if (!open(rules.jh) && !open(rules.hs)) return [];
-  const added = [];
-  const up = db.prepare(`INSERT INTO study_days (user_id, day, auto_min) VALUES (?, ?, 1)
-    ON CONFLICT(user_id, day) DO UPDATE SET auto_min = auto_min + 1`);
+  const added = []; // ポイントになる時間に足した生徒
+  Object.defineProperty(added, 'counted', { value: [], enumerable: false }); // 勉強時間（全部）に足した生徒（時間帯の外もふくむ）
+  const up = upMinute();
   db.exec('BEGIN');
   try {
     for (const p of online.values()) {
@@ -426,10 +442,10 @@ function tick(online, opt = {}) {
       if (c.requireSeat && !p.seat) continue;
       if (c.requireCamera && opt.photosOn && !p.studyCam) continue;
       const r = rules[isHS(p.user.grade) ? 'hs' : 'jh'];
-      if (!open(r)) continue;
-      if (dayTotal(p.id, t.day) >= r.cap) continue;
-      up.run(p.id, t.day);
-      added.push(p.id);
+      const point = open(r) && dayTotal(p.id, t.day) < r.cap;
+      up.run(p.id, t.day, point ? 1 : 0);
+      added.counted.push(p.id);
+      if (point) added.push(p.id);
     }
     db.exec('COMMIT');
   } catch (e) { db.exec('ROLLBACK'); throw e; }
@@ -445,18 +461,16 @@ function creditGap(userId, fromMs, toMs, maxMin = 5) {
   const c = getConfig();
   const n = Math.min(maxMin, Math.floor((toMs - fromMs) / 60_000));
   if (n <= 0) return 0;
-  const up = db.prepare(`INSERT INTO study_days (user_id, day, auto_min) VALUES (?, ?, 1)
-    ON CONFLICT(user_id, day) DO UPDATE SET auto_min = auto_min + 1`);
+  const up = upMinute();
   let added = 0;
   const u = db.prepare('SELECT grade FROM users WHERE id = ?').get(userId);
   const group = u && isHS(u.grade) ? 'hs' : null;
   for (let i = 1; i <= n; i++) {
     const t = jst(new Date(fromMs + i * 60_000));
     const r = ruleFor(t.day, c, group);
-    if (!r.on || !r.windows.some(w => t.hm >= w.start && t.hm < w.end)) continue;
-    if (dayTotal(userId, t.day) >= r.cap) continue;
-    up.run(userId, t.day);
-    added++;
+    const point = r.on && r.windows.some(w => t.hm >= w.start && t.hm < w.end) && dayTotal(userId, t.day) < r.cap;
+    up.run(userId, t.day, point ? 1 : 0); // 勉強時間（全部）はいつも足す
+    if (point) added++;
   }
   return added;
 }
@@ -474,7 +488,7 @@ function streak(userId, date = new Date()) {
   if (gu && isHS(gu.grade)) return hsWeeks(userId, date, c).streak; // 高校生は「週」で数える
   const min = streakMinFor(userId, c);
   const today = jst(date).day;
-  const rows = db.prepare(`SELECT day, ${totalExpr} AS m FROM study_days WHERE user_id = ? AND day <= ? AND day >= ? ORDER BY day DESC`)
+  const rows = db.prepare(`SELECT day, ${allExpr} AS m FROM study_days WHERE user_id = ? AND day <= ? AND day >= ? ORDER BY day DESC`)
     .all(userId, today, addDays(today, -400));
   const ok = new Set(rows.filter(r => r.m >= min).map(r => r.day));
   // 数えない曜日（お休みの曜日）は、とばしてつなげる。その日に自習していれば1日に数える
@@ -786,7 +800,7 @@ const mondayOf = (day) => addDays(day, -((weekdayOf(day) + 6) % 7));
  */
 function hsWeeks(userId, date = new Date(), c = getConfig()) {
   const hs = c.hs, today = jst(date).day, mon = mondayOf(today);
-  const rows = db.prepare(`SELECT day, ${totalExpr} AS m FROM study_days WHERE user_id = ? AND day >= ? AND day <= ?`).all(userId, mondayOf(c.pointsFrom), today);
+  const rows = db.prepare(`SELECT day, ${allExpr} AS m FROM study_days WHERE user_id = ? AND day >= ? AND day <= ?`).all(userId, mondayOf(c.pointsFrom), today); // 🔥（週）は勉強時間（全部）で数える
   const byWeek = new Map(); // 月曜日 -> { sessions, minutes }
   for (const r of rows) {
     const w = mondayOf(r.day), v = byWeek.get(w) || { sessions: 0, minutes: 0 };
@@ -806,7 +820,7 @@ function hsWeeks(userId, date = new Date(), c = getConfig()) {
   let streak = 0;
   for (let w = ok(mon) ? mon : addDays(mon, -7), i = 0; i < 300 && ok(w); i++, w = addDays(w, -7)) streak++;
   const cur = byWeek.get(mon) || { sessions: 0, minutes: 0 };
-  const todayMin = dayTotal(userId, today);
+  const todayMin = dayAll(userId, today);
   return {
     week: { start: mon, sessions: cur.sessions, need: hs.sessionsPerWeek, minutes: cur.minutes, needMinutes: hs.sessionsPerWeek * hs.sessionMinutes, achieved: cur.sessions >= hs.sessionsPerWeek },
     today: { minutes: todayMin, sessionMinutes: hs.sessionMinutes, done: todayMin >= hs.sessionMinutes },
@@ -906,7 +920,7 @@ module.exports = {
   streakMinFor,
   ruleFor, WEEKDAYS,
   SLOTS, EVENTS, currentEvent, dressupOpen, dressupInfo,
-  GRADES, STAGE_NAMES, SHOP, jst, addDays, getConfig, setConfig, termOf, allTerms, dayTotal, minutesBetween, daysBetween, setManual, tick,
+  GRADES, STAGE_NAMES, SHOP, jst, addDays, getConfig, setConfig, termOf, allTerms, dayTotal, dayAll, allBetween, minutesBetween, daysBetween, setManual, tick,
   streak, points, owned, getEquip, buy, equip, shopFor, setGoal, goalOf, listGoals, reviewGoal, forest, studentSummary, newYear,
   createReport, reportData,
 };

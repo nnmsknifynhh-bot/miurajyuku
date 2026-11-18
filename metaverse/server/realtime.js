@@ -348,7 +348,7 @@ function attach(httpServer) {
     p.equip = ganbari.getEquip(p.id);
     p.streak = user.role === 'student' ? ganbari.streak(p.id) : user.role === 'parent' ? parents.visitStreak(p.id) : 0;
     if (visit) { p.visitEndsAt = visit.endsAt; p.childIds = parents.childIds(p.id); }
-    p.today10 = user.role === 'student' ? shownToday(ganbari.dayTotal(p.id, ganbari.jst().day)) : null;
+    p.today10 = user.role === 'student' ? shownToday(ganbari.dayAll(p.id, ganbari.jst().day)) : null;
     p.bday = user.role === 'student' ? ganbari.birthdayInfo(p.id) : null;
     refreshHS(p, false);
     p.room = roomIdAt(p.x, p.y);
@@ -363,7 +363,7 @@ function attach(httpServer) {
         if (Math.hypot(c.x - p.x, c.y - p.y) <= 8) { p.seat = gap.seat; p.x = c.x; p.y = c.y; p.dir = SM.seatFacing(sx, sy); }
       }
       try { gapMinutes = ganbari.creditGap(p.id, gap.at, Date.now(), Math.floor(STUDY_GAP_MS / 60_000)); } catch (e) { console.error('切れていた間の自習時間を足せませんでした:', e.message); }
-      if (gapMinutes) { p.streak = ganbari.streak(p.id); p.today10 = shownToday(ganbari.dayTotal(p.id, ganbari.jst().day)); }
+      if (gapMinutes) { p.streak = ganbari.streak(p.id); p.today10 = shownToday(ganbari.dayAll(p.id, ganbari.jst().day)); }
     }
     // 授業中の先生が再接続したら、授業の自動終了を取り消す
     const myClass = p.room && classes.get(p.room);
@@ -823,7 +823,7 @@ function attach(httpServer) {
       const open = ganbari.dressupOpen();
       if (open !== dressupWasOpen) { dressupWasOpen = open; refreshAllGanbari(); }
       const added = ganbari.tick(online, { photosOn: studyPhotosEnabled() });
-      for (const id of added) {
+      for (const id of added.counted) { // 時間帯の外の自習も、🔥と今日の時間は進む
         const p = online.get(id);
         if (!p) continue;
         const s = ganbari.streak(id);
@@ -960,7 +960,7 @@ function shownToday(m) {
 // 今日の自習時間（表示用に丸めたもの）を更新して、変わったら全員に知らせる
 function updateToday(p) {
   if (p.user.role !== 'student') return;
-  const v = shownToday(ganbari.dayTotal(p.id, ganbari.jst().day));
+  const v = shownToday(ganbari.dayAll(p.id, ganbari.jst().day));
   if (v === p.today10) return;
   p.today10 = v;
   if (io) io.emit('user-updated', { id: p.id, today: v });

@@ -175,7 +175,7 @@ app.get('/api/me/ganbari', auth.requireAuth, (req, res) => {
   const term = ganbari.termOf(today, c);
   const u = req.user;
   res.json({
-    grade: u.grade || null, todayMinutes: ganbari.dayTotal(u.id, today),
+    grade: u.grade || null, todayMinutes: ganbari.dayTotal(u.id, today), todayAll: ganbari.dayAll(u.id, today),
     termMinutes: term ? ganbari.minutesBetween(u.id, term.start, term.end) : 0, term,
     points: ganbari.points(u.id), streak: u.role === 'parent' ? parents.visitStreak(u.id) : ganbari.streak(u.id), equip: ganbari.getEquip(u.id),
     shop: ganbari.shopFor(u.id), goal: term ? ganbari.goalOf(u.id, term.key) : null,
@@ -254,10 +254,10 @@ app.get('/api/parent/home', auth.requireAuth, requireParent, (req, res) => {
   const term = ganbari.termOf(today);
   const kids = parents.childrenOf(req.user.id).map(k => {
     const p = realtime._online.get(k.id);
-    let week = 0; for (let i = 0; i < 7; i++) { const d = ganbari.addDays(mon, i); if (d > today) break; week += ganbari.dayTotal(k.id, d); }
+    let week = 0; for (let i = 0; i < 7; i++) { const d = ganbari.addDays(mon, i); if (d > today) break; week += ganbari.dayAll(k.id, d); }
     const goal = term ? ganbari.goalOf(k.id, term.key) : null;
     return {
-      ...k, today: ganbari.dayTotal(k.id, today), week, streak: ganbari.streak(k.id), hs: ganbari.isHS(k.grade),
+      ...k, today: ganbari.dayAll(k.id, today), week, streak: ganbari.streak(k.id), hs: ganbari.isHS(k.grade),
       studying: !!(p && SchoolMap.isStudyRoom(p.room) && !p.away), online: !!p,
       goal: goal && goal.status === 'approved' ? { text: goal.text, achieved: !!goal.achieved } : null, cheered: sent.has(k.id),
     };
