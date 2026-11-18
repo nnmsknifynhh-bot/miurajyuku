@@ -30,6 +30,18 @@
         <p class="error" id="login-error" role="alert"></p>
         <button class="btn big" type="submit">ログイン</button>
         <p class="help">IDやパスワードがわからないときは、塾の先生に聞いてね。</p>
+        <p class="help"><a href="#parent" id="to-parent">👪 保護者の方で、はじめて登録する方はこちら</a></p>
+      </form>
+
+      <form id="parent-form" hidden>
+        <div class="notice"><b>👪 保護者の方の登録</b><br>塾からお渡しした「招待コード」を入れて、ログインIDとパスワードをご自分で決めてください。次からはそのID・パスワードでログインできます。</div>
+        <label class="field">招待コード<input id="parent-code" autocapitalize="characters" spellcheck="false" required placeholder="例：K7PX-29QM"></label>
+        <label class="field">お名前（保護者どうしで表示されます）<input id="parent-name" maxlength="20" required placeholder="例：三浦（母）"></label>
+        <label class="field">ログインID<input id="parent-id" autocapitalize="off" spellcheck="false" required pattern="[a-zA-Z0-9_.\-]{3,32}"><small>半角英数字と _ . - の3〜32文字</small></label>
+        <label class="field">パスワード<input id="parent-pw" type="password" autocomplete="new-password" minlength="8" required><small>8文字以上</small></label>
+        <p class="error" id="parent-error" role="alert"></p>
+        <button class="btn big" type="submit">登録してはじめる</button>
+        <p class="help"><a href="#" id="to-login">← ログインにもどる</a></p>
       </form>
 
       <form id="setup-form" hidden>

@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS users (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   login_id      TEXT NOT NULL UNIQUE COLLATE NOCASE,
   display_name  TEXT NOT NULL,
-  role          TEXT NOT NULL CHECK (role IN ('owner','teacher','student')),
+  role          TEXT NOT NULL CHECK (role IN ('owner','teacher','student','parent')),
   password_hash TEXT NOT NULL,
   avatar_color  TEXT NOT NULL DEFAULT '#64b5f6',
   is_active     INTEGER NOT NULL DEFAULT 1,

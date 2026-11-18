@@ -13,7 +13,8 @@
   };
   const canvas = $('#world'), ctx = canvas.getContext('2d');
   let mapCanvas = null;
-  const isStaff = () => state.user && state.user.role !== 'student';
+  const isStaff = () => !!(state.user && (state.user.role === 'owner' || state.user.role === 'teacher'));
+  const isParent = () => !!(state.user && state.user.role === 'parent');
 
   // ───────── 起動 ─────────
   (async function init() {
@@ -23,7 +24,7 @@
     $('#me-dot').style.background = u.avatarColor;
     $('#me-role').textContent = ROLE_LABEL[u.role];
     $('#me-role').className = 'badge ' + u.role;
-    document.body.classList.add(u.role === 'student' ? 'is-student' : 'is-staff');
+    document.body.classList.add(u.role === 'student' ? 'is-student' : u.role === 'parent' ? 'is-parent' : 'is-staff');
     mapCanvas = window.Render.buildMap();
     state.zoom = autoZoom();
     if (matchMedia('(pointer: coarse)').matches) $('#joystick').hidden = false;
@@ -166,6 +167,15 @@
       state.testQueue = d.testQueue || null;
       { const mine = state.testQueue && state.testQueue.booths.find(b => b.userId === d.me.id); state.testBooth = mine ? mine.seat : null; }
       buildReactions(); updateAll(); refreshWeek(true); refreshFun(true); renderTest();
+      if (isParent()) parentInit(d.visit);
+    });
+    // ── 保護者 ──
+    socket.on('visit-over', ({ message }) => showVisitOver(message));
+    socket.on('moms-updated', (m) => { if (state.gb && state.gb.forest) state.gb.forest.moms = m; });
+    // 生徒：おうちの人からの「見たよ」スタンプ（次に入ったとき1回だけ）
+    socket.on('cheer', ({ stamps }) => {
+      const show = (i) => { if (i >= stamps.length) return; toast(`🏠 おうちの人から：${stamps[i]}`, 7000); chime(0.15); setTimeout(() => show(i + 1), 7200); };
+      setTimeout(() => show(0), 1500);
     });
     socket.on('class-state', (c) => { state.classes = c; state.call.sync(); });
     socket.on('class-ended', ({ room, reason }) => {
@@ -211,6 +221,7 @@
     socket.on('kicked', ({ reason }) => {
       state.ready = false;
       state.call.leave(); state.pc.leave(); state.sc.stop();
+      if (isParent()) { showVisitOver(reason); return; }
       alert(reason || '接続が切断されました');
       location.replace('/');
     });
@@ -286,9 +297,11 @@
       Object.assign(state.me, { x: res.x, y: res.y, dir: res.dir, seat: SM.seatId(tx, ty), moving: false });
       state.lastSentKey = Math.round(res.x) + ',' + Math.round(res.y) + ',' + res.dir + ',false';
       updateAll();
+      if (isParent()) parentSeated();
     });
   }
   function standUp() {
+    if (state.overview) { state.overview = false; state.zoom = autoZoom(); }
     if (!state.me.seat) return;
     state.me.seat = null;
     state.socket.emit('stand');
@@ -348,6 +361,162 @@
     }
     if (!$('#seat-dialog').open) $('#seat-dialog').showModal();
   }
+  // ───────── 保護者：ロビーのソファ・見わたし・毎日5問・わが子 ─────────
+  let visitTimer = null, visitEndsAt = 0;
+  function parentInit(visit) {
+    if (visit && visit.endsAt) visitEndsAt = visit.endsAt;
+    clearInterval(visitTimer);
+    const tick = () => {
+      const left = Math.max(0, visitEndsAt - Date.now()), m = Math.floor(left / 60000), s = Math.floor(left / 1000) % 60;
+      const chip = $('#visit-chip'); chip.hidden = !visitEndsAt;
+      chip.textContent = `⏳ のこり ${m}:${String(s).padStart(2, '0')}・🔥${(state.me && state.me.streak) || 1}日目`;
+      chip.classList.toggle('warn', left < 60000);
+    };
+    tick(); visitTimer = setInterval(tick, 1000);
+    refreshPquizLabel();
+    if (visit && visit.again) toast('おかえりなさい。今日の訪問の残り時間からつづきます', 4000);
+    else toast('ようこそ！ 保護者の方はロビーで過ごします（1日1回・10分）', 4500);
+    if (!state.me.seat) setTimeout(openSofaPicker, 400); else parentSeated();
+  }
+  function openSofaPicker() {
+    const map = $('#sofa-map'); map.textContent = '';
+    const occ = occupiedSeats();
+    for (const sofa of SM.SOFAS) {
+      const box = el('div', 'seat-side'), grid = el('div', 'seat-grid');
+      grid.style.gridTemplateColumns = `repeat(${sofa.seats.length}, minmax(0, 44px))`;
+      for (const [x, y] of sofa.seats) {
+        const taken = occ.has(SM.seatId(x, y)), b = el('button', null, taken ? '👤' : '🛋');
+        b.type = 'button'; b.disabled = taken; b.title = taken ? 'ほかの方がすわっています' : 'ここにすわる';
+        b.onclick = () => { $('#sofa-dialog').close(); walkTo(x, y, true); };
+        grid.append(b);
+      }
+      box.append(el('b', null, sofa.name), grid); map.append(box);
+    }
+    if (!$('#sofa-dialog').open) $('#sofa-dialog').showModal();
+  }
+  let pquizAuto = false;
+  function parentSeated() {
+    state.overview = true;
+    // 塾全体が入る大きさ（スマホのたて画面では高さに合わせ、横は指でずらして見る）
+    const fitW = innerWidth / (SM.W * T), fitH = (innerHeight - 200) / (SM.H * T);
+    state.zoom = clampZoom(Math.min(fitH, fitW * 2.2));
+    state.view = { x: state.me.x, y: SM.H * T / 2 };
+    toast('塾の中全体を見わたせます。指でずらす・2本指でひろげると近くが見られます', 5000);
+    if (!pquizAuto) { pquizAuto = true; setTimeout(() => openPquiz(true), 1200); }
+  }
+  function showVisitOver(message) {
+    clearInterval(visitTimer);
+    state.ready = false;
+    $('#visit-over-msg').textContent = message || '';
+    document.querySelectorAll('dialog[open]').forEach(d => d.close());
+    $('#visit-over').hidden = false;
+  }
+  $('#visit-logout').onclick = async () => { try { await api('POST', '/api/logout'); } catch (e) {} location.replace('/'); };
+
+  // 毎日5問（日替わりの教科・1問正解で1ポイント）
+  let pq = null, pqIndex = 0;
+  async function refreshPquizLabel() {
+    try {
+      pq = await api('GET', '/api/parent/quiz');
+      const left = pq.questions.filter(q => !q.done).length;
+      $('#pquiz-label').textContent = left ? `5問 あと${left}` : '5問 ✓';
+      return left;
+    } catch (e) { return 0; }
+  }
+  async function openPquiz(auto) {
+    const left = await refreshPquizLabel();
+    if (!pq) return;
+    if (!left) { if (!auto) showPquizSummary(); return; }
+    pqIndex = pq.questions.findIndex(q => !q.done);
+    showPquizQuestion();
+    if (!$('#pquiz-dialog').open) $('#pquiz-dialog').showModal();
+  }
+  function showPquizQuestion() {
+    const q = pq.questions[pqIndex];
+    $('#pquiz-subject').textContent = `今日は${pq.subject}`;
+    $('#pquiz-step').textContent = `${pqIndex + 1} / ${pq.total}問目`;
+    $('#pquiz-q').textContent = q.question;
+    $('#pquiz-result').hidden = true; $('#pquiz-next').hidden = true; $('#pquiz-close').textContent = 'あとで';
+    const box = $('#pquiz-choices'); box.textContent = '';
+    for (const c of q.choices) {
+      const b = el('button', null, c); b.type = 'button';
+      b.onclick = async () => {
+        box.querySelectorAll('button').forEach(x => { x.disabled = true; });
+        let r;
+        try { r = await api('POST', '/api/parent/quiz/answer', { qid: q.qid, choice: c }); } catch (e) { toast(e.message); return; }
+        q.done = true; q.correct = r.correct;
+        [...box.children].forEach(x => { if (x.textContent === r.answer) x.classList.add('ok'); });
+        if (!r.correct) b.classList.add('ng');
+        const res = $('#pquiz-result');
+        res.textContent = r.correct ? '🎉 正解！ +1ポイント' : `ざんねん… 正解は「${r.answer}」`;
+        res.style.color = r.correct ? 'var(--success)' : 'var(--danger)';
+        res.hidden = false;
+        const next = pq.questions.findIndex(x => !x.done);
+        const nb = $('#pquiz-next'); nb.hidden = false; nb.textContent = next >= 0 ? '次の問題へ' : '結果を見る';
+        nb.onclick = () => { if (next >= 0) { pqIndex = next; showPquizQuestion(); } else showPquizSummary(); };
+        refreshPquizLabel();
+        if (state.gb && state.gb.refresh) state.gb.refresh();
+      };
+      box.append(b);
+    }
+  }
+  function showPquizSummary() {
+    const ok = pq.questions.filter(q => q.correct).length;
+    $('#pquiz-subject').textContent = `今日は${pq.subject}`;
+    $('#pquiz-step').textContent = '';
+    $('#pquiz-q').textContent = `今日の5問はおわりです。${pq.total}問中 ${ok}問 正解（+${ok}ポイント）`;
+    $('#pquiz-choices').textContent = '';
+    const res = $('#pquiz-result'); res.hidden = false; res.style.color = ''; res.textContent = 'ポイントは「🎁 ショップ」で着せかえと交換できます。また明日、ちがう教科でお待ちしています。';
+    $('#pquiz-next').hidden = true; $('#pquiz-close').textContent = 'とじる';
+    if (!$('#pquiz-dialog').open) $('#pquiz-dialog').showModal();
+  }
+  $('#btn-pquiz').onclick = () => openPquiz(false);
+  $('#pquiz-close').onclick = () => $('#pquiz-dialog').close();
+
+  // わが子の様子と「見たよ」スタンプ
+  async function openFamily() {
+    let d;
+    try { d = await api('GET', '/api/parent/home'); } catch (e) { toast(e.message); return; }
+    const list = $('#family-list'); list.textContent = '';
+    if (!d.children.length) list.append(el('p', 'muted', 'まだお子さまがつながっていません。塾の招待コードを下から追加してください。'));
+    for (const k of d.children) {
+      const card = el('div', 'family-kid');
+      card.append(el('h3', null, `${k.name}さん ${k.studying ? '📖 いま自習中' : k.online ? '🟢 入室中' : ''}`));
+      const st = el('div', 'family-stats');
+      const stat = (label, v) => { const d = el('div', null, label); d.append(el('b', null, v)); return d; };
+      st.append(stat('今日の自習', fmtMin(k.today)), stat('今週', fmtMin(k.week)), stat('🔥 連続', `${k.streak}日`));
+      card.append(st);
+      if (k.goal) card.append(el('p', 'muted', `🎯 目標：${k.goal.text}${k.goal.achieved ? '（達成！）' : ''}`));
+      const stamps = el('div', 'family-stamps');
+      if (k.cheered) stamps.append(el('p', 'muted', '✅ 今日のスタンプは送りました。次に入室したときに表示されます'));
+      else {
+        stamps.append(el('p', 'muted', '「見たよ」スタンプを1つ選んでください（1日1回）'));
+        for (const s of d.stamps) {
+          const b = el('button', 'btn secondary small', s); b.type = 'button';
+          b.onclick = async () => {
+            stamps.querySelectorAll('button').forEach(x => { x.disabled = true; });
+            try { await api('POST', '/api/parent/cheer', { studentId: k.id, stamp: s }); toast(`🌸 送りました！「母達の木」に花が1つ咲きました`, 4500); openFamily(); }
+            catch (e) { toast(e.message); stamps.querySelectorAll('button').forEach(x => { x.disabled = false; }); }
+          };
+          stamps.append(b);
+        }
+      }
+      card.append(stamps); list.append(card);
+    }
+    const m = d.moms;
+    $('#family-moms').textContent = `🌸 母達の木：花${m.flowers}こ（${m.stageName}）・今月${m.families}家族が挑戦中・あなたは🔥${d.streak}日連続・${d.points}ポイント`;
+    if (!$('#family-dialog').open) $('#family-dialog').showModal();
+  }
+  const fmtMin = (m) => m >= 60 ? `${Math.floor(m / 60)}時間${m % 60 ? (m % 60) + '分' : ''}` : `${m}分`;
+  $('#btn-family').onclick = openFamily;
+  $('#family-close').onclick = () => $('#family-dialog').close();
+  $('#family-add').onclick = async () => {
+    const code = $('#family-code').value.trim();
+    if (!code) return;
+    try { await api('POST', '/api/parent/link', { code }); $('#family-code').value = ''; toast('お子さまを追加しました'); openFamily(); }
+    catch (e) { toast(e.message); }
+  };
+
   // ───────── 高校生：週のノルマ・今日やること ─────────
   let weekBusy = false, lastWeekAt = 0;
   async function refreshWeek(force) {
@@ -577,7 +746,7 @@
     const zoneId = (x, y) => (SM.zoneAtPx(x, y) || {}).id || null; // 部屋は位置から求める（ほかの人の room は移動中に古いことがある）
     const myZone = zoneId(me.x, me.y);
     for (const u of state.others.values()) {
-      if (u.role !== 'student' && Math.hypot(u.x - me.x, u.y - me.y) <= T * 3.5 && zoneId(u.x, u.y) === myZone) return true;
+      if ((u.role === 'owner' || u.role === 'teacher') && Math.hypot(u.x - me.x, u.y - me.y) <= T * 3.5 && zoneId(u.x, u.y) === myZone) return true;
     }
     return false;
   }
@@ -849,7 +1018,7 @@
   setInterval(() => { if (!$('#panel').hidden) renderPanel(); }, 15000);
 
   // 個別通話を始められるか（サーバーでも同じ判定をしている）
-  const canPrivate = () => !!(state.user && state.user.role !== 'student' && state.user.permissions.start_private_call && state.classCall);
+  const canPrivate = () => !!(isStaff() && state.user.permissions.start_private_call && state.classCall);
   const handleableRoom = (roomId) => { const r = roomId && roomInfo(roomId); return !!(r && r.canEnter); };
 
   function lowerHand(u) {
@@ -971,7 +1140,7 @@
   }
   window.addEventListener('resize', resize);
   function autoZoom() { return clampZoom(Math.max(innerWidth, innerHeight) / (24 * T)); }
-  const clampZoom = (z) => Math.max(0.6, Math.min(2.6, z));
+  const clampZoom = (z) => Math.max(isParent() ? 0.15 : 0.6, Math.min(2.6, z)); // 保護者は塾全体を見わたせるように小さくできる
   const screenToWorld = (sx, sy) => ({ x: (sx - innerWidth / 2) / state.zoom + state.cam.x, y: (sy - innerHeight / 2) / state.zoom + state.cam.y });
 
   const pointers = new Map();
@@ -988,7 +1157,10 @@
   canvas.addEventListener('pointermove', (e) => {
     const p = pointers.get(e.pointerId);
     if (!p) return;
+    const dx = e.clientX - p.x, dy = e.clientY - p.y;
     p.x = e.clientX; p.y = e.clientY;
+    // 保護者がすわって見わたしているときは、1本指でずらして見る
+    if (state.overview && pointers.size === 1 && Math.hypot(p.x - p.sx, p.y - p.sy) > 8) { state.view.x -= dx / state.zoom; state.view.y -= dy / state.zoom; p.panned = true; }
     if (pinch && pointers.size === 2) {
       const [a, b] = [...pointers.values()];
       state.zoom = clampZoom(pinch.zoom * Math.hypot(a.x - b.x, a.y - b.y) / pinch.d);
@@ -999,7 +1171,7 @@
     if (!p) return;
     pointers.delete(e.pointerId);
     if (pinch) { if (pointers.size === 0) pinch = null; return; }
-    if (e.type === 'pointerup' && Math.hypot(p.x - p.sx, p.y - p.sy) < 12 && performance.now() - p.t < 600) onTap(e.clientX, e.clientY);
+    if (e.type === 'pointerup' && !p.panned && Math.hypot(p.x - p.sx, p.y - p.sy) < 12 && performance.now() - p.t < 600) onTap(e.clientX, e.clientY);
   };
   canvas.addEventListener('pointerup', endPointer);
   canvas.addEventListener('pointercancel', endPointer);
@@ -1223,7 +1395,11 @@
     // 自習室では、自分と部屋のまん中の間を見る（上の席にすわっても、まん中の学年の木が見えるように）
     const zone = SM.zoneAtPx(me.x, me.y);
     const lookY = zone && zone.type === 'study' ? (me.y + (zone.y1 + zone.y2 + 1) / 2 * T) / 2 : me.y;
-    const tx = clamp(me.x, innerWidth / z, SM.W * T), ty = clamp(lookY, innerHeight / z, SM.H * T, ins.top / z, ins.bottom / z);
+    let tx = clamp(me.x, innerWidth / z, SM.W * T), ty = clamp(lookY, innerHeight / z, SM.H * T, ins.top / z, ins.bottom / z);
+    if (state.overview) { // 保護者：すわっている間は塾全体を見わたす（ずらして見られる）
+      state.view.x = tx = clamp(state.view.x, innerWidth / z, SM.W * T);
+      state.view.y = ty = clamp(state.view.y, innerHeight / z, SM.H * T, ins.top / z, ins.bottom / z);
+    }
     state.cam.x += (tx - state.cam.x) * 0.12;
     state.cam.y += (ty - state.cam.y) * 0.12;
 
@@ -1254,6 +1430,11 @@
     list.push({ u: me, x: me.x, y: me.y, isMe: true });
     const forest = state.gb && state.gb.forest;
     SM.FOREST.forEach((f, i) => { const p = treePos(i); list.push({ tree: forest ? forest.trees[i] : null, x: p.x, y: p.y }); });
+    // 母達の木（ロビー）：見たよスタンプで花が咲く
+    if (forest && forest.moms) {
+      const m = forest.moms;
+      list.push({ tree: { name: m.name, stage: m.stage, stageName: `🌸${m.flowers}・今月${m.families}家族が挑戦中`, goals: [], grades: [] }, x: (SM.MOM_TREE.x + 1) * T, y: (SM.MOM_TREE.y + 1) * T - 6 });
+    }
     list.sort((a, b) => a.y - b.y);
     const season = window.Render.seasonOf();
     if (forest && forest.event) window.Render.drawDecorations(ctx, forest.event.id, time);

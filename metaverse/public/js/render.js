@@ -169,6 +169,16 @@
           break;
         case 'k': rr(px, py + 4, T, T - 8, 0, '#c58b5a'); g.fillStyle = '#e2b285'; g.fillRect(px, py + 4, T, 5); break;
         case 'F': rr(px + 8, py + 4, 16, 24, 3, '#f4f7fb'); circle(px + 16, py + 10, 5, '#8ecae6'); break;
+        case 'O': { // ソファ（2人がけ。となりもソファならつなげる）
+          const l = SM.tileAt(x - 1, y) === 'O', r = SM.tileAt(x + 1, y) === 'O';
+          g.fillStyle = 'rgba(0,0,0,.12)'; g.fillRect(px + (l ? 0 : 3), py + 26, T - (l ? 0 : 3) - (r ? 0 : 3), 4);
+          rr(px + (l ? -2 : 2), py + 16, T + (l ? 2 : -2) + (r ? 2 : -2), 12, 4, '#c9867a');   // 背もたれ（手前）
+          rr(px + (l ? -2 : 2), py + 6, T + (l ? 2 : -2) + (r ? 2 : -2), 14, 5, '#e3a397');    // 座面
+          if (!l) rr(px + 1, py + 6, 6, 22, 3, '#b8746a');
+          if (!r) rr(px + T - 7, py + 6, 6, 22, 3, '#b8746a');
+          g.fillStyle = 'rgba(255,255,255,.25)'; g.fillRect(px + 8, py + 9, T - 16, 2);
+          break;
+        }
         case 'S': rr(px + 2, py + 8, T - 4, 16, 3, '#a7744a'); g.fillStyle = '#bf8c5f'; g.fillRect(px + 2, py + 11, T - 4, 2); g.fillRect(px + 2, py + 17, T - 4, 2); break;
       }
     }
@@ -218,13 +228,13 @@
     sign('🎤 テスト教室', 14 * T, 15.5 * T, '#2f7de1'); sign('教室2', 32 * T, 15.5 * T, '#2fa36b'); sign('高校生自習室', 49 * T, 15.5 * T, '#6d4c41');
     sign('自習室', 17 * T, 18.5 * T, '#8b6b4a'); sign('ロビー', 43 * T, 18.5 * T, '#7a6f86');
     sign('🌿 自習室　しずかに集中しよう', 17 * T, 31.3 * T, 'rgba(110,85,60,.75)');
-    sign('ようこそ 三浦塾へ', 43 * T, 21.5 * T, 'rgba(120,110,135,.8)');
+    sign('ようこそ 三浦塾へ', 42 * T, 21.5 * T, 'rgba(120,110,135,.8)');
     sign('☕ 高校生自習室　自分のペースで、しっかり集中', 42 * T, 12.4 * T, 'rgba(93,58,34,.8)');
     g.textAlign = 'start'; g.textBaseline = 'alphabetic';
     return cv;
   }
 
-  const ROLE_TAG = { owner: 'オーナー', teacher: '先生' };
+  const ROLE_TAG = { owner: 'オーナー', teacher: '先生', parent: '🏠' };
 
   // ───────── 洋服 ─────────
   function drawBody(ctx, x, by, h, u, clothes, costume) {
@@ -318,7 +328,7 @@
     if (c.mane && dir === 'down') { c.mane.forEach((col, i) => { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x - 6 + i * 6, hy - 10, 2.6, 0, Math.PI * 2); ctx.fill(); }); }
     if (c.inner && c.ear === 'round' && !c.patches) { ctx.fillStyle = c.inner; [[-8, -8], [8, -8]].forEach(([dx, dy]) => { ctx.beginPath(); ctx.arc(x + dx, hy + dy, 2, 0, Math.PI * 2); ctx.fill(); }); }
   }
-  const TAG_BG = { owner: 'rgba(139,92,246,.95)', teacher: 'rgba(224,123,16,.95)', student: 'rgba(45,42,50,.78)' };
+  const TAG_BG = { owner: 'rgba(139,92,246,.95)', teacher: 'rgba(224,123,16,.95)', student: 'rgba(45,42,50,.78)', parent: 'rgba(214,92,140,.92)' };
 
   function drawAvatar(ctx, u, x, y, opts = {}) {
     const t = opts.time || 0;
@@ -392,7 +402,7 @@
     const tag = ROLE_TAG[u.role];
     // 高校生：称号を名前の前に、🔥は「週」で数える
     const fire = u.hs ? (u.streak >= 1 ? ` 🔥${u.streak}週` : '') : (u.streak >= 2 ? ` 🔥${u.streak}` : '');
-    const label = (u.bday ? '🎂 ' : '') + (tag ? tag + ' ' : '') + (u.title ? `【${u.title}】` : '') + u.name + fire;
+    const label = (u.myChild ? '💗 ' : '') + (u.bday ? '🎂 ' : '') + (tag ? tag + ' ' : '') + (u.title ? `【${u.title}】` : '') + u.name + fire;
     ctx.font = 'bold 12px sans-serif';
     const tw = Math.min(200, ctx.measureText(label).width + 12);
     ctx.fillStyle = opts.isMe ? 'rgba(47,125,225,.95)' : TAG_BG[u.role];
@@ -679,7 +689,7 @@
     // ロビー：大きな飾り（入口の両側）と横断幕
     put(ctx, d.big, 40.5 * T, 21 * T, 40); put(ctx, d.big, 45.5 * T, 21 * T, 40);
     d.items.forEach((e, i) => put(ctx, e, (37 + i) * T, 22.4 * T + Math.sin(t * 2 + i) * 1.5, 22));
-    d.items.forEach((e, i) => put(ctx, e, (47 + i) * T, 25 * T + Math.sin(t * 2 + i + 1) * 1.5, 22));
+    d.items.forEach((e, i) => put(ctx, e, (37 + i) * T, 25.2 * T + Math.sin(t * 2 + i + 1) * 1.5, 22));
     sign(d.banner, 43 * T, 27 * T);
     // ろうか：飾りの列（上の壁ぞい）
     for (let x = 3, i = 0; x <= 48; x += 3, i++) put(ctx, d.garland[i % d.garland.length], x * T, 15.25 * T + Math.sin(t * 1.5 + i) * 1.2, 16);

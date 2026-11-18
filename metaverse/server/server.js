@@ -10,6 +10,8 @@ const livekit = require('./livekit');
 const notify = require('./notify');
 const ganbari = require('./ganbari');
 const fun = require('./fun');
+const parents = require('./parents');
+const SchoolMap = require('../public/shared/map.js');
 const kanken = require('./kanken');
 
 const PORT = Number(process.env.PORT || 3000);
@@ -34,7 +36,7 @@ app.use((req, res, next) => {
 
 // 受け取るデータの大きさの上限（漢字テストのまとめて登録だけ大きめ）
 const jsonSmall = express.json({ limit: '20kb' }), jsonBulk = express.json({ limit: '400kb' });
-app.use('/api', (req, res, next) => (req.path === '/admin/kanken/questions/bulk' ? jsonBulk : jsonSmall)(req, res, next));
+app.use('/api', (req, res, next) => (req.path === '/admin/kanken/questions/bulk' || req.path === '/admin/parent-questions/bulk' ? jsonBulk : jsonSmall)(req, res, next));
 app.use('/api', (req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
   // 他サイトからの書き込みリクエストを拒否（CSRF 対策）
@@ -173,22 +175,22 @@ app.get('/api/me/ganbari', auth.requireAuth, (req, res) => {
   res.json({
     grade: u.grade || null, todayMinutes: ganbari.dayTotal(u.id, today),
     termMinutes: term ? ganbari.minutesBetween(u.id, term.start, term.end) : 0, term,
-    points: ganbari.points(u.id), streak: ganbari.streak(u.id), equip: ganbari.getEquip(u.id),
+    points: ganbari.points(u.id), streak: u.role === 'parent' ? parents.visitStreak(u.id) : ganbari.streak(u.id), equip: ganbari.getEquip(u.id),
     shop: ganbari.shopFor(u.id), goal: term ? ganbari.goalOf(u.id, term.key) : null,
     dressup: ganbari.dressupInfo(), myItems: ganbari.getEquip(u.id, { ignorePeriod: true }).ids,
     hs: ganbari.isHS(u.grade) ? { ...ganbari.hsWeeks(u.id), title: ganbari.titleOf(u.id), plan: ganbari.planOf(u.id), visitDays: u.visit_days ? u.visit_days.split(',').map(Number) : [], visitTime: u.visit_time || null } : null,
-    fun: fun.statusFor(u.id),
+    fun: u.role === 'student' ? fun.statusFor(u.id) : null, parent: u.role === 'parent',
     rules: { minutesPerPoint: c.minutesPerPoint, streakMin: ganbari.streakMinFor(u.id, c), window: c.window, window2: c.window2, requireSeat: c.requireSeat, today: ganbari.ruleFor(today, c, ganbari.isHS(u.grade) ? 'hs' : null) },
   });
 });
 app.post('/api/me/shop/buy', auth.requireAuth, (req, res) => {
-  if (req.user.role !== 'student') return bad(res, 'ポイントは生徒の機能です', 403);
+  if (req.user.role !== 'student' && req.user.role !== 'parent') return bad(res, 'ポイントは生徒と保護者の機能です', 403);
   const err = ganbari.buy(req.user.id, String(req.body.item || ''));
   if (err) return bad(res, err);
   res.json({ ok: true, points: ganbari.points(req.user.id) });
 });
 app.post('/api/me/equip', auth.requireAuth, (req, res) => {
-  if (req.user.role !== 'student') return bad(res, '着せかえは生徒の機能です', 403);
+  if (req.user.role !== 'student' && req.user.role !== 'parent') return bad(res, '着せかえは生徒と保護者の機能です', 403);
   const err = ganbari.equip(req.user.id, String(req.body.slot || ''), req.body.item === null ? null : String(req.body.item || ''));
   if (err) return bad(res, err);
   realtime.refreshGanbari(req.user.id);
@@ -202,7 +204,77 @@ app.post('/api/me/goal', auth.requireAuth, (req, res) => {
   res.json({ ok: true, goal: ganbari.goalOf(req.user.id, term.key) });
 });
 // 学年の木（ログインしている人なら誰でも見られる）
-app.get('/api/forest', auth.requireAuth, (req, res) => res.json(ganbari.forest()));
+app.get('/api/forest', auth.requireAuth, (req, res) => {
+  const f = ganbari.forest();
+  // 保護者には、自分の子ども以外の生徒の名前を見せない（短冊の目標は見せる）
+  if (req.user.role === 'parent') { const mine = new Set(parents.childrenOf(req.user.id).map(k => k.name)); for (const t of f.trees) for (const g of t.goals) if (!mine.has(g.name)) g.name = '生徒'; }
+  res.json({ ...f, moms: parents.momsTree() });
+});
+
+// ═════════ 保護者 ═════════
+// 招待コードで保護者が自分で登録する（ログインしていなくても使える）
+app.post('/api/parent/register', (req, res) => {
+  const ipKey = 'ip:' + req.ip;
+  if (auth.isLocked(ipKey)) return bad(res, `まちがいが続いたため、${auth.LOCK_MINUTES}分ほど待ってからためしてください`, 429);
+  const b = req.body || {};
+  if (!parents.inviteStudent(b.code)) { auth.recordFailure(ipKey, 10); return bad(res, '招待コードが正しくないか、もう使われています'); }
+  const loginId = String(b.loginId || '').trim();
+  const displayName = cleanName(b.displayName);
+  if (!RE_LOGIN.test(loginId)) return bad(res, 'ログインIDは半角英数字と _ . - の3〜32文字にしてください');
+  const e = validateName(displayName) || validatePassword(b.password);
+  if (e) return bad(res, e);
+  if (db.prepare('SELECT 1 FROM users WHERE login_id = ?').get(loginId)) return bad(res, 'このログインIDはすでに使われています', 409);
+  const id = transaction(() => {
+    const r = db.prepare("INSERT INTO users (login_id, display_name, role, password_hash, avatar_color, created_at, updated_at) VALUES (?, ?, 'parent', ?, ?, ?, ?)")
+      .run(loginId, displayName, auth.hashPassword(b.password), '#f48fb1', now(), now());
+    const id = Number(r.lastInsertRowid);
+    applyPermissionsAndRooms(id, 'parent', {}, []);
+    parents.useInvite(b.code, id);
+    return id;
+  });
+  audit(id, 'parent.registered', loginId, null, req.ip);
+  const s = auth.createSession(id, req);
+  auth.setSessionCookie(res, s.token, s.expires);
+  res.status(201).json({ user: publicUser(auth.loadUser(id)) });
+});
+const requireParent = (req, res, next) => (req.user.role === 'parent' ? next() : bad(res, '保護者の機能です', 403));
+// きょうだいを追加
+app.post('/api/parent/link', auth.requireAuth, requireParent, (req, res) => {
+  const r = parents.useInvite(req.body.code, req.user.id);
+  if (r.error) return bad(res, r.error);
+  const me = realtime._online.get(req.user.id);
+  if (me) me.childIds = parents.childIds(req.user.id);
+  res.json({ ok: true, children: parents.childrenOf(req.user.id) });
+});
+// 保護者ページ：お子さんの様子（数字だけ）・見たよスタンプ
+app.get('/api/parent/home', auth.requireAuth, requireParent, (req, res) => {
+  const today = ganbari.jst().day, mon = ganbari.mondayOf(today), sent = parents.cheersSentToday(req.user.id);
+  const term = ganbari.termOf(today);
+  const kids = parents.childrenOf(req.user.id).map(k => {
+    const p = realtime._online.get(k.id);
+    let week = 0; for (let i = 0; i < 7; i++) { const d = ganbari.addDays(mon, i); if (d > today) break; week += ganbari.dayTotal(k.id, d); }
+    const goal = term ? ganbari.goalOf(k.id, term.key) : null;
+    return {
+      ...k, today: ganbari.dayTotal(k.id, today), week, streak: ganbari.streak(k.id), hs: ganbari.isHS(k.grade),
+      studying: !!(p && SchoolMap.isStudyRoom(p.room) && !p.away), online: !!p,
+      goal: goal && goal.status === 'approved' ? { text: goal.text, achieved: !!goal.achieved } : null, cheered: sent.has(k.id),
+    };
+  });
+  res.json({ children: kids, stamps: parents.STAMPS, streak: parents.visitStreak(req.user.id), endsAt: parents.visitEndsAt(req.user.id), points: ganbari.points(req.user.id).balance, moms: parents.momsTree() });
+});
+app.post('/api/parent/cheer', auth.requireAuth, requireParent, (req, res) => {
+  const r = parents.sendCheer(req.user.id, Number(req.body.studentId), String(req.body.stamp || ''));
+  if (r.error) return bad(res, r.error);
+  realtime.refreshMoms();
+  res.json({ ok: true, moms: parents.momsTree() });
+});
+// 毎日5問
+app.get('/api/parent/quiz', auth.requireAuth, requireParent, (req, res) => res.json(parents.todayQuiz(req.user.id)));
+app.post('/api/parent/quiz/answer', auth.requireAuth, requireParent, (req, res) => {
+  const r = parents.answerQuiz(req.user.id, String(req.body.qid || ''), String(req.body.choice || ''));
+  if (r.error) return bad(res, r.error);
+  res.json({ ...r, points: ganbari.points(req.user.id).balance });
+});
 
 // ── 季節のお楽しみ ──
 app.post('/api/me/santa/open', auth.requireAuth, (req, res) => {
@@ -308,6 +380,31 @@ admin.get('/users', requireOwner, (req, res) => {
   const sessionCounts = new Map(db.prepare('SELECT user_id, COUNT(*) AS n FROM sessions WHERE expires_at > ? GROUP BY user_id').all(now()).map(r => [r.user_id, r.n]));
   res.json({ users: ids.map(({ id }) => { const u = auth.loadUser(id); return { ...publicUser(u), activeSessions: sessionCounts.get(id) || 0, locked: !!auth.isLocked('id:' + u.login_id) }; }) });
 });
+// 保護者の招待コード（生徒ごと）
+admin.post('/users/:id/parent-invite', requireOwner, (req, res) => {
+  const r = parents.createInvite(Number(req.params.id), req.user.id);
+  if (r.error) return bad(res, r.error, 404);
+  res.json(r);
+});
+admin.get('/users/:id/parents', requireOwner, (req, res) => res.json({ parents: parents.parentsOf(Number(req.params.id)) }));
+admin.delete('/users/:id/parents/:parentId', requireOwner, (req, res) => {
+  if (!parents.unlink(Number(req.params.parentId), Number(req.params.id))) return bad(res, 'つながりが見つかりません', 404);
+  audit(req.user.id, 'parent.unlinked', String(req.params.id), { parent: Number(req.params.parentId) }, req.ip);
+  res.json({ ok: true });
+});
+// 保護者の毎日の問題（英単語・数学・理科・社会。漢字は漢字テストの問題を使う）
+admin.get('/parent-questions', requireOwner, (req, res) => res.json({ subjects: parents.SUBJECTS, questions: parents.listQuestions() }));
+admin.post('/parent-questions/bulk', requireOwner, (req, res) => {
+  const rows = Array.isArray(req.body.rows) ? req.body.rows.slice(0, 2000) : [];
+  const r = parents.addQuestions(rows);
+  audit(req.user.id, 'parent.questions_added', null, { added: r.added }, req.ip);
+  res.json(r);
+});
+admin.delete('/parent-questions/:id', requireOwner, (req, res) => {
+  if (!parents.deleteQuestion(Number(req.params.id))) return bad(res, '問題が見つかりません', 404);
+  res.json({ ok: true });
+});
+
 // ログインのロック（まちがいが続いたとき）を外す
 admin.post('/users/:id/unlock', requireOwner, (req, res) => {
   const u = auth.loadUser(Number(req.params.id));
@@ -328,6 +425,7 @@ function applyPermissionsAndRooms(userId, role, permissions, rooms) {
   const p = {};
   for (const k of KEYS) {
     let v = permissions && typeof permissions[k] === 'boolean' ? permissions[k] : base[k];
+    if (role === 'parent') v = false; // 保護者には権限を付けない（ロビーだけ）
     if (role === 'student' && STUDENT_FORBIDDEN.includes(k)) v = false; // 生徒には付与させない
     p[k] = v ? 1 : 0;
   }

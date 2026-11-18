@@ -34,6 +34,7 @@
           <button data-role="" class="chip active">すべて</button>
           <button data-role="teacher" class="chip">先生</button>
           <button data-role="student" class="chip">生徒</button>
+          <button data-role="parent" class="chip">保護者</button>
         </div>
         <input id="search" class="search" placeholder="名前・IDで検索" type="search">
         <button class="btn" id="add-user">＋ ユーザーを追加</button>
@@ -100,7 +101,7 @@
         <legend>担当する教室</legend>
         <div id="f-rooms" class="checks"></div>
       </fieldset>
-      <fieldset>
+      <fieldset id="perms-field">
         <legend>権限</legend>
         <div id="f-perms" class="checks"></div>
         <small class="muted" id="perm-note"></small>
@@ -112,6 +113,17 @@
         <button type="submit" class="btn" id="user-save">保存する</button>
       </div>
     </form>
+  </dialog>
+
+  <!-- 👪 保護者の招待コード -->
+  <dialog id="family-admin">
+    <div class="dialog-body">
+      <h2 id="fa-title">保護者</h2>
+      <div id="fa-list"></div>
+      <button type="button" class="btn" id="fa-make">👪 招待コードを作る</button>
+      <pre class="cred" id="fa-code" hidden></pre>
+      <div class="dialog-actions"><button type="button" class="btn secondary" id="fa-copy" hidden>コピー</button><button type="button" class="btn secondary" id="fa-close">とじる</button></div>
+    </div>
   </dialog>
 
   <!-- 作成したログイン情報 -->

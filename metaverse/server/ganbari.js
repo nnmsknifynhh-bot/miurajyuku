@@ -569,7 +569,12 @@ function points(userId, date = new Date()) {
   const c = getConfig();
   const today = jst(date).day;
   // ポイントは年度をまたいで引きつぐ（数え始めた日からの合計）
-  const gu = db.prepare('SELECT grade FROM users WHERE id = ?').get(userId);
+  const gu = db.prepare('SELECT grade, role FROM users WHERE id = ?').get(userId);
+  if (gu && gu.role === 'parent') { // 保護者：毎日の問題で正解した数がポイント（1問1ポイント）
+    const earnedP = db.prepare('SELECT COUNT(*) AS n FROM parent_quiz WHERE user_id = ? AND correct = 1').get(userId).n;
+    const spentP = db.prepare('SELECT COALESCE(SUM(price), 0) AS s FROM shop_owned WHERE user_id = ?').get(userId).s;
+    return { earned: earnedP, spent: spentP, balance: earnedP - spentP, yearMinutes: 0 };
+  }
   const bonus = gu && isHS(gu.grade) ? hsWeeks(userId, date, c).achievedWeeks * c.hs.weekBonus : 0; // 高校生：週のノルマ達成ボーナス
   const extra = db.prepare('SELECT COALESCE(SUM(points), 0) AS s FROM bonus_points WHERE user_id = ?').get(userId).s; // 朝活など
   const earned = Math.floor(minutesBetween(userId, c.pointsFrom, today) / c.minutesPerPoint) + bonus + extra;

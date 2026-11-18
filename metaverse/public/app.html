@@ -118,7 +118,7 @@
     <div class="test-q-head"><b>順番待ち</b><span id="test-q-count"></span></div>
     <ol id="test-queue"></ol>
   </aside>
-  <div class="top-chips"><div class="week-chip" id="week-chip" hidden></div><div class="week-chip fun-chip" id="fun-chip" hidden></div></div>
+  <div class="top-chips"><div class="week-chip" id="week-chip" hidden></div><div class="week-chip fun-chip" id="fun-chip" hidden></div><div class="week-chip visit-chip" id="visit-chip" hidden></div></div>
 
   <!-- 🎅 がんばりサンタのプレゼント -->
   <dialog id="santa-dialog" class="fun-card santa-card">
@@ -130,6 +130,41 @@
     </div>
   </dialog>
 
+
+  <!-- 👪 保護者：ロビーのソファをえらぶ -->
+  <dialog id="sofa-dialog">
+    <div class="dialog-body">
+      <h2>🛋 どのソファにすわりますか？</h2>
+      <p class="muted">保護者の方はロビーで過ごします。すわると、塾の中全体を見わたせます（指でずらす・ひろげると動かせます）。</p>
+      <div class="seat-map" id="sofa-map"></div>
+    </div>
+  </dialog>
+  <!-- 👪 保護者：わが子の様子と「見たよ」スタンプ -->
+  <dialog id="family-dialog">
+    <div class="dialog-body">
+      <h2>🏠 わが子の様子</h2>
+      <div id="family-list"></div>
+      <p class="muted" id="family-moms"></p>
+      <details class="family-add"><summary>👪 きょうだいを追加する</summary>
+        <div class="gb-row"><input id="family-code" placeholder="招待コード" autocapitalize="characters"><button type="button" class="btn small" id="family-add">追加</button></div>
+      </details>
+      <div class="dialog-actions"><button type="button" class="btn secondary" id="family-close">とじる</button></div>
+    </div>
+  </dialog>
+  <!-- 👪 保護者：今日の5問 -->
+  <dialog id="pquiz-dialog" class="pquiz-card">
+    <div class="dialog-body">
+      <div class="pquiz-head"><span class="quiz-badge" id="pquiz-subject"></span><span id="pquiz-step"></span></div>
+      <p class="pquiz-q" id="pquiz-q"></p>
+      <div class="quiz-choices" id="pquiz-choices"></div>
+      <p class="pquiz-result" id="pquiz-result" hidden></p>
+      <div class="dialog-actions"><button type="button" class="btn secondary" id="pquiz-close">あとで</button><button type="button" class="btn" id="pquiz-next" hidden>次へ</button></div>
+    </div>
+  </dialog>
+  <!-- 👪 保護者：今日の訪問がおわった -->
+  <div class="visit-over" id="visit-over" hidden>
+    <div class="visit-card"><div class="fun-big">🌸</div><h2>今日の訪問はここまでです</h2><p id="visit-over-msg"></p><p class="muted">保護者の方の訪問は、1日1回・10分です。また明日お待ちしています。</p><button class="btn" id="visit-logout">ログアウト</button></div>
+  </div>
 
   <!-- 誕生日のお祝いカード -->
   <dialog id="bday-dialog" class="bday-card">
@@ -222,7 +257,7 @@
     <a href="/admin" id="menu-admin" hidden>⚙️ 管理画面</a>
     <button id="menu-shop" class="student-only">🎁 ポイントと着せかえ</button>
     <button id="menu-goal" class="student-only">🎯 今学期の目標</button>
-    <button id="menu-forest">🌳 学年の木</button>
+    <button id="menu-forest" class="not-parent">🌳 学年の木</button>
     <button id="menu-notify" class="staff-only">🔔 入室の通知</button>
     <button id="menu-sound">🔈 音のテスト</button>
     <button id="menu-password">🔑 パスワードを変える</button>
@@ -238,12 +273,14 @@
   <div class="joystick" id="joystick" hidden><div class="knob" id="knob"></div></div>
 
   <footer class="hud-bottom">
-    <button class="big-btn" id="btn-rooms"><span>🏫</span><b>へや</b></button>
+    <button class="big-btn not-parent" id="btn-rooms"><span>🏫</span><b>へや</b></button>
     <button class="big-btn" id="btn-sit"><span>🪑</span><b id="sit-label">すわる</b></button>
     <button class="big-btn student-only" id="btn-hand"><span>✋</span><b id="hand-label">手をあげる</b></button>
-    <button class="big-btn" id="btn-topic"><span>💬</span><b>吹き出し</b></button>
+    <button class="big-btn not-parent" id="btn-topic"><span>💬</span><b>吹き出し</b></button>
     <button class="big-btn student-only" id="btn-react"><span>😊</span><b>スタンプ</b></button>
     <button class="big-btn student-only" id="btn-test" hidden><span>🎤</span><b id="test-label">テストに並ぶ</b></button>
+    <button class="big-btn parent-only" id="btn-family"><span>🏠</span><b>わが子</b></button>
+    <button class="big-btn parent-only" id="btn-pquiz"><span>📝</span><b id="pquiz-label">今日の5問</b></button>
     <button class="big-btn staff-only" id="btn-hands"><span>🙋</span><b>挙手</b><i class="count" id="hands-count" hidden>0</i></button>
     <button class="big-btn staff-only" id="btn-people"><span>👥</span><b>入室者</b></button>
   </footer>

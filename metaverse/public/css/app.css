@@ -250,6 +250,31 @@ body:not(.is-student) .me-menu .student-only { display: none; }
 #test-queue { margin: 4px 0 0; padding-left: 22px; font-size: 14px; }
 #test-queue li { padding: 2px 0; }
 .fun-card .dialog-body { text-align: center; }
+/* 保護者 */
+body:not(.is-parent) .parent-only { display: none !important; }
+body.is-parent .not-parent { display: none !important; }
+body.is-parent #btn-react.student-only, body.is-parent #menu-shop.student-only { display: flex !important; }
+body.is-parent #menu-shop.student-only { display: block !important; }
+.family-kid { border: 2px solid var(--line); border-radius: 14px; padding: 10px 12px; display: grid; gap: 6px; margin-bottom: 8px; }
+.family-kid h3 { margin: 0; font-size: 17px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.family-kid .now { font-size: 12px; font-weight: 800; border-radius: 999px; padding: 2px 8px; background: #eee; color: #666; }
+.family-kid .now.on { background: #e3f6ea; color: #1f7a45; }
+.family-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; text-align: center; }
+.family-stats div { background: var(--cream, #fbf6ee); border-radius: 10px; padding: 6px 4px; font-size: 12px; color: var(--muted); }
+.family-stats b { display: block; font-size: 17px; color: var(--text); }
+.family-stamps { display: flex; flex-wrap: wrap; gap: 6px; }
+.family-stamps button { border: 2px solid var(--line); background: #fff; border-radius: 999px; padding: 6px 10px; font-weight: 700; font-size: 14px; }
+.family-stamps button:disabled { opacity: .5; }
+.family-add summary { cursor: pointer; font-weight: 700; color: var(--muted); }
+.family-add input { min-height: 40px; border: 2px solid var(--line); border-radius: 10px; padding: 0 8px; font-size: 16px; }
+.pquiz-card .dialog-body { text-align: center; }
+.pquiz-head { display: flex; justify-content: space-between; align-items: center; }
+.pquiz-q { font-size: 20px; font-weight: 800; margin: 6px 0; }
+.pquiz-result { margin: 0; font-weight: 800; font-size: 17px; }
+.pquiz-card .dialog-actions { justify-content: center; }
+.visit-over { position: fixed; inset: 0; z-index: 70; background: rgba(40,30,50,.75); display: grid; place-items: center; padding: 16px; }
+.visit-card { background: #fff; border-radius: 20px; padding: 24px; text-align: center; max-width: 380px; display: grid; gap: 10px; }
+.visit-card h2 { margin: 0; }
 .fun-card .dialog-actions { justify-content: center; }
 .fun-big { font-size: 72px; line-height: 1; }
 .fun-big.shake { animation: shake .5s ease-in-out 3; }
@@ -267,3 +292,6 @@ body:not(.is-student) .me-menu .student-only { display: none; }
 .bday-from { margin: 0; color: var(--muted); font-weight: 700; }
 .bday-card .dialog-actions { justify-content: center; }
 #shop-sub { white-space: pre-line; }
+/* 保護者：のこり時間 */
+.visit-chip { background: rgba(255,240,246,.96); border-color: #f0a6c4; color: #8a2f58; }
+.visit-chip.warn { background: #ffe0e0; border-color: #e57373; color: #b71c1c; }

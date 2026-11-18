@@ -26,7 +26,7 @@
     setTimeout(() => el.remove(), ms);
   }
 
-  const ROLE_LABEL = { owner: 'オーナー', teacher: '先生', student: '生徒' };
+  const ROLE_LABEL = { owner: 'オーナー', teacher: '先生', student: '生徒', parent: '保護者' };
 
   // PWA（ホーム画面に追加して使えるようにする）
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {

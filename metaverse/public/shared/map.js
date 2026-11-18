@@ -11,7 +11,7 @@
    *  .  床          _  出入口       p  教壇(歩ける)  r  ラグ(歩ける)         m  玄関マット(歩ける)
    *  T  教卓        D  生徒の机     c  椅子(座れる)  b  学習ブースの机        L  ロッカー
    *  P  観葉植物    B  本棚/下駄箱  k  受付カウンター  F  ウォーターサーバー   S  ベンチ(座れる)
- *  Y  がんばりの木の根元（描画は動的）      q  カフェのテーブル
+ *  Y  がんばりの木の根元（描画は動的）      q  カフェのテーブル      O  ソファ(座れる・保護者用)
    */
   const grid = [];
   for (let y = 0; y < H; y++) grid.push(new Array(W).fill('.'));
@@ -94,7 +94,16 @@
   fill(40, 28, 45, 31, 'm');
   fill(36, 23, 38, 23, 'k');                 // 受付
   fill(35, 26, 35, 31, 'B');                 // 下駄箱
-  fill(47, 23, 49, 23, 'S');                 // ベンチ
+  // 母達の木と、まわりのソファ3つ（2人がけ）。保護者はロビーのここにすわる
+  fill(46, 21, 50, 24, 'r');
+  set(48, 23, 'Y'); set(49, 23, 'Y');
+  const SOFAS = [
+    { name: 'ソファ1', seats: [[46, 26], [47, 26]] },
+    { name: 'ソファ2', seats: [[49, 26], [50, 26]] },
+    { name: 'ソファ3', seats: [[47, 28], [48, 28]] },
+  ];
+  for (const s of SOFAS) for (const [x, y] of s.seats) set(x, y, 'O');
+  const MOM_TREE = { x: 48, y: 23 };
   [[35, 20], [50, 20], [50, 32], [36, 32]].forEach(([x, y]) => set(x, y, 'P'));
 
   // 部屋（ゾーン）。id は DB の rooms.id と一致させる
@@ -126,8 +135,8 @@
     class1: [{ label: '順番待ちの席', y1: 5, y2: 13 }],
   };
 
-  const WALKABLE = new Set(['.', '_', 'p', 'r', 'm', 'c', 'S']);
-  const SEATS = new Set(['c', 'S']);
+  const WALKABLE = new Set(['.', '_', 'p', 'r', 'm', 'c', 'S', 'O']);
+  const SEATS = new Set(['c', 'S', 'O']);
   const tileAt = (tx, ty) => (tx < 0 || ty < 0 || tx >= W || ty >= H) ? '#' : grid[ty][tx];
   const isWalkable = (tx, ty) => WALKABLE.has(tileAt(tx, ty));
   const isSeat = (tx, ty) => SEATS.has(tileAt(tx, ty));
@@ -137,6 +146,7 @@
   const tileCenter = (tx, ty) => ({ x: (tx + 0.5) * TILE, y: (ty + 0.5) * TILE });
   // 椅子の向き：机が上にあれば上向き、下にあれば下向き
   const seatFacing = (tx, ty) => {
+    if (tileAt(tx, ty) === 'O') return 'up'; // ソファは母達の木のほうを向く
     const up = tileAt(tx, ty - 1), down = tileAt(tx, ty + 1);
     if (up === 'D' || up === 'b' || up === 'q') return 'up';
     if (down === 'D' || down === 'b' || down === 'q') return 'down';
@@ -181,7 +191,7 @@
   for (let y = 28; y <= 31; y++) for (let x = 40; x <= 45; x++) SPAWN.push({ x, y });
 
   return {
-    W, H, TILE, grid, ZONES, ENTRY, EXIT, PODIUM, SPAWN, classroomSeats, FOREST, isStudyRoom, SEAT_GROUPS, BOOTHS, isBoothSeat,
+    W, H, TILE, grid, ZONES, ENTRY, EXIT, PODIUM, SPAWN, classroomSeats, FOREST, isStudyRoom, SEAT_GROUPS, BOOTHS, isBoothSeat, SOFAS, MOM_TREE,
     tileAt, isWalkable, isSeat, zoneAt, zoneAtPx, seatId, tileCenter, seatFacing, findPath, seatCount,
   };
 });

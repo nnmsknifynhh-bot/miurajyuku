@@ -12,11 +12,13 @@ const livekit = require('./livekit');
 const notify = require('./notify');
 const ganbari = require('./ganbari');
 const fun = require('./fun');
+const parents = require('./parents');
 const kanken = require('./kanken');
 const { can, canEnterRoom } = require('./permissions');
 
 const T = SM.TILE;
 const REACTIONS = ['👍', '👏', '😊', '❓', '💡', '🙏'];
+const PARENT_REACTIONS = ['👋', '🙇', '😊', '👍', '🌸']; // 保護者どうしのあいさつ
 const ROOM_TYPES = new Set(['classroom', 'study']);
 
 let io = null;
@@ -46,10 +48,18 @@ function pub(p) {
     id: p.id, name: p.user.display_name, role: p.user.role, color: p.user.avatar_color,
     x: p.x, y: p.y, dir: p.dir, moving: p.moving, room: p.room, seat: p.seat, hand: p.hand, handAt: p.handAt,
     inPrivate: inActiveCall(p), away: p.away || null, studyCam: !!p.studyCam, topic: p.topic || null, today: p.today10 ?? null,
-    bday: !!(p.bday && p.bday.public),
-    hs: !!p.hs, title: p.title || null, plan: p.plan || null, // 高校生：称号・今日やること（🔥は週で数える） // 誕生日（ほかの生徒にも見せる設定のときだけ。先生だけの設定は staff にだけ別に送る）
+    bday: !!(p.bday && p.bday.public), // 誕生日（ほかの生徒にも見せる設定のときだけ。先生だけの設定は staff にだけ別に送る）
+    hs: !!p.hs, title: p.title || null, plan: p.plan || null, // 高校生：称号・今日やること（🔥は週で数える）
     equip: equipView(p.equip), streak: p.streak || 0,
   };
+}
+// 見る人に合わせた情報：生徒には保護者の名前を見せない。保護者には自分の子ども以外の生徒の名前を見せない（時間と🔥は見せる）
+function pubFor(p, viewer) {
+  const d = pub(p);
+  if (p.user.role === 'parent' && viewer.user.role === 'student') d.name = '保護者';
+  if (viewer.user.role === 'parent' && p.user.role === 'student' && !(viewer.childIds && viewer.childIds.has(p.id))) { d.name = '生徒'; d.title = null; d.plan = null; d.bday = false; }
+  if (viewer.user.role === 'parent' && p.user.role === 'student' && viewer.childIds && viewer.childIds.has(p.id)) d.myChild = true;
+  return d;
 }
 
 // ═════════ 自習室の見守り写真 ═════════
@@ -215,7 +225,8 @@ function testState() {
     booths: SM.BOOTHS[TEST_ROOM].map(b => { const seat = `${b.x},${b.y}`, id = testQ.booths[seat]; return { seat, name: b.name, userId: id, userName: id ? name(id) : null }; }),
   };
 }
-function broadcastTest() { if (io) io.emit('test-queue', testState()); }
+// 順番待ちには生徒の名前が入るので、保護者には送らない
+function broadcastTest() { if (!io) return; const st = testState(); for (const o of online.values()) if (o.user.role !== 'parent') o.socket.emit('test-queue', st); }
 function leaveTest(userId) {
   let changed = false;
   const i = testQ.queue.indexOf(userId);
@@ -312,6 +323,13 @@ function attach(httpServer) {
       kickPresence(old, '別の端末（またはタブ）で入室したため、こちらは切断しました');
     }
 
+    // 保護者：1日1回・10分まで（同じ日に10分をすぎたら入れない）
+    let visit = null;
+    if (user.role === 'parent') {
+      visit = parents.startVisit(user.id);
+      if (visit.error) { socket.emit('visit-over', { message: visit.error }); socket.disconnect(true); return; }
+    }
+
     const p = {
       id: user.id, user, socket, tokenHash: user.sessionTokenHash,
       x: 0, y: 0, dir: 'down', moving: false, room: null, seat: null, hand: false, handAt: 0,
@@ -320,7 +338,8 @@ function attach(httpServer) {
     };
     Object.assign(p, spawnPos(p));
     p.equip = ganbari.getEquip(p.id);
-    p.streak = user.role === 'student' ? ganbari.streak(p.id) : 0;
+    p.streak = user.role === 'student' ? ganbari.streak(p.id) : user.role === 'parent' ? parents.visitStreak(p.id) : 0;
+    if (visit) { p.visitEndsAt = visit.endsAt; p.childIds = parents.childIds(p.id); }
     p.today10 = user.role === 'student' ? shownToday(ganbari.dayTotal(p.id, ganbari.jst().day)) : null;
     p.bday = user.role === 'student' ? ganbari.birthdayInfo(p.id) : null;
     refreshHS(p, false);
@@ -352,11 +371,14 @@ function attach(httpServer) {
     }
 
     socket.emit('init', {
-      me: { ...pub(p), bday: !!p.bday }, users: [...online.values()].filter(o => o !== p).map(pub), rooms: roomCounts(), reactions: REACTIONS,
-      classes: classState(), classCall: livekit.enabled, testQueue: testState(),
+      me: { ...pub(p), bday: !!p.bday }, users: [...online.values()].filter(o => o !== p).map(o => pubFor(o, p)), rooms: roomCounts(), reactions: user.role === 'parent' ? PARENT_REACTIONS : REACTIONS,
+      visit: visit ? { endsAt: visit.endsAt, again: visit.again } : null,
+      classes: classState(), classCall: livekit.enabled, testQueue: user.role === 'parent' ? null : testState(),
     });
     if (gap && p.room === gap.room && Date.now() - gap.at <= STUDY_GAP_MS) socket.emit('study-resumed', { minutes: gapMinutes, seat: p.seat });
-    socket.broadcast.emit('user-joined', pub(p));
+    for (const o of online.values()) if (o !== p) o.socket.emit('user-joined', pubFor(p, o));
+    // 保護者からの「見たよ」スタンプ（まだ受け取っていない分）
+    if (user.role === 'student') { const st = parents.takeCheers(p.id); if (st.length) socket.emit('cheer', { stamps: st }); }
     // 誕生日を「先生だけ」に見せる生徒：先生・オーナーにだけ🎂を知らせる
     if (p.bday && !p.bday.public) socket.to('staff').emit('user-updated', { id: p.id, bday: true });
     if (isStaff(p)) for (const o of online.values()) if (o !== p && o.bday && !o.bday.public) socket.emit('user-updated', { id: o.id, bday: true });
@@ -375,6 +397,7 @@ function attach(httpServer) {
       p.lastMoveAt = t;
       if (Math.hypot(x - p.x, y - p.y) > T * 4) return reject('移動が速すぎます');
       if (!SM.isWalkable(Math.floor(x / T), Math.floor(y / T))) return reject(null);
+      if (p.user.role === 'parent' && (SM.zoneAtPx(x, y) || {}).id !== 'lobby') return reject('保護者の方はロビーだけです');
       const newRoom = roomIdAt(x, y);
       if (newRoom && newRoom !== p.room) {
         const err = entryError(p, newRoom);
@@ -448,7 +471,7 @@ function attach(httpServer) {
 
     // ── リアクション ──
     socket.on('reaction', (kind) => {
-      if (!REACTIONS.includes(kind)) return;
+      if (!(p.user.role === 'parent' ? PARENT_REACTIONS : REACTIONS).includes(kind)) return;
       // 生徒のスタンプは、先生・オーナーに話しかけられているとき（近く・個別通話中・授業中の教室）だけ
       if (p.user.role === 'student' && !studentChatAllowed(p)) return;
       const t = Date.now();
@@ -618,6 +641,7 @@ function attach(httpServer) {
     socket.on('study-topic', (d, ack) => {
       if (typeof ack !== 'function') ack = () => {};
       const text = String((d && d.text) || '').replace(/[\u0000-\u001f\u007f<>]/g, '').trim().slice(0, 24);
+      if (p.user.role === 'parent') return ack({ ok: false, error: '保護者の方は、あいさつスタンプを使ってください' });
       // 生徒の吹き出しは、先生・オーナーと話すとき（近くにいる・個別通話中）だけ
       if (text && p.user.role === 'student' && !studentChatAllowed(p)) {
         return ack({ ok: false, error: p.room && classes.has(p.room) ? '授業中は、先生がOKを出したときだけ吹き出しを使えます' : '吹き出しは、先生と話すときだけ使えます。先生に近くに来てもらってね' });
@@ -760,6 +784,14 @@ function attach(httpServer) {
   });
 
   setInterval(flushMoves, 100).unref();
+
+  // 保護者は10分で自動で退室（1日1回）
+  setInterval(() => {
+    const t = Date.now();
+    for (const p of [...online.values()]) {
+      if (p.user.role === 'parent' && p.visitEndsAt && t >= p.visitEndsAt) kickPresence(p, '今日の訪問はここまでです。また明日お待ちしています（1日1回・10分）');
+    }
+  }, Number(process.env.PARENT_CHECK_MS || 5000)).unref();
 
   // 先生・オーナーがはなれたら、生徒の吹き出しを消す（10秒ごと）
   setInterval(() => {
@@ -933,7 +965,7 @@ function refreshGanbari(userId) {
   const p = online.get(Number(userId));
   if (!p) return;
   p.equip = ganbari.getEquip(p.id);
-  p.streak = p.user.role === 'student' ? ganbari.streak(p.id) : 0;
+  p.streak = p.user.role === 'student' ? ganbari.streak(p.id) : p.user.role === 'parent' ? parents.visitStreak(p.id) : 0;
   io.emit('user-updated', { id: p.id, equip: equipView(p.equip), streak: p.streak });
   updateToday(p);
   refreshHS(p);
@@ -1010,8 +1042,11 @@ function presence() {
 
 function _reset() { online.clear(); lastPos.clear(); lastOffline.clear(); calls.clear(); studyPhotos.clear(); }
 
+// 母達の木が変わったら、みんなの画面を更新
+function refreshMoms() { if (io) io.emit('moms-updated', parents.momsTree()); }
+
 module.exports = {
-  shownToday,
+  shownToday, refreshMoms,
   isQuickRejoin, refreshGanbari, refreshBirthday, refreshAllGanbari, _online: online,
   storeStudyPhoto, getStudyPhoto, studyPhotoTimes, canViewStudyPhotos, setStudyPhotosFeature, studyPhotosEnabled,
   attach, kick, refreshUser, refreshRooms, presence, roomCounts, classState, endClass, endCallOf, REACTIONS, _reset };

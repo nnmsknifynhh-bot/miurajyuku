@@ -136,6 +136,45 @@
     };
     filter.onchange = render;
     render();
+    loadParentQuestions(root, { api, toast });
+  }
+
+  // ── 👪 保護者の「今日の5問」（英単語・数学・理科・社会。漢字は上の漢字テストの4級〜準2級から出ます） ──
+  async function loadParentQuestions(root, { api, toast }) {
+    let d;
+    try { d = await api('GET', '/api/admin/parent-questions'); } catch (e) { return; }
+    const sec = el('div', 'gb-sec'); root.append(sec);
+    const counts = {}; d.questions.forEach(q => { counts[q.subject] = (counts[q.subject] || 0) + 1; });
+    sec.append(el('h3', 'sec', '👪 保護者の「今日の5問」'),
+      el('p', 'muted', `教科は日替わり（漢字→英単語→数学→理科→社会）。漢字の日は、上の漢字テストの4級・3級・準2級から出ます。登録数：${['英単語', '数学', '理科', '社会'].map(s => `${s} ${counts[s] || 0}問`).join('・')}。最初に入っている問題は目安なので、先生が確認してください。`));
+    const paste = el('textarea', 'gb-out'); paste.rows = 5;
+    paste.placeholder = '教科	問題	正解	まちがい1	まちがい2	まちがい3\n理科	水が沸騰する温度は？	100℃	50℃	0℃	80℃\n…（表計算ソフトからコピーして貼り付け）';
+    const add = el('button', 'btn', '貼り付けた問題を登録する');
+    add.onclick = async () => {
+      const rows = paste.value.replace(/\r/g, '').split('\n').map((line, i) => ({ line, i })).filter(x => x.line.trim())
+        .map(({ line, i }) => { const c = (line.includes('\t') ? line.split('\t') : splitCsvLine(line)).map(x => x.trim()); return { line: i + 1, subject: c[0], question: c[1], answer: c[2], wrong: c.slice(3, 6) }; })
+        .filter(r => !(r.line === 1 && r.subject === '教科'));
+      if (!rows.length) return toast('貼り付けた内容がありません');
+      try {
+        const r = await api('POST', '/api/admin/parent-questions/bulk', { rows });
+        toast(`${r.added}問を登録しました` + (r.skipped ? `（${r.skipped}問は登録済み）` : '') + (r.errors.length ? `（${r.errors.map(e => e.line + '行目：' + e.error).slice(0, 3).join(' / ')}）` : ''), 8000);
+        if (r.added) load(root, { api, toast });
+      } catch (e) { toast(e.message); }
+    };
+    const filter = el('select'); [['', 'すべての教科'], ...['英単語', '数学', '理科', '社会'].map(x => [x, x])].forEach(([v, t]) => { const o = el('option', null, t); o.value = v; filter.append(o); });
+    const list = el('div', 'kq-list');
+    const render = () => {
+      list.textContent = '';
+      for (const q of d.questions.filter(x => !filter.value || x.subject === filter.value)) {
+        const row = el('div', 'kq-row');
+        row.append(el('span', 'badge', q.subject), el('b', 'kq-word', q.question), el('span', 'kq-ans', '✅ ' + q.answer), el('small', 'muted', '✖ ' + q.wrong.join('・')));
+        const acts = el('span', 'kq-acts'), del = el('button', 'btn small danger', '削除');
+        del.onclick = async () => { if (!confirm(`「${q.question}」を削除しますか？`)) return; try { await api('DELETE', `/api/admin/parent-questions/${q.id}`); d.questions = d.questions.filter(x => x !== q); render(); } catch (e) { toast(e.message); } };
+        acts.append(del); row.append(acts); list.append(row);
+      }
+    };
+    filter.onchange = render; render();
+    sec.append(paste, add, filter, list);
   }
 
   // ── 貼り付けた表を読む ──

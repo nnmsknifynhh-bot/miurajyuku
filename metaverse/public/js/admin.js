@@ -69,6 +69,7 @@
       const btn = (label, cls, fn) => { const b = el('button', 'btn small ' + cls, label); b.onclick = fn; actions.append(b); };
       if (u.locked) btn('🔓 ロックを解除', '', () => unlock(u));
       btn('編集', 'secondary', () => openEditor(u));
+      if (u.role === 'student' && me.role === 'owner') btn('👪 保護者', 'secondary', () => openFamily(u));
       if (u.role !== 'owner') {
         btn(u.isActive ? '無効にする' : '有効にする', u.isActive ? 'danger' : '', () => toggleActive(u));
       }
@@ -152,6 +153,7 @@
 
   function renderPermFields(role, u) {
     $('#grade-field').hidden = role !== 'student';
+    $('#perms-field').hidden = role === 'parent';
     $('#bday-field').hidden = role !== 'student';
     $('#visit-field').hidden = role !== 'student' || !/^高[123]$/.test(($('#f-grade') || {}).value || '');
     const isOwner = role === 'owner';
@@ -205,7 +207,7 @@
       }
     }
     const pw = $('#f-pw').value;
-    if (role !== 'owner') { body.permissions = permissions; if (role === 'teacher') body.rooms = rooms; }
+    if (role !== 'owner' && role !== 'parent') { body.permissions = permissions; if (role === 'teacher') body.rooms = rooms; }
     $('#user-save').disabled = true;
     try {
       let saved;
@@ -225,6 +227,39 @@
       $('#user-save').disabled = false;
     }
   });
+
+  // ── 👪 保護者の招待コード・つながっている保護者 ──
+  let famUser = null;
+  async function openFamily(u) {
+    famUser = u;
+    $('#fa-title').textContent = `👪 ${u.displayName} さんの保護者`;
+    $('#fa-code').hidden = true; $('#fa-copy').hidden = true; $('#fa-code').textContent = '';
+    const list = $('#fa-list'); list.textContent = '';
+    try {
+      const { parents } = await api('GET', `/api/admin/users/${u.id}/parents`);
+      if (!parents.length) list.append(el('p', 'muted', 'まだ保護者は登録されていません。「招待コードを作る」で作ったコードを保護者の方にお渡しください（1回だけ使えます）。'));
+      for (const p of parents) {
+        const row = el('div', 'gb-row');
+        row.append(el('span', null, `${p.name}（ID: ${p.loginId}）${p.active ? '' : '・無効'}`));
+        const b = el('button', 'btn small danger', '外す');
+        b.onclick = async () => {
+          if (!confirm(`${p.name} さんと ${u.displayName} さんのつながりを外しますか？\n（保護者のアカウントは残ります。無効にするときはユーザー一覧から）`)) return;
+          try { await api('DELETE', `/api/admin/users/${u.id}/parents/${p.id}`); toast('外しました'); openFamily(u); } catch (e) { toast(e.message); }
+        };
+        row.append(b); list.append(row);
+      }
+    } catch (e) { toast(e.message); return; }
+    if (!$('#family-admin').open) $('#family-admin').showModal();
+  }
+  $('#fa-make').onclick = async () => {
+    try {
+      const { code } = await api('POST', `/api/admin/users/${famUser.id}/parent-invite`);
+      $('#fa-code').textContent = `三浦塾 オンライン教室（保護者の方へ）\n${famUser.displayName} さんの保護者用 招待コード：${code}\n\n1. ${location.origin}/#parent を開く\n2. 招待コード・お名前・ログインID・パスワードを入れて登録\n※コードは1回だけ使えます。訪問は1日1回・10分です。`;
+      $('#fa-code').hidden = false; $('#fa-copy').hidden = false;
+    } catch (e) { toast(e.message); }
+  };
+  $('#fa-copy').onclick = async () => { try { await navigator.clipboard.writeText($('#fa-code').textContent); toast('コピーしました'); } catch (e) { toast('コピーできませんでした'); } };
+  $('#fa-close').onclick = () => $('#family-admin').close();
 
   function showCredentials(u, pw) {
     $('#cred-text').textContent = `三浦塾 オンライン教室\nURL：${location.origin}/\n名前：${u.displayName}\nログインID：${u.loginId}\nパスワード：${pw}`;
