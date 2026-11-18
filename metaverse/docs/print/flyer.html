@@ -17,7 +17,7 @@
   .page > * { position: relative; z-index: 1; }
 
   /* ── ヒーロー ── */
-  .hero { height: 66mm; padding: 8mm 11mm 0; flex: none; color: #fff; overflow: hidden;
+  .hero { height: 63mm; padding: 8mm 11mm 0; flex: none; color: #fff; overflow: hidden;
     background: linear-gradient(160deg, #47b4ff 0%, #6f8cff 45%, #b07cff 75%, #ff8fbf 100%);
     border-radius: 0 0 14mm 14mm; box-shadow: 0 2mm 0 #f6c9a5; }
   .hero::after { content: ''; position: absolute; left: -20mm; right: -20mm; bottom: -16mm; height: 30mm; background: radial-gradient(ellipse at 50% 0, rgba(255,255,255,.25), transparent 70%); }
@@ -29,7 +29,7 @@
   .school { position: absolute; right: 10mm; top: 8mm; width: 40mm; height: 40mm; border-radius: 50%; background: rgba(255,255,255,.2); display: grid; place-items: center; font-size: 25mm; }
   .burst { position: absolute; right: 8mm; top: 44mm; transform: rotate(-8deg); background: var(--yellow); color: #7a3d00; font-weight: 900; font-size: 4.2mm; line-height: 1.3; text-align: center; padding: 2.4mm 4mm; border-radius: 5mm; box-shadow: 0 1mm 0 #e0a800; }
 
-  .content { padding: 0 10mm; display: flex; flex-direction: column; gap: 3.4mm; margin-top: -7mm; }
+  .content { padding: 0 10mm; display: flex; flex-direction: column; gap: 3.2mm; margin-top: -6mm; }
 
   /* ── 画面写真 ── */
   .shots { display: flex; gap: 5mm; align-items: flex-end; justify-content: center; }
@@ -81,12 +81,17 @@
   .rooms em { font-style: normal; background: #fff3e0; color: #8a4b12; border-radius: 3mm; padding: .6mm 1.8mm; font-size: 2.75mm; font-weight: 900; }
 
   /* ── 下の帯 ── */
-  .cta { margin-top: auto; flex: none; background: linear-gradient(120deg, #ff9a3d, #ff6f91); color: #fff; padding: 4.5mm 10mm 5.5mm; display: flex; align-items: center; gap: 5mm; border-radius: 12mm 12mm 0 0; }
+  .cta { margin-top: auto; flex: none; background: linear-gradient(120deg, #ff9a3d, #ff6f91); color: #fff; padding: 4mm 10mm 4.5mm; display: flex; align-items: center; gap: 5mm; border-radius: 12mm 12mm 0 0; }
   .cta .msg { flex: 1; }
-  .cta h2 { margin: 0; font-size: 6.4mm; font-weight: 900; line-height: 1.3; text-shadow: 0 .6mm 0 rgba(150,40,40,.25); }
+  .cta h2 { margin: 0; font-size: 5.9mm; font-weight: 900; line-height: 1.3; text-shadow: 0 .6mm 0 rgba(150,40,40,.25); }
   .cta p { margin: 1.2mm 0 0; font-size: 3.6mm; font-weight: 700; line-height: 1.6; }
-  .cta .devices { display: flex; gap: 1.6mm; margin-top: 2mm; }
-  .cta .devices span { background: rgba(255,255,255,.25); border-radius: 3mm; padding: .8mm 2.6mm; font-size: 3.2mm; font-weight: 900; }
+  .cta .devices { display: flex; align-items: center; gap: 1.4mm; margin-top: 1.8mm; font-size: 3.1mm; font-weight: 900; }
+  .lesson { display: flex; align-items: center; gap: 2.4mm; margin-top: 2mm; background: #fff; color: var(--ink); border-radius: 4mm; padding: 1.6mm 3.4mm; box-shadow: 0 .8mm 0 rgba(120,30,30,.2); }
+  .lesson .ic { font-size: 7mm; line-height: 1; }
+  .lesson b { display: block; font-size: 4.6mm; font-weight: 900; color: #e8590c; line-height: 1.25; }
+  .lesson b .time { background: linear-gradient(transparent 60%, #ffe27a 60%); padding: 0 .6mm; }
+  .lesson span { display: block; font-size: 3mm; font-weight: 700; color: #6b5a4c; line-height: 1.4; }
+  .cta .devices span { background: rgba(255,255,255,.25); border-radius: 3mm; padding: .6mm 2.2mm; font-size: 3mm; font-weight: 900; }
   .contact { width: 58mm; flex: none; background: #fff; color: var(--ink); border-radius: 5mm; padding: 3.2mm 4mm; box-shadow: 0 1.2mm 0 rgba(120,30,30,.2); }
   .contact .t { font-size: 3.2mm; color: var(--muted); font-weight: 900; }
   .contact .name { font-size: 7.6mm; font-weight: 900; color: #e8590c; line-height: 1.2; margin-top: .4mm; }
@@ -145,8 +150,8 @@
   <section class="cta">
     <div class="msg">
       <h2>いっしょに、がんばる仲間がいる。<br>三浦塾で、自習を習慣に！</h2>
-      <p>アプリのインストールは不要。ブラウザからすぐ入れます。</p>
-      <div class="devices"><span>📱 スマホ</span><span>📲 タブレット</span><span>💻 パソコン</span></div>
+      <div class="lesson"><div class="ic">⏰</div><div><b>通常授業は 週2回　<span class="time" style="display:inline;font-size:inherit;color:inherit;font-weight:900">20:00〜22:00</span></b><span>授業は塾の教室で。授業のない日も、オンライン自習室でがんばれる！</span></div></div>
+      <div class="devices">アプリのインストール不要<span>📱 スマホ</span><span>📲 タブレット</span><span>💻 パソコン</span></div>
     </div>
     <div class="contact">
       <div class="t">くわしくは、お気軽にどうぞ</div>
