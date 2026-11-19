@@ -340,6 +340,12 @@ app.post('/api/me/myseat', auth.requireAuth, (req, res) => {
 // 📝 先生の黒板（ロビー）：先生・オーナーが書く。毎日でなくてよい
 function readBoard() { try { return JSON.parse(getSetting('blackboard', 'null')); } catch (e) { return null; } }
 app.get('/api/blackboard', auth.requireAuth, (req, res) => res.json({ board: readBoard() }));
+// 🌅 今日の朝活 成功者（ロビーの掲示板）。体験中の子には名前を出さない
+app.get('/api/morning-board', auth.requireAuth, (req, res) => {
+  const mb = fun.morningBoard();
+  if (mb && req.user.trial_until) mb.names = mb.names.map(() => '生徒');
+  res.json({ board: mb });
+});
 app.put('/api/blackboard', auth.requireAuth, (req, res) => {
   if (req.user.role !== 'owner' && req.user.role !== 'teacher') return bad(res, '先生とオーナーだけが書けます', 403);
   const text = String((req.body || {}).text || '').replace(/[\u0000-\u0009\u000b-\u001f\u007f<>]/g, '').trim().slice(0, 60);

@@ -413,7 +413,7 @@
     const tag = ROLE_TAG[u.role];
     // 高校生：称号を名前の前に、🔥は「週」で数える
     const fire = u.hs ? (u.streak >= 1 ? ` 🔥${u.streak}週` : '') : (u.streak >= 1 ? ` 🔥${u.streak}` : '');
-    const label = (u.myChild ? '💗 ' : '') + (u.bday ? '🎂 ' : '') + (tag ? tag + ' ' : '') + (u.title ? `【${u.title}】` : '') + u.name + fire;
+    const label = (u.myChild ? '💗 ' : '') + (u.bday ? '🎂 ' : '') + (tag ? tag + ' ' : '') + (u.title ? `【${u.title}】` : '') + u.name + fire + (u.asa ? ' 🌅' : '');
     ctx.font = 'bold 12px sans-serif';
     const tw = Math.min(200, ctx.measureText(label).width + 12);
     ctx.fillStyle = opts.isMe ? 'rgba(47,125,225,.95)' : TAG_BG[u.role];
@@ -828,6 +828,50 @@
   }
   const inBoard = (wx, wy) => wx >= BOARD.x && wx <= BOARD.x + BOARD.w && wy >= BOARD.y && wy <= BOARD.y + BOARD.h;
 
+  // 🌅 今日の朝活 成功者（ロビーの上の壁、入口の右）
+  const MORNING = { x: 44 * T + 4, y: 19 * T + 2, w: 5 * T - 8, h: T + 20 };
+  function drawMorningBoard(ctx, mb) {
+    if (!mb) return;
+    const b = MORNING;
+    const g = ctx.createLinearGradient(0, b.y, 0, b.y + b.h);
+    g.addColorStop(0, '#ffb15c'); g.addColorStop(1, '#ff7d4d');
+    ctx.fillStyle = '#a8572c'; ctx.beginPath(); ctx.roundRect(b.x, b.y, b.w, b.h, 4); ctx.fill(); // わく
+    ctx.fillStyle = g; ctx.beginPath(); ctx.roundRect(b.x + 2, b.y + 2, b.w - 4, 15, 3); ctx.fill(); // 見出し
+    ctx.fillStyle = '#fff8ec'; ctx.beginPath(); ctx.roundRect(b.x + 2, b.y + 18, b.w - 4, b.h - 20, 3); ctx.fill(); // 名前の紙
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const n = mb.names.length;
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 9px sans-serif';
+    ctx.fillText(n ? `🌅 今日の朝活 成功者 ${n}人` : '🌅 今日の朝活', b.x + b.w / 2, b.y + 10);
+    ctx.fillStyle = '#5a3a1e';
+    if (!n) {
+      ctx.font = 'bold 9px sans-serif';
+      ctx.fillText(mb.over ? '明日も待ってるよ！' : '今日の一番乗りはだれ？', b.x + b.w / 2, b.y + 28);
+      ctx.font = '7.5px sans-serif'; ctx.fillStyle = '#9a7a5c';
+      ctx.fillText(`朝 ${mb.start}〜${mb.end} に ${mb.minutes}分`, b.x + b.w / 2, b.y + 41);
+    } else {
+      // 2行まで。入りきらない人は「ほか○人」
+      ctx.font = 'bold 8.5px sans-serif';
+      const maxW = b.w - 10, lines = [''];
+      let shown = 0;
+      for (const name of mb.names) {
+        const cur = lines[lines.length - 1], next = cur ? cur + '・' + name : name;
+        if (ctx.measureText(next).width <= maxW) { lines[lines.length - 1] = next; shown++; continue; }
+        if (lines.length < 2) { lines.push(name); shown++; continue; }
+        break;
+      }
+      if (shown < n) {
+        const rest = `ほか${n - shown}人`;
+        let last = lines[lines.length - 1];
+        while (last.includes('・') && ctx.measureText(last + ' ' + rest).width > maxW) { last = last.slice(0, last.lastIndexOf('・')); shown--; }
+        lines[lines.length - 1] = last + ' ' + `ほか${n - shown}人`;
+      }
+      const y0 = lines.length === 1 ? b.y + 34 : b.y + 28;
+      lines.forEach((ln, i) => ctx.fillText(ln, b.x + b.w / 2, y0 + i * 12));
+    }
+    ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
+  }
+  const inMorningBoard = (wx, wy) => wx >= MORNING.x && wx <= MORNING.x + MORNING.w && wy >= MORNING.y && wy <= MORNING.y + MORNING.h;
+
   // 🎎 ひな人形：着物の色と、持ち物
   const HINA = {
     dairi: { robe: '#2a2a3a', under: '#7a1f2b', hair: 'kanmuri' },                 // おだいりさま：黒の束帯・冠・しゃく
@@ -953,5 +997,5 @@
     ctx.restore();
   }
 
-  window.Render = { buildMap, drawAvatar, drawFollower, drawFx, drawBloomGlow, drawPetal, drawWindows, drawBoard, inBoard, drawTree, drawDecorations, seasonOf, COSTUMES };
+  window.Render = { buildMap, drawAvatar, drawFollower, drawFx, drawBloomGlow, drawPetal, drawWindows, drawBoard, inBoard, drawMorningBoard, inMorningBoard, drawTree, drawDecorations, seasonOf, COSTUMES };
 })();

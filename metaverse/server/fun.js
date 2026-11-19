@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS badges (user_id INTEGER NOT NULL, badge TEXT NOT NULL
 CREATE TABLE IF NOT EXISTS santa_gifts (user_id INTEGER NOT NULL, year INTEGER NOT NULL, item TEXT NOT NULL, opened_at TEXT NOT NULL, PRIMARY KEY (user_id, year));
 CREATE TABLE IF NOT EXISTS study_morning (user_id INTEGER NOT NULL, day TEXT NOT NULL, minutes INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user_id, day));
 `);
+if (!db.prepare('PRAGMA table_info(study_morning)').all().some(c => c.name === 'done_at')) db.exec('ALTER TABLE study_morning ADD COLUMN done_at TEXT'); // 朝活が成功した時刻（掲示板の順番）
 
 const cfg = () => G.getConfig().fun;
 const md = (t) => t.day.slice(5);
@@ -138,6 +139,7 @@ function morningTick(userIds, date = new Date()) {
     up.run(id, t.day);
     const m = db.prepare('SELECT minutes FROM study_morning WHERE user_id = ? AND day = ?').get(id, t.day).minutes;
     if (m !== f.asakatsuMinutes) continue; // ちょうど達したときだけ
+    db.prepare('UPDATE study_morning SET done_at = ? WHERE user_id = ? AND day = ?').run(now(), id, t.day);
     bonus(id, `asa:${t.day}`, f.asakatsuPoints);
     out.push({ id, stamps: morningStamps(id), points: f.asakatsuPoints });
   }
@@ -145,6 +147,22 @@ function morningTick(userIds, date = new Date()) {
 }
 function morningStamps(userId) {
   return db.prepare('SELECT COUNT(*) AS n FROM study_morning WHERE user_id = ? AND minutes >= ?').get(userId, cfg().asakatsuMinutes).n;
+}
+// 🌅 今日の朝活 成功者（成功した順）。ロビーの掲示板に出す
+function morningBoard(date = new Date()) {
+  const f = cfg(), t = G.jst(date);
+  if (!f.asakatsu) return null;
+  const names = db.prepare(`SELECT u.display_name AS name FROM study_morning m JOIN users u ON u.id = m.user_id
+    WHERE m.day = ? AND m.minutes >= ? AND u.role = 'student' AND u.is_active = 1 AND u.trial_until IS NULL
+    ORDER BY COALESCE(m.done_at, '9'), u.display_name`).all(t.day, f.asakatsuMinutes).map(r => r.name);
+  return { day: t.day, names, start: f.asakatsuStart, end: f.asakatsuEnd, minutes: f.asakatsuMinutes, over: t.hm >= f.asakatsuEnd };
+}
+// 今日の朝活が成功しているか（名札の🌅）
+function morningDone(userId, date = new Date()) {
+  const f = cfg();
+  if (!f.asakatsu) return false;
+  const r = db.prepare('SELECT minutes FROM study_morning WHERE user_id = ? AND day = ?').get(userId, G.jst(date).day);
+  return !!(r && r.minutes >= f.asakatsuMinutes);
 }
 function morningStatus(userId, date = new Date()) {
   const f = cfg();
@@ -163,5 +181,5 @@ function statusFor(userId, date = new Date()) {
 
 module.exports = {
   awardBadge, badgesOf, EVENTS, eventStatus, santaStatus, tanabataStatus, readLetter, followersOf, fxOf, bloomOf, hinaStatus,
-  morningTick, morningStamps, morningStatus, statusFor,
+  morningTick, morningStamps, morningStatus, morningBoard, morningDone, statusFor,
 };

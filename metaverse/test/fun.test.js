@@ -106,6 +106,22 @@ test('朝活：6:00〜7:30に数えた時間が30分になった日にスタン�
   assert.match(G.setConfig({ fun: { asakatsuStart: '08:00', asakatsuEnd: '07:00' } }), /時間帯/);
 });
 
+test('ロビーの「今日の朝活 成功者」：成功した順に名前・名札の🌅', async () => {
+  const day = `${Y}-10-05`;
+  assert.deepEqual(F.morningBoard(at(day, '06:00')).names, [], 'まだだれもいない');
+  for (let m = 0; m < 30; m++) F.morningTick([U.aaa.id], at(day, `06:${String(m).padStart(2, '0')}`));
+  for (let m = 0; m < 29; m++) F.morningTick([U.bbb.id], at(day, `06:${String(m).padStart(2, '0')}`));
+  const b1 = F.morningBoard(at(day, '07:00'));
+  assert.equal(b1.names.length, 1, '30分に届いた人だけ');
+  assert.equal(F.morningDone(U.aaa.id, at(day, '07:00')), true);
+  assert.equal(F.morningDone(U.bbb.id, at(day, '07:00')), false);
+  F.morningTick([U.bbb.id], at(day, '07:10'));
+  const b2 = F.morningBoard(at(day, '07:40'));
+  assert.equal(b2.names.length, 2); assert.equal(b2.over, true, '7:30をすぎた');
+  assert.equal(F.morningDone(U.aaa.id, at(`${Y}-10-06`, '06:00')), false, '次の日はリセット');
+  assert.equal((await http('GET', '/api/morning-board', null, U.aaa.cookie)).status, 200);
+});
+
 test('オーナーはお楽しみのオン/オフと条件を変えられる。オフにすると出ない', async () => {
   assert.equal((await http('PATCH', '/api/admin/ganbari/config', { fun: { santaDays: 0 } }, owner)).status, 400);
   assert.equal((await http('PATCH', '/api/admin/ganbari/config', { fun: { santa: false, asakatsu: false } }, owner)).status, 200);

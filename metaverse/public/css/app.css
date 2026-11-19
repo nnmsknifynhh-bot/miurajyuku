@@ -342,3 +342,7 @@ body.is-trial .not-trial { display: none !important; }
 /* 保護者：のこり時間 */
 .visit-chip { background: rgba(255,240,246,.96); border-color: #f0a6c4; color: #8a2f58; }
 .visit-chip.warn { background: #ffe0e0; border-color: #e57373; color: #b71c1c; }
+
+/* 🌅 今日の朝活 成功者 */
+.morning-list { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; max-height: 50vh; overflow: auto; margin: 8px 0; }
+.morning-name { font-weight: 700; padding: 4px 8px; background: #fff4e6; border-radius: 8px; }

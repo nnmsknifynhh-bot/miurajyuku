@@ -53,6 +53,7 @@ function pub(p) {
     bday: !!(p.bday && p.bday.public), // 誕生日（ほかの生徒にも見せる設定のときだけ。先生だけの設定は staff にだけ別に送る）
     hs: !!p.hs, title: p.title || null, plan: p.plan || null, // 高校生：称号・今日やること（🔥は週で数える）
     equip: equipView(p.equip), streak: p.streak || 0, trial: !!p.user.trial_until,
+    asa: !!p.asa, // 🌅 今日の朝活に成功
     follow: p.follow || null, fx: p.fx || null, bloom: !!p.bloom, // 季節の2章イベント：うしろについて歩く仲間・特別な日の演出（12/25・7/7）
   };
 }
@@ -117,6 +118,7 @@ function broadcastRooms() {
   roomsTimer = setTimeout(() => { roomsTimer = null; io.emit('rooms', roomCounts()); }, 100);
 }
 
+let lastMorningKey = null; // ロビーの朝活の掲示板（変わったときだけ送る）
 const MENDAN_MAX = 3; // 面談ブースに入れるのは、オーナーのほかに3人まで
 // 入室チェック：権限と定員
 function entryError(p, roomId) {
@@ -367,6 +369,7 @@ function attach(httpServer) {
     p.bday = user.role === 'student' ? ganbari.birthdayInfo(p.id) : null;
     p.follow = user.role === 'student' && !user.trial_until ? fun.followersOf(p.id) : null;
     p.fx = p.follow ? fun.fxOf(p.id) : null;
+    p.asa = user.role === 'student' && !user.trial_until ? fun.morningDone(p.id) : false;
     if (user.role === 'student' && myseat.checkKeep(p.id)) setTimeout(() => { socket.emit('myseat-lost'); broadcastMySeats(); }, 500); // 🔥がとぎれていたらマイ席を返す
     p.bloom = user.role === 'student' && !user.trial_until ? fun.bloomOf(p.id) : false;
     refreshHS(p, false);
@@ -860,10 +863,18 @@ function attach(httpServer) {
         if (won) for (const w of won) { refreshGanbari(w); const o = online.get(w); if (o) o.socket.emit('referral-reward', { kind: 'pair', points: referral.PAIR_POINTS }); }
       }
       // 🌅 朝活チャレンジ：朝（初期設定 6:00〜7:30）に数えた時間で早起きスタンプとポイント
-      for (const r of fun.morningTick(added)) {
+      const asaNew = fun.morningTick(added);
+      for (const r of asaNew) {
         const p = online.get(r.id);
         if (p) p.socket.emit('fun-event', { kind: 'asa', stamps: r.stamps, points: r.points });
       }
+      // 名札の🌅（成功したとき・日がかわったとき）と、ロビーの「今日の朝活 成功者」
+      for (const p of online.values()) {
+        if (p.user.role !== 'student' || p.user.trial_until) continue;
+        const a = fun.morningDone(p.id);
+        if (a !== !!p.asa) { p.asa = a; io.emit('user-updated', { id: p.id, asa: a }); }
+      }
+      { const mb = fun.morningBoard(); const key = mb ? mb.day + mb.names.join(',') + mb.over : ''; if (key !== lastMorningKey) { lastMorningKey = key; for (const o of online.values()) o.socket.emit('morning-board', mb && o.user.trial_until ? { ...mb, names: mb.names.map(() => '生徒') } : mb); } }
       for (const p of online.values()) { updateToday(p); refreshBirthday(p); refreshHS(p); refreshFollow(p); } // 日付が変わったときも 0 にもどる
       // 決めた曜日・時刻を過ぎても来ていない高校生を、先生に知らせる
       for (const s of ganbari.lateStudents(new Set(online.keys()))) notify.studentLate(s, online).catch(e => console.error('遅れの通知に失敗:', e.message));

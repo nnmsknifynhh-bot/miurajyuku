@@ -173,7 +173,7 @@
       state.path = []; state.pathSeat = null; state.ready = true;
       state.testQueue = d.testQueue || null;
       state.mySeats = d.mySeats || [];
-      loadBoard();
+      loadBoard(); loadMorning();
       if (state.user.role === 'student') setTimeout(goMySeat, 1800);
       { const mine = state.testQueue && state.testQueue.booths.find(b => b.userId === d.me.id); state.testBooth = mine ? mine.seat : null; }
       buildReactions(); updateAll(); refreshWeek(true); refreshFun(true); renderTest();
@@ -183,6 +183,7 @@
     // ── 保護者 ──
     socket.on('visit-over', ({ message }) => showVisitOver(message));
     socket.on('myseats', (list) => { state.mySeats = list || []; });
+    socket.on('morning-board', (mb) => { state.morning = mb; if ($('#morning-dialog').open) openMorning(); });
     socket.on('blackboard', ({ board }) => { state.board = board; if (board && !isStaff()) { toast('📝 先生の黒板が新しくなったよ（ロビー）', 5000); markBoardSeen(); } });
     socket.on('myseat-lost', () => { toast('⭐ 🔥がとぎれたので、マイ席はお休みになりました。また続けたら、えらべるよ', 7000); refreshFun(true); });
     socket.on('referral-reward', ({ kind, points }) => {
@@ -1376,6 +1377,7 @@
     }
     if (hit) return showUserPop(hit, sx, sy);
     if (window.Render.inBoard(w.x, w.y)) return openBoard(); // 📝 先生の黒板
+    if (state.morning && window.Render.inMorningBoard(w.x, w.y)) return openMorning(); // 🌅 今日の朝活 成功者
     // 学年の木
     for (let i = 0; i < SM.FOREST.length; i++) {
       const p = treePos(i);
@@ -1475,6 +1477,19 @@
   $('#menu-invite').onclick = openInvite;
   // ───── 📝 先生の黒板 ─────
   const boardKey = () => 'juku-board-seen-' + (state.user ? state.user.id : '');
+  // 🌅 今日の朝活 成功者
+  async function loadMorning() { try { state.morning = (await api('GET', '/api/morning-board')).board; } catch (e) { /* 次の機会に */ } }
+  setInterval(loadMorning, 10 * 60_000); // 日がかわったときのため
+  function openMorning() {
+    const mb = state.morning; if (!mb) return;
+    $('#morning-title').textContent = mb.names.length ? `🌅 今日の朝活 成功者 ${mb.names.length}人` : '🌅 今日の朝活';
+    $('#morning-rule').textContent = `朝 ${mb.start}〜${mb.end} に${mb.minutes}分自習すると成功！ 早起きスタンプとポイントがもらえるよ`;
+    const list = $('#morning-list'); list.textContent = '';
+    if (!mb.names.length) list.append(el('p', 'muted', mb.over ? 'きょうはまだいません。明日も待ってるよ！' : 'まだだれもいません。今日の一番乗りはだれ？'));
+    mb.names.forEach((n, i) => list.append(el('div', 'morning-name', `${i + 1}. ${n}`)));
+    if (!$('#morning-dialog').open) $('#morning-dialog').showModal();
+  }
+  $('#morning-close').onclick = () => $('#morning-dialog').close();
   function markBoardSeen() { try { if (state.board) localStorage.setItem(boardKey(), String(state.board.at)); } catch (e) {} }
   async function loadBoard() {
     try { state.board = (await api('GET', '/api/blackboard')).board; } catch (e) { return; }
@@ -1742,6 +1757,7 @@
     { const hw = innerWidth / 2 / z, hh = innerHeight / 2 / z, cx = Math.round(state.cam.x), cy = Math.round(state.cam.y);
       window.Render.drawWindows(ctx, time / 1000, { x1: cx - hw, x2: cx + hw, y1: cy - hh, y2: cy + hh }); }
     window.Render.drawBoard(ctx, state.board);
+    window.Render.drawMorningBoard(ctx, state.morning);
     drawMySeatPlates(time);
 
     // 入れない部屋・満員の部屋
