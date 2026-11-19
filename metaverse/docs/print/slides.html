@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>三浦塾オンライン教室 保護者会</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap">
+<style>
+  @page { size: 1280px 720px; margin: 0; }
+  :root { --ink: #33291f; --muted: #7a6a5c; --cream: #fffaf2; --line: #ecdcc6; --blue: #3d8bfd; --orange: #ff8a3d; --green: #2fae74; --pink: #f25f9a; --purple: #8b6cf6; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: 'Zen Maru Gothic', sans-serif; color: var(--ink); font-weight: 500; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .slide { width: 1280px; height: 720px; padding: 40px 56px 36px; position: relative; overflow: hidden; background: var(--cream); page-break-after: always; display: flex; flex-direction: column; gap: 20px; }
+  .slide::before { content: ''; position: absolute; inset: 0; background-image: radial-gradient(#f1dfc4 2px, transparent 2.2px); background-size: 24px 24px; opacity: .55; z-index: 0; }
+  .slide > * { position: relative; z-index: 1; }
+  .no { position: absolute; right: 30px; bottom: 16px; font-size: 14px; color: var(--muted); font-weight: 700; }
+  h1 { margin: 0; font-size: 44px; font-weight: 900; line-height: 1.2; }
+  .kicker { display: inline-block; align-self: flex-start; color: #fff; font-weight: 900; font-size: 17px; padding: 5px 16px; border-radius: 20px; }
+  .head { display: flex; flex-direction: column; gap: 8px; }
+  .body { flex: 1; display: grid; gap: 28px; min-height: 0; }
+  .c2 { grid-template-columns: 1fr 1fr; } .c21 { grid-template-columns: 1.15fr 1fr; } .c12 { grid-template-columns: 1fr 1.2fr; } .c3 { grid-template-columns: repeat(3, 1fr); }
+  ul.pt { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 14px; }
+  ul.pt li { background: #fff; border: 2px solid var(--line); border-radius: 16px; padding: 12px 18px; font-size: 22px; line-height: 1.5; }
+  ul.pt li b { color: #c2410c; }
+  .shot { border-radius: 14px; overflow: hidden; border: 4px solid #fff; box-shadow: 0 4px 14px rgba(80,50,20,.22); background: #2b2533; min-height: 0; }
+  .shot img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .phone { border-radius: 22px; padding: 6px; background: #2b2533; box-shadow: 0 4px 14px rgba(40,20,60,.3); min-height: 0; }
+  .phone img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 16px; }
+  .cap { font-size: 15px; color: var(--muted); font-weight: 700; text-align: center; margin-top: 6px; }
+  .col { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+  .col > .shot, .col > .phone { flex: 1; }
+  .card { background: #fff; border: 2px solid var(--line); border-radius: 18px; padding: 16px 20px; }
+  .card h3 { margin: 0 0 6px; font-size: 24px; font-weight: 900; }
+  .card p { margin: 0; font-size: 19px; line-height: 1.55; }
+  .note { background: #fff7d6; border: 2px dashed #e8b923; border-radius: 16px; padding: 12px 18px; font-size: 20px; line-height: 1.5; }
+  table.t { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 19px; background: #fff; border-radius: 14px; overflow: hidden; border: 2px solid var(--line); }
+  table.t th { background: #fdeccf; font-weight: 900; padding: 9px 12px; text-align: left; }
+  table.t td { padding: 9px 12px; border-top: 1.5px solid var(--line); line-height: 1.4; }
+  .k-blue { background: var(--blue); } .k-orange { background: var(--orange); } .k-green { background: var(--green); } .k-pink { background: var(--pink); } .k-purple { background: var(--purple); } .k-red { background: #d6455d; }
+  .title { background: linear-gradient(150deg, #47b4ff 0%, #7c8cff 45%, #b07cff 75%, #ff9fc8 100%); color: #fff; }
+  .title::before { background-image: radial-gradient(rgba(255,255,255,.35) 2px, transparent 2.2px); }
+  .flow { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
+  .step { background: #fff; border: 2px solid var(--line); border-radius: 18px; padding: 14px; text-align: center; display: flex; flex-direction: column; gap: 8px; }
+  .step .ic { font-size: 40px; }
+  .step b { font-size: 21px; }
+  .step span { font-size: 16px; line-height: 1.45; color: var(--muted); font-weight: 700; }
+</style>
+</head>
+<body>
+
+<!-- 1 -->
+<section class="slide title">
+  <div class="body c21" style="align-items:center">
+    <div style="display:flex;flex-direction:column;gap:22px">
+      <span class="kicker" style="background:#fff;color:var(--pink)">保護者会のご説明</span>
+      <h1 style="font-size:64px">三浦塾<br>オンライン教室</h1>
+      <p style="margin:0;font-size:28px;font-weight:700;line-height:1.6">おうちでも、みんなと、がんばれる。<br>スマホで入れる、2Dの自習室です。</p>
+    </div>
+    <div class="shot" style="height:520px"><img src="img/all.jpg" alt=""></div>
+  </div>
+  <span class="no" style="color:#fff">1</span>
+</section>
+
+<!-- 2 ねらい -->
+<section class="slide">
+  <div class="head"><span class="kicker k-blue">ねらい</span><h1>「家でも勉強する」を、毎日の習慣に</h1></div>
+  <div class="body c21">
+    <ul class="pt">
+      <li>家だと、ひとりでは<b>なかなか机に向かえない</b>…</li>
+      <li>アプリを開けば、<b>友だちが自習している教室</b>に入れます。</li>
+      <li>すわっている間の<b>自習時間を自動で記録</b>。がんばりが目に見えます。</li>
+      <li>テスト前の<b>季節のクエスト</b>で、楽しみながら続けられます。</li>
+      <li>通常授業（週2回・20:00〜22:00）はこれまでどおり教室で行います。</li>
+    </ul>
+    <div class="col"><div class="phone"><img src="img/study.jpg" alt=""></div><div class="cap">自習室のようす（スマホ画面）</div></div>
+  </div>
+  <span class="no">2</span>
+</section>
+
+<!-- 3 1日の流れ -->
+<section class="slide">
+  <div class="head"><span class="kicker k-green">つかい方</span><h1>1日の流れ</h1></div>
+  <div class="flow">
+    <div class="step"><div class="ic">📱</div><b>ログイン</b><span>ブラウザで開くだけ。アプリのインストールは不要</span></div>
+    <div class="step"><div class="ic">📝</div><b>漢字1問</b><span>入る前に漢検の読みを1問。毎日の小さな積み重ね</span></div>
+    <div class="step"><div class="ic">🚶</div><b>自習室へ</b><span>中学生は自習室、高校生は高校生自習室（カフェ）</span></div>
+    <div class="step"><div class="ic">🪑</div><b>席にすわる</b><span>すわると自習時間のカウントが始まります</span></div>
+    <div class="step"><div class="ic">🔥</div><b>記録が残る</b><span>今日の時間・連続日数・ポイントがたまります</span></div>
+  </div>
+  <div class="body c3" style="gap:20px">
+    <div class="col"><div class="phone"><img src="img/kanji.jpg" alt="" style="object-position:center 35%"></div><div class="cap">入る前の漢字テスト</div></div>
+    <div class="col"><div class="shot"><img src="img/study_wide.jpg" alt=""></div><div class="cap">頭の上に「今日○分」</div></div>
+    <div class="col"><div class="phone"><img src="guide2/saver.jpg" alt=""></div><div class="cap">長時間は省電力画面（電池の節約）</div></div>
+  </div>
+  <span class="no">3</span>
+</section>
+
+<!-- 4 集中ルール -->
+<section class="slide">
+  <div class="head"><span class="kicker k-red">安心・集中</span><h1>遊び場にならない、集中のしくみ</h1></div>
+  <div class="body c21">
+    <ul class="pt">
+      <li>💬 吹き出し・スタンプは<b>先生と話すときだけ</b>。生徒どうしの雑談はできません。</li>
+      <li>🚶 自習室で<b>10秒以上立ち歩く</b>と、席にすわるよう声がかかります。</li>
+      <li>📱 アプリを閉じる・ほかのアプリを見ると<b>時間は止まります</b>。</li>
+      <li>👩‍🏫 先生・オーナーが<b>教室全体を見わたし</b>、質問にはその場で対応します。</li>
+      <li>🎤 スピーキング等のテストは、個別の<b>テストブース</b>で行います。</li>
+    </ul>
+    <div class="col"><div class="shot"><img src="guide2/teacher.jpg" alt=""></div><div class="cap">先生・オーナーはスーツ姿で大きめに表示</div></div>
+  </div>
+  <span class="no">4</span>
+</section>
+
+<!-- 5 がんばりが見える -->
+<section class="slide">
+  <div class="head"><span class="kicker k-orange">続けるしくみ</span><h1>がんばりが「見える」から、続けられる</h1></div>
+  <div class="body c3" style="gap:20px">
+    <div class="col"><div class="card"><h3>🔥 連続自習</h3><p>学年の最低時間（中1 45分・中2 60分・中3 90分）をこえた日が続くと🔥が増えます。<b>授業の曜日は途切れません。</b></p></div><div class="phone"><img src="img/shop.jpg" alt="" style="object-position:center 15%"></div><div class="cap">10分で1ポイント → 着せかえと交換</div></div>
+    <div class="col"><div class="card"><h3>🌳 学年の木</h3><p>学年みんなの自習時間で木が育ちます。<b>競争ではなく協力</b>のしくみです。</p></div><div class="phone"><img src="img/trees.jpg" alt="" style="object-position:center 25%"></div><div class="cap">芽 → 花 → 実</div></div>
+    <div class="col"><div class="card"><h3>⭐ マイ席</h3><p>🔥30日（高校生は4週）で、自分だけの指定席。金色の名前プレートがつきます。</p></div><div class="shot"><img src="guide2/myseat_room.jpg" alt=""></div><div class="cap">すわると光るマイ席</div></div>
+  </div>
+  <span class="no">5</span>
+</section>
+
+<!-- 6 季節のクエスト -->
+<section class="slide">
+  <div class="head"><span class="kicker k-pink">季節のクエスト</span><h1>定期テスト前に、がんばるほど楽しいイベント</h1></div>
+  <div class="body c12">
+    <div class="col" style="gap:14px">
+      <table class="t">
+        <tr><th>クエスト</th><th>期間</th><th>ごほうび</th></tr>
+        <tr><td>🎋 1学期中間・期末</td><td>5月・6月<br>各15日</td><td>7/1〜20 彦星（両方で織姫も）</td></tr>
+        <tr><td>🎅 2学期中間・期末</td><td>10月・11月<br>各15日</td><td>12/1〜25 サンタ（両方でトナカイも）</td></tr>
+        <tr><td>🎎 3学期学年末</td><td>1/20〜2/28<br>15日〜</td><td>3/1〜20 ひな人形の行列</td></tr>
+      </table>
+      <div class="note">学校ごとにテストの日がちがっても大丈夫なように、<b>1か月の中で15日</b>（2日に1回より少し多いくらい）にしています。</div>
+    </div>
+    <div class="col" style="gap:12px">
+      <div class="shot" style="flex:1"><img src="guide2/santa_walk.jpg" alt=""></div>
+      <div class="shot" style="flex:1"><img src="guide2/hina_0303.jpg" alt=""></div>
+      <div class="cap">クリアした子のうしろを、仲間がついて歩きます</div>
+    </div>
+  </div>
+  <span class="no">6</span>
+</section>
+
+<!-- 7 保護者機能 -->
+<section class="slide">
+  <div class="head"><span class="kicker k-blue">保護者の方へ</span><h1>おうちの方も、ロビーから見守れます</h1></div>
+  <div class="body" style="grid-template-columns: 1.05fr .8fr .8fr; gap:20px">
+    <ul class="pt" style="gap:10px">
+      <li style="font-size:19px">🛋 ロビーのソファから<b>塾全体を見わたせます</b>（1日1回・10分）。</li>
+      <li style="font-size:19px">🏠「わが子」で<b>今日・今週の自習時間</b>と🔥を確認。</li>
+      <li style="font-size:19px">📅 <b>勉強の足あとカレンダー</b>（保護者だけ）。</li>
+      <li style="font-size:19px">👏「見たよ」スタンプ → お子さまに届き、<b>家族の木</b>に花が咲きます。</li>
+      <li style="font-size:19px">📝 保護者向け<b>毎日5問クイズ</b>でポイントも。</li>
+    </ul>
+    <div class="col"><div class="phone"><img src="guide2/calendar.jpg" alt="" style="object-fit:contain;background:#fff"></div><div class="cap">勉強の足あとカレンダー</div></div>
+    <div class="col"><div class="phone"><img src="guide2/parent_view.jpg" alt="" style="object-position:center top"></div><div class="cap">わが子のようす</div></div>
+  </div>
+  <span class="no">7</span>
+</section>
+
+<!-- 8 プライバシー -->
+<section class="slide">
+  <div class="head"><span class="kicker k-green">プライバシー</span><h1>名前の見え方と、安心のための約束</h1></div>
+  <div class="body c21">
+    <ul class="pt">
+      <li>保護者の方の<b>お名前は、子どもには表示されません</b>。</li>
+      <li>保護者の方には、<b>ほかのお子さまの名前は表示されません</b>。</li>
+      <li>アカウントは<b>塾が発行</b>。招待コードがないと登録できません。</li>
+      <li>カメラ・マイクは<b>ブースの中だけ</b>。自習室では使いません。</li>
+      <li>体験の友だちは<b>期限つき・記録なし</b>で、ほかの子の名前は見えません。</li>
+    </ul>
+    <div class="col"><div class="shot"><img src="guide2/parent_sofa.jpg" alt=""></div><div class="cap">保護者の方はロビーのソファから</div></div>
+  </div>
+  <span class="no">8</span>
+</section>
+
+<!-- 9 保護者会・面談 -->
+<section class="slide">
+  <div class="head"><span class="kicker k-purple">保護者会・面談</span><h1>オンラインで、保護者会と面談も</h1></div>
+  <div class="body c2">
+    <div class="col" style="gap:14px">
+      <div class="card"><h3>🏫 保護者会の日</h3><p>保護者の方が<b>全部の教室</b>に入れます。自習室やテスト教室を、子どもと同じルールで体験できます（その時間、生徒は入れません）。</p></div>
+      <div class="card"><h3>🗣 面談ブース</h3><p>ロビーの面談ブースは、<b>塾が許可した方だけ</b>入れます。通話と画面共有で、成績表を見ながらお話しできます。</p></div>
+      <div class="card"><h3>📝 先生の黒板</h3><p>ロビーの黒板に、先生からのメッセージを書きます。</p></div>
+    </div>
+    <div class="col"><div class="shot"><img src="guide2/board.jpg" alt=""></div><div class="cap">ロビーの先生の黒板</div><div class="shot"><img src="guide2/test_booth.jpg" alt="" style="object-position:center 70%"></div><div class="cap">ブース（通話・画面共有）</div></div>
+  </div>
+  <span class="no">9</span>
+</section>
+
+<!-- 10 友だち紹介 -->
+<section class="slide">
+  <div class="head"><span class="kicker k-orange">友だち紹介</span><h1>お友だちと、いっしょに</h1></div>
+  <div class="body" style="grid-template-columns: 1.3fr .7fr .7fr; gap:20px">
+    <ul class="pt" style="gap:10px">
+      <li style="font-size:19px">🤝 メニュー「友だちを招待」から<b>LINEで招待カード</b>を送れます。</li>
+      <li style="font-size:19px">🎫 お友だちは<b>3日間の体験</b>（紹介ウィーク中はもっと長く）。</li>
+      <li style="font-size:19px">🐥 入塾したら、2人に<b>おそろいのひよこ</b>。</li>
+      <li style="font-size:19px">💫 7日間2人とも🔥で、<b>きらきら星＋30ポイント</b>。</li>
+      <li style="font-size:19px">🌷 保護者どうしのご紹介で、家族の木に<b>特別な花＋50ポイント</b>。</li>
+    </ul>
+    <div class="col"><div class="phone"><img src="guide2/invite.jpg" alt="" style="object-position:center 30%"></div><div class="cap">招待カード</div></div>
+    <div class="col"><div class="phone"><img src="guide2/trial.jpg" alt="" style="object-position:center 30%"></div><div class="cap">体験のはじめかた</div></div>
+  </div>
+  <span class="no">10</span>
+</section>
+
+<!-- 11 はじめかた -->
+<section class="slide">
+  <div class="head"><span class="kicker k-blue">はじめかた</span><h1>今日から使えます</h1></div>
+  <div class="body c21">
+    <div class="col" style="gap:14px">
+      <div class="card"><h3>👦 お子さま</h3><p>塾から<b>IDとパスワード</b>をお渡しします。スマホ・タブレット・パソコンのブラウザで開くだけ。ホーム画面に追加するとアプリのように使えます。</p></div>
+      <div class="card"><h3>🏠 保護者の方</h3><p>塾から<b>招待コード</b>をお渡しします。登録画面でコードを入力し、お名前・ID・パスワードを決めてください。</p></div>
+      <div class="note">📖 お子さま向けの「攻略本（A4）」もお配りします。イベントやクエストのことがすべてのっています。</div>
+    </div>
+    <div class="col"><div class="shot"><img src="guide2/win_spring.jpg" alt=""></div><div class="cap">窓の外は、季節と時間で変わります</div></div>
+  </div>
+  <span class="no">11</span>
+</section>
+
+<!-- 12 おわり -->
+<section class="slide title" style="justify-content:center;align-items:center;text-align:center">
+  <h1 style="font-size:60px">ご質問・ご相談は<br>お気軽に塾まで</h1>
+  <p style="margin:0;font-size:28px;font-weight:700">おうちでも、みんなと、がんばれる。<br>三浦塾オンライン教室をよろしくお願いします。</p>
+  <span class="no" style="color:#fff">12</span>
+</section>
+
+</body>
+</html>
