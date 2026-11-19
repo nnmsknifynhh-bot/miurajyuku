@@ -576,30 +576,44 @@
     $('#family-moms').textContent = `🌸 家族の木：花${m.flowers}こ${m.tulips ? `・🌷${m.tulips}` : ''}（${m.stageName}）・今月${m.families}家族が挑戦中・あなたは🔥${d.streak}日連続・${d.points}ポイント`;
     if (!$('#family-dialog').open) $('#family-dialog').showModal();
   }
+  // 📅 勉強の足あとカレンダー：ふつうのカレンダーの形で、1か月ずつ（日付の下に、その日の自習時間）
   async function drawFootprints(box, id) {
     box.textContent = '読みこみ中…';
     let d; try { d = await api('GET', '/api/parent/footprints/' + id); } catch (e) { box.textContent = e.message; return; }
-    box.textContent = '';
     const lvl = (m) => (!m ? 0 : m < 30 ? 1 : m < 60 ? 2 : m < 120 ? 3 : 4);
-    const add = (day, n) => { const x = new Date(day + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
-    // 週ごとの列（日曜はじまり）
-    let start = d.from; while (new Date(start + 'T00:00:00Z').getUTCDay() !== 0) start = add(start, -1);
-    const wrap = el('div', 'foot-scroll'), months = el('div', 'foot-months'), grid = el('div', 'foot-grid');
-    let total = 0, count = 0, col = 0, lastMonth = '';
-    for (let day = start; day <= d.to; day = add(day, 1)) {
-      const wd = new Date(day + 'T00:00:00Z').getUTCDay();
-      if (wd === 0) { col++; const mo = (day < d.from ? d.from : day).slice(5, 7); if (mo !== lastMonth) { const ml = el('span', null, Number(mo) + '月'); ml.style.gridColumn = col; months.append(ml); lastMonth = mo; } }
-      const m = day >= d.from ? (d.days[day] || 0) : null, c = el('i', 'f' + (m == null ? 'x' : lvl(m)));
-      c.style.gridColumn = col; c.style.gridRow = wd + 1;
-      if (m != null) { c.title = `${Number(day.slice(5, 7))}/${Number(day.slice(8))} ${m ? fmtMin(m) : '自習なし'}`; if (m) { total += m; count++; } }
-      grid.append(c);
+    const months = [];
+    for (let ym = d.from.slice(0, 7); ym <= d.to.slice(0, 7);) {
+      months.push(ym);
+      const [y, mo] = ym.split('-').map(Number); ym = mo === 12 ? `${y + 1}-01` : `${y}-${String(mo + 1).padStart(2, '0')}`;
     }
-    months.style.gridTemplateColumns = grid.style.gridTemplateColumns = `repeat(${col}, 12px)`;
-    wrap.append(months, grid);
-    const legend = el('div', 'foot-legend');
-    legend.append(el('span', null, '少ない'), ...[0, 1, 2, 3, 4].map(n => el('i', 'f' + n)), el('span', null, '多い（2時間〜）'));
-    box.append(el('p', 'foot-sum', `今年度（${Number(d.from.slice(5, 7))}月〜）：${count}日・合計${fmtMin(total)}`), wrap, legend);
-    wrap.scrollLeft = wrap.scrollWidth; // 今日のあたりを見せる
+    let idx = months.length - 1; // 今月から
+    const show = () => {
+      box.textContent = '';
+      const ym = months[idx], [y, mo] = ym.split('-').map(Number);
+      const last = new Date(Date.UTC(y, mo, 0)).getUTCDate(), first = new Date(Date.UTC(y, mo - 1, 1)).getUTCDay();
+      let total = 0, count = 0;
+      for (let dd = 1; dd <= last; dd++) { const m = d.days[`${ym}-${String(dd).padStart(2, '0')}`] || 0; if (m) { total += m; count++; } }
+      const nav = el('div', 'cal-nav');
+      const prev = el('button', 'btn secondary small', '◀'), next = el('button', 'btn secondary small', '▶');
+      prev.type = next.type = 'button'; prev.disabled = idx === 0; next.disabled = idx === months.length - 1;
+      prev.onclick = () => { idx--; show(); }; next.onclick = () => { idx++; show(); };
+      nav.append(prev, el('b', null, `${y}年${mo}月`), next);
+      const sum = el('p', 'cal-sum', count ? `この月は ${count}日 自習しました（合計 ${fmtMin(total)}）` : 'この月は、まだ自習の記録がありません');
+      const grid = el('div', 'cal-grid');
+      ['日', '月', '火', '水', '木', '金', '土'].forEach((w, k) => grid.append(el('div', 'cal-wd' + (k === 0 ? ' sun' : k === 6 ? ' sat' : ''), w)));
+      for (let k = 0; k < first; k++) grid.append(el('div', 'cal-empty'));
+      for (let dd = 1; dd <= last; dd++) {
+        const day = `${ym}-${String(dd).padStart(2, '0')}`, m = d.days[day] || 0, future = day > d.to, before = day < d.from;
+        const c = el('div', 'cal-day lv' + (future || before ? 'x' : lvl(m)) + (day === d.to ? ' today' : ''));
+        c.append(el('span', 'cal-n', String(dd)));
+        if (!future && !before && m) c.append(el('span', 'cal-m', m >= 60 ? `${Math.floor(m / 60)}時間${m % 60 ? '\n' + (m % 60) + '分' : ''}` : `${m}分`));
+        grid.append(c);
+      }
+      const legend = el('div', 'cal-legend');
+      [['lv1', '〜30分'], ['lv2', '〜1時間'], ['lv3', '〜2時間'], ['lv4', '2時間〜']].forEach(([c, t]) => { const it = el('span'); it.append(el('i', 'cal-dot ' + c), document.createTextNode(t)); legend.append(it); });
+      box.append(nav, sum, grid, legend, el('p', 'cal-help', '色がついている日が、自習した日です。色が濃いほど長く勉強しています。'));
+    };
+    show();
   }
   const fmtMin = (m) => m >= 60 ? `${Math.floor(m / 60)}時間${m % 60 ? (m % 60) + '分' : ''}` : `${m}分`;
   $('#btn-family').onclick = openFamily;
