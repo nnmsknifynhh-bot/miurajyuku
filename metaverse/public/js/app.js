@@ -1294,10 +1294,11 @@
     if (!state.ready) return;
     const w = screenToWorld(sx, sy);
     // ほかの人のアバター
-    let hit = null, hd = 20;
+    let hit = null, hd = Infinity;
     for (const u of state.others.values()) {
-      const d = Math.hypot(u.rx - w.x, u.ry - 8 - w.y);
-      if (d < hd) { hd = d; hit = u; }
+      const big = u.bloom || u.role === 'owner' || u.role === 'teacher'; // 1.4倍のアバターは、当たりも大きく
+      const d = Math.hypot(u.rx - w.x, u.ry - (big ? 14 : 8) - w.y);
+      if (d < (big ? 28 : 20) && d < hd) { hd = d; hit = u; }
     }
     if (hit) return showUserPop(hit, sx, sy);
     // 学年の木
@@ -1680,9 +1681,9 @@
       else if (it.follower) window.Render.drawFollower(ctx, it.follower, it.x, it.y, time / 1000);
       else if (it.fx) window.Render.drawFx(ctx, it.fx, it.x, it.y, time / 1000);
       else if (it.petals) { for (let i = petals.length - 1; i >= 0; i--) if (!window.Render.drawPetal(ctx, petals[i], time)) petals.splice(i, 1); }
-      else if (it.u && it.u.bloom) { // 🌸 春のスター：まわりが光って、アバターが1.4倍
+      else if (it.u && (it.u.bloom || it.u.role === 'owner' || it.u.role === 'teacher')) { // 先生・オーナー（と🌸春のスター）はアバターが1.4倍
         const s = 1.4;
-        window.Render.drawBloomGlow(ctx, it.x, it.y, time / 1000, s);
+        if (it.u.bloom) window.Render.drawBloomGlow(ctx, it.x, it.y, time / 1000, s);
         ctx.save(); ctx.translate(it.x, it.y + 12); ctx.scale(s, s); ctx.translate(-it.x, -(it.y + 12));
         window.Render.drawAvatar(ctx, it.u, it.x, it.y, { isMe: it.isMe, time: time / 1000, now: time, speaking: state.call && state.call.isSpeaking(it.u.id) });
         ctx.restore();

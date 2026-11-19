@@ -250,7 +250,7 @@
     const C = {
       uniform: { base: '#2c3e66' }, parka: { base: u.color }, jersey: { base: '#1f5fbf' }, kimono: { base: '#d6456e' },
       dress: { base: '#f48fb1' }, tuxedo: { base: '#222' }, armor: { base: '#9aa5b1' }, hero: { base: '#e53935' },
-      ninja: { base: '#26304a' }, astronaut: { base: '#eef1f5' }, king: { base: '#6a1b9a' },
+      ninja: { base: '#26304a' }, astronaut: { base: '#eef1f5' }, king: { base: '#6a1b9a' }, suit: { base: '#2f3a4f' },
     }[clothes] || { base: u.color };
     if (clothes === 'dress') { // すそが広がる
       ctx.fillStyle = C.base; ctx.beginPath(); ctx.moveTo(x - 7, by - 5); ctx.lineTo(x + 7, by - 5); ctx.lineTo(x + 13, by + h - 1); ctx.lineTo(x - 13, by + h - 1); ctx.closePath(); ctx.fill();
@@ -260,6 +260,14 @@
     rr(x - 10, by - 5, 20, h, 7, C.base);
     ctx.fillStyle = 'rgba(255,255,255,.25)'; ctx.fillRect(x - 7, by - 3, 5, 3);
     switch (clothes) {
+      case 'suit': { // スーツ：白いシャツ・ネクタイ（オーナーは紫、先生はオレンジ）・えり
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(x - 4.5, by - 5); ctx.lineTo(x + 4.5, by - 5); ctx.lineTo(x, by + 5); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = u.role === 'owner' ? '#8b5cf6' : '#e07b10';
+        ctx.beginPath(); ctx.moveTo(x - 1.6, by - 5); ctx.lineTo(x + 1.6, by - 5); ctx.lineTo(x + 2, by + 3); ctx.lineTo(x, by + 5.5); ctx.lineTo(x - 2, by + 3); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#1e2635'; ctx.lineWidth = 1.1; ctx.beginPath(); ctx.moveTo(x - 4.5, by - 5); ctx.lineTo(x - 1, by + 6); ctx.moveTo(x + 4.5, by - 5); ctx.lineTo(x + 1, by + 6); ctx.stroke();
+        ctx.fillStyle = '#c9d2e0'; ctx.beginPath(); ctx.arc(x - 0.2, by + 7.5, 0.9, 0, Math.PI * 2); ctx.arc(x - 0.2, by + 10.5, 0.9, 0, Math.PI * 2); ctx.fill(); // ボタン
+        break;
+      }
       case 'uniform':
         ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(x - 5, by - 5); ctx.lineTo(x + 5, by - 5); ctx.lineTo(x, by + 1); ctx.fill();
         ctx.fillStyle = '#d32f2f'; ctx.fillRect(x - 1.2, by - 4, 2.4, 6); break;
@@ -351,8 +359,9 @@
       ctx.fillRect(x - 6, by + 8 + step, 5, 5); ctx.fillRect(x + 1, by + 8 - step, 5, 5);
     }
     const eq = u.equip || {};
-    const costume = eq.costume ? COSTUMES[eq.costume] : null;
-    const clothes = !costume && eq.clothes ? eq.clothes : null;
+    const staff = u.role === 'owner' || u.role === 'teacher';
+    const costume = !staff && eq.costume ? COSTUMES[eq.costume] : null;
+    const clothes = staff ? 'suit' : !costume && eq.clothes ? eq.clothes : null; // 先生・オーナーはいつもスーツ
     const bodyH = seated ? 13 : 15;
     // ヒーローのマント（体の後ろ）
     if (clothes === 'king' && u.dir !== 'down') { ctx.fillStyle = '#b71c1c'; ctx.beginPath(); ctx.moveTo(x - 10, by - 5); ctx.lineTo(x + 10, by - 5); ctx.lineTo(x + 14, by + 14); ctx.lineTo(x - 14, by + 14); ctx.fill(); ctx.fillStyle = '#fff'; for (let i = -12; i <= 12; i += 4) { ctx.beginPath(); ctx.arc(x + i, by + 14, 1.6, 0, Math.PI * 2); ctx.fill(); } }
