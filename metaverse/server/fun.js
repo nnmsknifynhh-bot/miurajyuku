@@ -77,8 +77,8 @@ function eventStatus(name, userId, date = new Date()) {
 }
 // ───────── 🎎 3学期：ひな祭り・春のスター ─────────
 // 3学期学年末クエスト：1/20〜2/28 に「自習した日」が15日 → 3/1〜3/20 おだいりさま・おひなさまがついて歩く（20日で三人官女、25日で五人囃子も）
-// 3/21〜3/31 は「春のスター」（アバター1.4倍・まわりが光る・歩くと花吹雪）。3/3は、ひなあられがふる
-const HINA = { name: '3学期学年末クエスト', count: { from: '01-20', to: '02-28' }, parade: { from: '03-01', to: '03-20' }, star: { from: '03-21', to: '03-31' }, fxDay: '03-03' };
+// 3/3は、ひなあられがふる。3/21からは何もなし
+const HINA = { name: '3学期学年末クエスト', count: { from: '01-20', to: '02-28' }, parade: { from: '03-01', to: '03-20' }, fxDay: '03-03' };
 const HINA_TIERS = [
   { plus: 0, follow: ['dairi', 'hina'], label: 'おだいりさま・おひなさま' },
   { plus: 5, follow: ['kanjo1', 'kanjo2', 'kanjo3'], label: '三人官女' },
@@ -88,7 +88,7 @@ function hinaStatus(userId, date = new Date()) {
   const f = cfg(), t = G.jst(date);
   if (f.hina === false) return null;
   const m = md(t), base = f.hinaDays || 15;
-  const phase = m >= HINA.count.from && m <= HINA.count.to ? 'count' : m >= HINA.parade.from && m <= HINA.parade.to ? 'parade' : m >= HINA.star.from && m <= HINA.star.to ? 'star' : null;
+  const phase = m >= HINA.count.from && m <= HINA.count.to ? 'count' : m >= HINA.parade.from && m <= HINA.parade.to ? 'parade' : null;
   if (!phase) return null;
   const days = chapterDays(userId, t.year, { from: HINA.count.from, to: HINA.count.to }, t.day);
   const tiers = HINA_TIERS.map(x => ({ need: base + x.plus, label: x.label, cleared: days >= base + x.plus }));
@@ -96,7 +96,7 @@ function hinaStatus(userId, date = new Date()) {
   const follow = phase === 'parade' && cleared ? HINA_TIERS.filter((x, i) => tiers[i].cleared).flatMap(x => x.follow) : [];
   return {
     event: 'hina', name: HINA.name, year: t.year, phase, days, tiers, minMinutes: G.streakMinFor(userId), cleared,
-    follow, bloom: phase === 'star' && cleared, fx: phase === 'parade' && cleared && m === HINA.fxDay ? 'hinamatsuri' : null,
+    follow, bloom: false, fx: phase === 'parade' && cleared && m === HINA.fxDay ? 'hinamatsuri' : null,
   };
 }
 const santaStatus = (userId, date) => eventStatus('santa', userId, date);

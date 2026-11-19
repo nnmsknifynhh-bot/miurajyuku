@@ -253,7 +253,7 @@
     const fSantaDays = numInput(f.santaDays || 15, 1, 30);
     const fTana = check('🎋 七夕（1学期中間のクエスト 5月→織姫と彦星の手紙と笹かざり／1学期期末のクエスト 6月→7/1〜20 彦星がついて歩く／両方で織姫も。7/7は特別な演出）', f.tanabata !== false);
     const fTanaDays = numInput(f.tanabataDays || 15, 1, 30);
-    const fHina = check('🎎 3学期学年末クエスト（1/20〜2/28に15日→3/1〜3/20 おだいりさま・おひなさま、20日で三人官女、25日で五人囃子も／3/21〜3/31 春のスター：1.4倍・光る・花吹雪）', f.hina !== false);
+    const fHina = check('🎎 3学期学年末クエスト（1/20〜2/28に15日→3/1〜3/20 おだいりさま・おひなさま、20日で三人官女、25日で五人囃子も。3/3はひなあられ）', f.hina !== false);
     const fHinaDays = numInput(f.hinaDays || 15, 1, 30);
     const fAsa = check('🌅 朝活チャレンジ（朝の自習で早起きスタンプとポイント）', f.asakatsu !== false);
     const fAsaMin = numInput(f.asakatsuMinutes || 30, 1, 120), fAsaPt = numInput(f.asakatsuPoints ?? 3, 0, 100);

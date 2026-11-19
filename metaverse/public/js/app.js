@@ -656,7 +656,6 @@
         const next = hi.tiers.find(x => !x.cleared);
         chips.push(`🎎 ${hi.name} ${hi.days}日（1日${hi.minMinutes}分以上）` + (next ? `\nあと${next.need - hi.days}日で${next.label}` : '\n五人囃子までそろったよ！'));
       } else if (hi && hi.phase === 'parade' && hi.cleared) chips.push(`🎎 ひな人形の行列がいっしょ！（3/20まで）`);
-      else if (hi && hi.phase === 'star' && hi.cleared) chips.push('🌸 春のスター！（3/31まで）');
       if (hi && hi.fx) { const k = `juku-fx-hina-${hi.year}`; let seen = false; try { seen = !!localStorage.getItem(k); localStorage.setItem(k, '1'); } catch (e2) {} if (!seen) { toast('🎎 ひな祭りおめでとう！ がんばったあなたに、ひなあられがふってきたよ', 9000); chime(0.25); } }
       const hm = new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Tokyo' });
       if (f.morning && hm >= f.morning.start && hm < f.morning.end) chips.push(f.morning.today >= f.morning.minutes ? `🌅 朝活 今日のスタンプ ✓（ぜんぶで${f.morning.stamps}こ）` : `🌅 朝活 ${f.morning.today}/${f.morning.minutes}分（スタンプ${f.morning.stamps}こ）`);
