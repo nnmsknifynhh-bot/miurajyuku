@@ -278,6 +278,7 @@
 
     // ═════ 生徒の自習時間 ═════
     const stSec = section('👦 生徒の自習時間', '「修正」で、日ごとの自習時間を直せます（直した値が優先されます）。');
+    root.prepend(stSec); // いちばん上に（毎日見るので）
     const stBox = el('div', 'table-wrap'); stSec.append(stBox);
     async function loadStudents() {
       let data;
