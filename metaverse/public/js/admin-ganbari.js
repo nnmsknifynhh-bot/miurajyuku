@@ -277,7 +277,7 @@
     bdSec.append(field('お祝いカードのひとこと（100文字まで）', bdMsg), saveBd);
 
     // ═════ 生徒の自習時間 ═════
-    const stSec = section('👦 生徒の自習時間', '「修正」で、日ごとの自習時間を直せます（直した値が優先されます）。');
+    const stSec = section('👦 生徒の自習時間', '生徒をタップすると、勉強時間のくわしい内容（今日・今週・今学期・今年度、最近14日、ポイント、🔥）が見られます。表の時間は「ポイントになる時間」です。「修正」で、日ごとの自習時間を直せます（直した値が優先されます）。');
     root.prepend(stSec); // いちばん上に（毎日見るので）
     const stBox = el('div', 'table-wrap'); stSec.append(stBox);
     async function loadStudents() {
@@ -291,8 +291,11 @@
       const tb = el('tbody');
       for (const s of data.students) {
         const tr = el('tr');
-        [s.name, s.grade || '未設定', hm(s.today), hm(s.term), hm(s.year), s.points, s.streak ? `${s.streak}日` : ''].forEach(v => tr.append(el('td', null, String(v))));
-        const td = el('td'); const b = el('button', 'btn small secondary', '修正'); b.onclick = () => openDays(s); td.append(b); tr.append(td);
+        tr.style.cursor = 'pointer'; tr.title = 'タップすると勉強時間のくわしい内容';
+        tr.onclick = () => window.StudyDetail.open(api, s.id);
+        const nameTd = el('td'); const nl = el('a', null, s.name); nl.href = '#'; nl.onclick = (e) => e.preventDefault(); nameTd.append(nl); tr.append(nameTd);
+        [s.grade || '未設定', hm(s.today), hm(s.term), hm(s.year), s.points, s.streak ? `${s.streak}${s.hs ? '週' : '日'}` : ''].forEach(v => tr.append(el('td', null, String(v))));
+        const td = el('td'); const b = el('button', 'btn small secondary', '修正'); b.onclick = (e) => { e.stopPropagation(); openDays(s); }; td.append(b); tr.append(td);
         tb.append(tr);
       }
       if (!data.students.length) { const tr = el('tr'); const td = el('td', 'empty', '生徒がいません'); td.colSpan = 8; tr.append(td); tb.append(tr); }

@@ -64,3 +64,25 @@ dialog::backdrop { background: rgba(30, 25, 40, .45); }
 .dialog-body h2 { margin: 0; font-size: 20px; }
 .dialog-actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
 .badge.trial { background: #ff8a3d; }
+
+/* 生徒の勉強時間のくわしい内容（study-detail.js） */
+.sd-dialog { max-width: 460px; width: calc(100vw - 24px); }
+.sd-dialog h2 { margin: 0 0 4px; }
+.sd-sub { color: #7a6a5c; font-size: 13px; margin-bottom: 10px; }
+.sd-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
+.sd-card { background: #fff7ec; border-radius: 12px; padding: 8px; text-align: center; }
+.sd-card b { display: block; font-size: 18px; }
+.sd-card small { color: #7a6a5c; font-size: 11px; }
+.sd-tbl { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 10px; }
+.sd-tbl th, .sd-tbl td { padding: 5px 6px; border-bottom: 1px solid #f0e3d0; text-align: right; }
+.sd-tbl th:first-child, .sd-tbl td:first-child { text-align: left; }
+.sd-tbl th { background: #fdf0db; font-size: 12px; }
+.sd-bars { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; }
+.sd-bar { display: grid; grid-template-columns: 58px 1fr 64px; align-items: center; gap: 6px; font-size: 12px; }
+.sd-bar .t { height: 12px; background: #f4ece0; border-radius: 6px; overflow: hidden; position: relative; }
+.sd-bar .a { position: absolute; inset: 0 auto 0 0; background: #8fd3a8; border-radius: 6px; }
+.sd-bar .p { position: absolute; inset: 0 auto 0 0; background: #2fae74; border-radius: 6px; }
+.sd-bar .n { text-align: right; color: #33291f; }
+.sd-bar.today { font-weight: 700; }
+.sd-legend { font-size: 11px; color: #7a6a5c; margin-bottom: 8px; }
+.sd-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; vertical-align: -1px; margin: 0 3px 0 8px; }

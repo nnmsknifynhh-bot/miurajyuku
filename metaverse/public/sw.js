@@ -1,8 +1,8 @@
 // オフライン時の表示用キャッシュ。API は常にネットワークから取得し、保存しない。
-const CACHE = 'juku-v61';
+const CACHE = 'juku-v63';
 const ASSETS = [
   '/', '/app', '/admin', '/css/common.css', '/css/login.css', '/css/app.css', '/css/admin.css',
-  '/js/api.js', '/js/login.js', '/js/app.js', '/js/render.js', '/js/admin.js', '/js/classcall.js', '/js/privatecall.js', '/js/studycam.js', '/js/ganbari.js', '/shared/map.js',
+  '/js/api.js', '/js/login.js', '/js/app.js', '/js/render.js', '/js/admin.js', '/js/classcall.js', '/js/privatecall.js', '/js/studycam.js', '/js/ganbari.js', '/js/study-detail.js', '/shared/map.js',
   '/icons/icon.svg', '/icons/icon-192.png', '/manifest.webmanifest',
 ];
 self.addEventListener('install', (e) => {

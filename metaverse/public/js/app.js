@@ -1245,6 +1245,9 @@
         else { c.disabled = true; c.textContent = '🎧 担当の教室・自習室の生徒のみ'; }
         pop.append(c);
       }
+      if (u.role === 'student' && (state.user.role === 'owner' || state.user.permissions.handle_students)) {
+        const sd = el('button', 'btn small secondary', '📊 勉強時間を見る'); sd.onclick = () => { hideUserPop(); window.StudyDetail.open(api, u.id); }; pop.append(sd);
+      }
       const go = el('button', 'btn small secondary', '近くへ行く'); go.onclick = () => walkNear(u); pop.append(go);
       if (u.hand && handleable(u.room)) { const b = el('button', 'btn small', '挙手に対応済みにする'); b.onclick = () => lowerHand(u); pop.append(b); }
     }

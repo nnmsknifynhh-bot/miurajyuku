@@ -148,6 +148,16 @@ test('ポイント：今年度の自習時間で増え、買うと減る。足�
   assert.equal(G.buy(U.a1.id, 'santa', now), 'そのアイテムはありません', '季節限定アイテムはなくなった');
 });
 
+test('生徒の勉強時間のくわしい内容：オーナーと先生（個別対応）だけ見られる', async () => {
+  const r = await http('GET', `/api/admin/ganbari/students/${U.a1.id}/detail`, null, owner);
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  for (const k of ['today', 'week', 'year']) assert.ok(Number.isInteger(r.data[k].all) && Number.isInteger(r.data[k].point), k);
+  assert.equal(r.data.days.length, 14);
+  assert.ok(r.data.points && Number.isInteger(r.data.points.balance));
+  assert.equal((await http('GET', `/api/admin/ganbari/students/${U.a1.id}/detail`, null, U.a1.cookie)).status, 403, '生徒は見られない');
+  assert.equal((await http('GET', '/api/admin/ganbari/students/999999/detail', null, owner)).status, 404);
+});
+
 test('着せかえ：持っているものだけつけられる', async () => {
   assert.equal(G.equip(U.a1.id, 'pet', 'dog'), 'まだ持っています'.replace('持っています', '持っていません'));
   assert.equal(G.equip(U.a1.id, 'head', 'cat'), 'そのアイテムはここにはつけられません');

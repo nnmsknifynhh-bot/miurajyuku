@@ -766,6 +766,12 @@ admin.post('/ganbari/new-year', requireOwner, (req, res) => {
 // 目標の確認（オーナーと、生徒への個別対応の権限がある先生）
 const requireGoalReviewer = (req, res, next) =>
   (req.user.role === 'owner' || (req.user.role === 'teacher' && can(req.user, 'handle_students')) ? next() : bad(res, 'この操作は許可されていません', 403));
+// 生徒1人の勉強時間のくわしい内容（オーナーと、生徒への個別対応の権限がある先生）
+admin.get('/ganbari/students/:id/detail', requireGoalReviewer, (req, res) => {
+  const d = ganbari.studyDetail(Number(req.params.id));
+  if (!d) return bad(res, '生徒が見つかりません', 404);
+  res.json(d);
+});
 admin.get('/ganbari/goals', requireGoalReviewer, (req, res) => {
   const term = ganbari.termOf(ganbari.jst().day);
   res.json({ term, goals: term ? ganbari.listGoals(term.key) : [] });

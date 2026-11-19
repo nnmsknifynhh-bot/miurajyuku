@@ -777,9 +777,28 @@ function studentSummary(date = new Date()) {
     const pt = points(s.id, date);
     return {
       ...s, today: dayTotal(s.id, today), term: term ? minutesBetween(s.id, term.start, term.end) : 0,
-      year: pt.yearMinutes, points: pt.balance, streak: streak(s.id, date),
+      year: pt.yearMinutes, points: pt.balance, streak: streak(s.id, date), hs: isHS(s.grade),
     };
   });
+}
+
+// 生徒1人の勉強時間のくわしい内容（オーナー・先生用）。all＝勉強時間（全部）、point＝ポイントになる時間
+function studyDetail(userId, date = new Date()) {
+  const u = db.prepare("SELECT id, display_name AS name, grade FROM users WHERE id = ? AND role = 'student'").get(userId);
+  if (!u) return null;
+  const c = getConfig(), today = jst(date).day, term = termOf(today, c), mon = mondayOf(today);
+  const both = (from, to) => ({ all: allBetween(userId, from, to), point: minutesBetween(userId, from, to) });
+  const days = [];
+  for (let i = 13; i >= 0; i--) { const d = addDays(today, -i); days.push({ day: d, all: dayAll(userId, d), point: dayTotal(userId, d) }); }
+  const hs = isHS(u.grade);
+  const studied = db.prepare(`SELECT COUNT(*) AS n FROM study_days WHERE user_id = ? AND day BETWEEN ? AND ? AND ${allExpr} > 0`).get(userId, c.yearStart, today).n;
+  return {
+    id: u.id, name: u.name, grade: u.grade, hs,
+    today: { all: dayAll(userId, today), point: dayTotal(userId, today) },
+    week: both(mon, today), term: term ? { name: term.name, ...both(term.start, term.end) } : null, year: both(c.yearStart, today),
+    points: points(userId, date), streak: streak(userId, date), streakMin: hs ? null : streakMinFor(userId, c),
+    medal: hs ? hsWeeks(userId, date, c) : null, studiedDays: studied, days,
+  };
 }
 
 // ───────── 新年度 ─────────
@@ -964,6 +983,6 @@ module.exports = {
   ruleFor, WEEKDAYS,
   SLOTS, EVENTS, currentEvent, dressupOpen, dressupInfo,
   GRADES, STAGE_NAMES, SHOP, jst, addDays, getConfig, setConfig, termOf, allTerms, dayTotal, dayAll, allBetween, minutesBetween, daysBetween, setManual, tick,
-  streak, points, owned, getEquip, buy, equip, shopFor, setGoal, goalOf, listGoals, reviewGoal, forest, studentSummary, newYear,
+  streak, points, owned, getEquip, buy, equip, shopFor, setGoal, goalOf, listGoals, reviewGoal, forest, studentSummary, studyDetail, newYear,
   createReport, reportData,
 };
