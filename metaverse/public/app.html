@@ -132,6 +132,18 @@
   </dialog>
 
 
+  <!-- 📝 先生の黒板 -->
+  <dialog id="board-dialog">
+    <div class="dialog-body">
+      <h2>📝 先生の黒板</h2>
+      <div class="board-view"><p id="board-text"></p><small id="board-meta"></small></div>
+      <div id="board-edit" hidden>
+        <label class="field">書く（60文字まで）<textarea id="board-input" maxlength="60" rows="3" placeholder="例：テスト前、ラストスパート！ みんなならできる！"></textarea></label>
+        <div class="gb-row"><button type="button" class="btn" id="board-save">黒板に書く</button><button type="button" class="btn secondary" id="board-clear">消す</button></div>
+      </div>
+      <div class="dialog-actions"><button type="button" class="btn secondary" id="board-close">とじる</button></div>
+    </div>
+  </dialog>
   <!-- ⭐ マイ席 -->
   <dialog id="myseat-dialog">
     <div class="dialog-body">

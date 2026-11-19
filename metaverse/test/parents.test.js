@@ -260,3 +260,25 @@ test('保護者会：時間中は保護者も教室へ・生徒は入れない�
   assert.ok(G.meetingDays().has(today)); // 始まったあとにおわったので、🔥を守る日はそのまま
   assert.ok((await connect(U.other.cookie)).init); // 生徒はまた入れる
 });
+
+test('📅 足あとカレンダー：保護者は自分の子どもの分だけ見られる', async () => {
+  const kid = U.kid.id;
+  const G = require('../server/ganbari.js');
+  require('../server/db.js').db.prepare('INSERT OR REPLACE INTO study_days (user_id, day, auto_min, all_min) VALUES (?, ?, 0, 75)').run(kid, G.jst().day);
+  const inv = await http('POST', `/api/admin/users/${kid}/parent-invite`, {}, owner);
+  const r = await http('POST', '/api/parent/register', { code: inv.data.code, displayName: 'キッドの父', loginId: 'papa', password: 'password123' });
+  const f = await http('GET', `/api/parent/footprints/${kid}`, null, r.cookie);
+  assert.equal(f.status, 200);
+  assert.equal(f.data.days[G.jst().day], 75);
+  assert.equal((await http('GET', `/api/parent/footprints/${U.other.id}`, null, r.cookie)).status, 403, 'ほかの子は見られない');
+  assert.equal((await http('GET', `/api/parent/footprints/${kid}`, null, U.kid.cookie)).status, 403, '生徒は見られない');
+});
+
+test('📝 先生の黒板：先生・オーナーだけが書ける・消せる', async () => {
+  assert.equal((await http('PUT', '/api/blackboard', { text: 'がんばろう' }, U.kid.cookie)).status, 403);
+  const w = await http('PUT', '/api/blackboard', { text: 'テスト前、ラストスパート！' }, owner);
+  assert.equal(w.status, 200);
+  assert.equal((await http('GET', '/api/blackboard', null, U.kid.cookie)).data.board.text, 'テスト前、ラストスパート！');
+  await http('PUT', '/api/blackboard', { text: '' }, owner);
+  assert.equal((await http('GET', '/api/blackboard', null, U.kid.cookie)).data.board, null);
+});

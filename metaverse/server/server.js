@@ -2,7 +2,7 @@
 const path = require('path');
 const http = require('http');
 const express = require('express');
-const { db, now, transaction, audit, setSetting } = require('./db');
+const { db, now, transaction, audit, setSetting, getSetting } = require('./db');
 const auth = require('./auth');
 const { PERMISSIONS, KEYS, STUDENT_FORBIDDEN, defaultPermissions, can, canEnterRoom } = require('./permissions');
 const realtime = require('./realtime');
@@ -285,6 +285,15 @@ app.post('/api/parent/link', auth.requireAuth, requireParent, (req, res) => {
   res.json({ ok: true, children: parents.childrenOf(req.user.id) });
 });
 // 保護者ページ：お子さんの様子（数字だけ）・見たよスタンプ
+// 📅 勉強の足あとカレンダー（保護者が、自分の子どもの分だけ見られる）：今年度（4月から）の毎日の自習時間
+app.get('/api/parent/footprints/:id', auth.requireAuth, requireParent, (req, res) => {
+  const id = Number(req.params.id);
+  if (!parents.childIds(req.user.id).has(id)) return bad(res, '自分のお子さんの記録だけ見られます', 403);
+  const c = ganbari.getConfig(), today = ganbari.jst().day, from = c.yearStart;
+  const days = {};
+  for (const r of ganbari.daysBetween(id, from, today)) if (r.all > 0) days[r.day] = r.all;
+  res.json({ from, to: today, days });
+});
 app.get('/api/parent/home', auth.requireAuth, requireParent, (req, res) => {
   const today = ganbari.jst().day, mon = ganbari.mondayOf(today), sent = parents.cheersSentToday(req.user.id);
   const term = ganbari.termOf(today);
@@ -326,6 +335,19 @@ app.post('/api/me/myseat', auth.requireAuth, (req, res) => {
   if (r.error) return bad(res, r.error);
   realtime.broadcastMySeats();
   res.json(r);
+});
+
+// 📝 先生の黒板（ロビー）：先生・オーナーが書く。毎日でなくてよい
+function readBoard() { try { return JSON.parse(getSetting('blackboard', 'null')); } catch (e) { return null; } }
+app.get('/api/blackboard', auth.requireAuth, (req, res) => res.json({ board: readBoard() }));
+app.put('/api/blackboard', auth.requireAuth, (req, res) => {
+  if (req.user.role !== 'owner' && req.user.role !== 'teacher') return bad(res, '先生とオーナーだけが書けます', 403);
+  const text = String((req.body || {}).text || '').replace(/[\u0000-\u0009\u000b-\u001f\u007f<>]/g, '').trim().slice(0, 60);
+  const board = text ? { text, by: req.user.display_name, role: req.user.role, at: Date.now() } : null;
+  setSetting('blackboard', JSON.stringify(board));
+  audit(req.user.id, 'blackboard.updated', null, { text }, req.ip);
+  realtime.blackboardChanged(board);
+  res.json({ ok: true, board });
 });
 
 // ── 季節のお楽しみ ──

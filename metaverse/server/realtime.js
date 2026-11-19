@@ -1152,11 +1152,12 @@ function mySeatsFor(viewer) {
     return { id: s.id, seat: s.seat, room: s.room, name: hide ? '' : s.name };
   });
 }
+function blackboardChanged(board) { if (io) io.emit('blackboard', { board }); }
 function broadcastMySeats() { for (const o of online.values()) o.socket.emit('myseats', mySeatsFor(o)); }
 function refreshMoms() { if (io) io.emit('moms-updated', parents.momsTree()); }
 
 module.exports = {
-  shownToday, refreshMoms, parentMeetingChanged, mendanChanged, referralRewarded, broadcastMySeats,
+  shownToday, refreshMoms, parentMeetingChanged, mendanChanged, referralRewarded, broadcastMySeats, blackboardChanged,
   isQuickRejoin, refreshGanbari, refreshBirthday, refreshAllGanbari, _online: online,
   storeStudyPhoto, getStudyPhoto, studyPhotoTimes, canViewStudyPhotos, setStudyPhotosFeature, studyPhotosEnabled,
   attach, kick, refreshUser, refreshRooms, presence, roomCounts, classState, endClass, endCallOf, REACTIONS, _reset };

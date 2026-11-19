@@ -757,6 +757,77 @@
     ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
   }
 
+  // 🪟 季節と時間で変わる窓：朝焼け・昼・夕焼け・夜空、春は桜・夏は入道雲・秋は紅葉・冬は雪
+  let WINDOWS = null;
+  function windowRects() {
+    if (WINDOWS) return WINDOWS;
+    WINDOWS = [];
+    for (let y = 0; y < SM.H; y++) for (let x = 0; x < SM.W; x++) if (SM.tileAt(x, y) === 'w') {
+      const px = x * T, py = y * T;
+      WINDOWS.push(x === 0 ? { x: px + 8, y: py + 2, w: 16, h: T - 4, i: x * 7 + y * 13 } : { x: px + 2, y: py + 6, w: T - 4, h: 18, i: x * 7 + y * 13 });
+    }
+    return WINDOWS;
+  }
+  function skyNow() {
+    if (window.__sky) return window.__sky; // 画面の確認用
+    const f = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', month: 'numeric', hour: 'numeric', minute: 'numeric', hour12: false });
+    const o = Object.fromEntries(f.formatToParts(new Date()).map(p => [p.type, p.value]));
+    const h = (Number(o.hour) % 24) + Number(o.minute) / 60, m = Number(o.month);
+    const time = h >= 5 && h < 7 ? 'dawn' : h >= 7 && h < 16 ? 'day' : h >= 16 && h < 18.5 ? 'dusk' : 'night';
+    const season = m >= 3 && m <= 5 ? 'spring' : m >= 6 && m <= 8 ? 'summer' : m >= 9 && m <= 11 ? 'autumn' : 'winter';
+    return { time, season };
+  }
+  const SKY = { dawn: ['#ffb38a', '#ffe0b8'], day: ['#6fbaf5', '#cfe9ff'], dusk: ['#ff8a5c', '#ffc79a'], night: ['#16224a', '#2e3f7a'] };
+  function drawWindows(ctx, t, view) {
+    const sk = skyNow(), [top, bottom] = SKY[sk.time];
+    for (const r of windowRects()) {
+      if (view && (r.x > view.x2 || r.x + r.w < view.x1 || r.y > view.y2 || r.y + r.h < view.y1)) continue;
+      const g = ctx.createLinearGradient(0, r.y, 0, r.y + r.h); g.addColorStop(0, top); g.addColorStop(1, bottom);
+      ctx.fillStyle = g; ctx.fillRect(r.x, r.y, r.w, r.h);
+      ctx.save(); ctx.beginPath(); ctx.rect(r.x, r.y, r.w, r.h); ctx.clip();
+      const k = r.i;
+      if (sk.time === 'night') { // 星と月
+        for (let j = 0; j < 4; j++) { const tw = (Math.sin(t * 2 + k + j * 1.9) + 1) / 2; ctx.fillStyle = `rgba(255,255,220,${0.35 + tw * 0.65})`; ctx.fillRect(r.x + ((k * 5 + j * 7) % (r.w - 2)) + 1, r.y + ((k * 3 + j * 5) % (r.h - 2)) + 1, 1.4, 1.4); }
+        if (k % 9 === 0) { ctx.fillStyle = '#fff6c8'; ctx.beginPath(); ctx.arc(r.x + r.w * 0.7, r.y + r.h * 0.35, 3.2, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = top; ctx.beginPath(); ctx.arc(r.x + r.w * 0.7 + 1.6, r.y + r.h * 0.35 - 1, 2.8, 0, Math.PI * 2); ctx.fill(); }
+      } else if (sk.time === 'day') { // 雲
+        const cx = r.x + ((t * 3 + k * 11) % (r.w + 16)) - 8, cy = r.y + 5 + (k % 3) * 3;
+        ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2); ctx.arc(cx + 3.5, cy - 1, 3.6, 0, Math.PI * 2); ctx.arc(cx + 7, cy, 2.8, 0, Math.PI * 2); ctx.fill();
+      } else { // 朝焼け・夕焼けの太陽
+        if (k % 5 === 0) { ctx.fillStyle = sk.time === 'dawn' ? 'rgba(255,240,180,.95)' : 'rgba(255,200,120,.95)'; ctx.beginPath(); ctx.arc(r.x + r.w / 2, r.y + r.h - 2, 4, 0, Math.PI * 2); ctx.fill(); }
+      }
+      // 季節のもの
+      if (sk.season === 'spring') for (let j = 0; j < 2; j++) { const px = r.x + ((k * 7 + j * 13 + t * 6) % r.w), py = r.y + ((t * 8 + k * 5 + j * 9) % r.h); ctx.fillStyle = '#ffc4d8'; ctx.beginPath(); ctx.ellipse(px, py, 1.6, 1, t + j, 0, Math.PI * 2); ctx.fill(); }
+      if (sk.season === 'autumn') for (let j = 0; j < 2; j++) { const px = r.x + ((k * 5 + j * 11 + t * 4) % r.w), py = r.y + ((t * 6 + k * 7 + j * 9) % r.h); ctx.fillStyle = j ? '#e8662f' : '#f2b233'; ctx.beginPath(); ctx.ellipse(px, py, 1.7, 1.1, t * 2 + j, 0, Math.PI * 2); ctx.fill(); }
+      if (sk.season === 'winter') for (let j = 0; j < 3; j++) { const px = r.x + ((k * 5 + j * 7) % r.w) + Math.sin(t + j) * 1.5, py = r.y + ((t * 7 + k * 3 + j * 6) % r.h); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(px, py, 0.9, 0, Math.PI * 2); ctx.fill(); }
+      if (sk.season === 'summer' && sk.time !== 'night' && k % 4 === 0) { ctx.fillStyle = 'rgba(255,255,255,.95)'; ctx.beginPath(); ctx.arc(r.x + 6, r.y + r.h - 1, 4, Math.PI, 0); ctx.arc(r.x + 11, r.y + r.h - 3, 4.5, Math.PI, 0); ctx.fill(); } // 入道雲
+      ctx.restore();
+      ctx.fillStyle = 'rgba(255,255,255,.35)'; if (r.w > r.h) ctx.fillRect(r.x + 3, r.y + 2, 6, 2); else ctx.fillRect(r.x + 2, r.y + 2, 2, 6); // ガラスの光
+    }
+  }
+
+  // 📝 先生の黒板（ロビーの掲示板の場所）
+  const BOARD = { x: 36 * T + 1, y: 19 * T + 2, w: 4 * T - 2, h: T + 20 };
+  function drawBoard(ctx, board) {
+    const b = BOARD;
+    ctx.fillStyle = '#8a6038'; ctx.beginPath(); ctx.roundRect(b.x, b.y, b.w, b.h, 3); ctx.fill(); // 木のわく
+    ctx.fillStyle = '#2f5d46'; ctx.fillRect(b.x + 3, b.y + 3, b.w - 6, b.h - 9);
+    ctx.fillStyle = '#c9b48a'; ctx.fillRect(b.x + 6, b.y + b.h - 6, b.w - 12, 3); // チョーク置き
+    ctx.fillStyle = '#fff'; ctx.fillRect(b.x + b.w - 22, b.y + b.h - 8, 7, 2); ctx.fillStyle = '#ffd1dc'; ctx.fillRect(b.x + b.w - 13, b.y + b.h - 8, 6, 2);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    if (!board) { ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.font = 'bold 8px sans-serif'; ctx.fillText('📝 先生の黒板', b.x + b.w / 2, b.y + b.h / 2 - 2); }
+    else {
+      // 1行9文字くらいで、3行まで
+      const chars = [...board.text], lines = [];
+      for (let i = 0; i < chars.length && lines.length < 3; i += 11) lines.push(chars.slice(i, i + 11).join(''));
+      if (chars.length > 33) lines[2] = lines[2].slice(0, 10) + '…';
+      ctx.fillStyle = 'rgba(255,255,255,.95)'; ctx.font = 'bold 9.5px sans-serif';
+      const lh = 11, y0 = b.y + 3 + (b.h - 9) / 2 - (lines.length - 1) * lh / 2;
+      lines.forEach((ln, i) => ctx.fillText(ln, b.x + b.w / 2, y0 + i * lh));
+    }
+    ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
+  }
+  const inBoard = (wx, wy) => wx >= BOARD.x && wx <= BOARD.x + BOARD.w && wy >= BOARD.y && wy <= BOARD.y + BOARD.h;
+
   // 🎎 ひな人形：着物の色と、持ち物
   const HINA = {
     dairi: { robe: '#2a2a3a', under: '#7a1f2b', hair: 'kanmuri' },                 // おだいりさま：黒の束帯・冠・しゃく
@@ -882,5 +953,5 @@
     ctx.restore();
   }
 
-  window.Render = { buildMap, drawAvatar, drawFollower, drawFx, drawBloomGlow, drawPetal, drawTree, drawDecorations, seasonOf, COSTUMES };
+  window.Render = { buildMap, drawAvatar, drawFollower, drawFx, drawBloomGlow, drawPetal, drawWindows, drawBoard, inBoard, drawTree, drawDecorations, seasonOf, COSTUMES };
 })();

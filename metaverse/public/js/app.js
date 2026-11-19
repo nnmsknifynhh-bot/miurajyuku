@@ -173,6 +173,7 @@
       state.path = []; state.pathSeat = null; state.ready = true;
       state.testQueue = d.testQueue || null;
       state.mySeats = d.mySeats || [];
+      loadBoard();
       if (state.user.role === 'student') setTimeout(goMySeat, 1800);
       { const mine = state.testQueue && state.testQueue.booths.find(b => b.userId === d.me.id); state.testBooth = mine ? mine.seat : null; }
       buildReactions(); updateAll(); refreshWeek(true); refreshFun(true); renderTest();
@@ -182,6 +183,7 @@
     // ── 保護者 ──
     socket.on('visit-over', ({ message }) => showVisitOver(message));
     socket.on('myseats', (list) => { state.mySeats = list || []; });
+    socket.on('blackboard', ({ board }) => { state.board = board; if (board && !isStaff()) { toast('📝 先生の黒板が新しくなったよ（ロビー）', 5000); markBoardSeen(); } });
     socket.on('myseat-lost', () => { toast('⭐ 🔥がとぎれたので、マイ席はお休みになりました。また続けたら、えらべるよ', 7000); refreshFun(true); });
     socket.on('referral-reward', ({ kind, points }) => {
       const msg = kind === 'enroll' ? '🐥 友だちが入塾しました！ おそろいの「なかよしひよこ」をもらったよ。7日間のペア自習チャレンジもスタート！'
@@ -563,11 +565,41 @@
           stamps.append(b);
         }
       }
-      card.append(stamps); list.append(card);
+      card.append(stamps);
+      // 📅 勉強の足あとカレンダー（保護者だけが見られる）
+      const fb = el('button', 'btn secondary small', '📅 勉強の足あとカレンダー'); fb.type = 'button';
+      const fbox = el('div', 'foot-box'); fbox.hidden = true;
+      fb.onclick = async () => { if (!fbox.hidden) { fbox.hidden = true; return; } fbox.hidden = false; await drawFootprints(fbox, k.id); };
+      card.append(fb, fbox); list.append(card);
     }
     const m = d.moms;
     $('#family-moms').textContent = `🌸 家族の木：花${m.flowers}こ${m.tulips ? `・🌷${m.tulips}` : ''}（${m.stageName}）・今月${m.families}家族が挑戦中・あなたは🔥${d.streak}日連続・${d.points}ポイント`;
     if (!$('#family-dialog').open) $('#family-dialog').showModal();
+  }
+  async function drawFootprints(box, id) {
+    box.textContent = '読みこみ中…';
+    let d; try { d = await api('GET', '/api/parent/footprints/' + id); } catch (e) { box.textContent = e.message; return; }
+    box.textContent = '';
+    const lvl = (m) => (!m ? 0 : m < 30 ? 1 : m < 60 ? 2 : m < 120 ? 3 : 4);
+    const add = (day, n) => { const x = new Date(day + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+    // 週ごとの列（日曜はじまり）
+    let start = d.from; while (new Date(start + 'T00:00:00Z').getUTCDay() !== 0) start = add(start, -1);
+    const wrap = el('div', 'foot-scroll'), months = el('div', 'foot-months'), grid = el('div', 'foot-grid');
+    let total = 0, count = 0, col = 0, lastMonth = '';
+    for (let day = start; day <= d.to; day = add(day, 1)) {
+      const wd = new Date(day + 'T00:00:00Z').getUTCDay();
+      if (wd === 0) { col++; const mo = (day < d.from ? d.from : day).slice(5, 7); if (mo !== lastMonth) { const ml = el('span', null, Number(mo) + '月'); ml.style.gridColumn = col; months.append(ml); lastMonth = mo; } }
+      const m = day >= d.from ? (d.days[day] || 0) : null, c = el('i', 'f' + (m == null ? 'x' : lvl(m)));
+      c.style.gridColumn = col; c.style.gridRow = wd + 1;
+      if (m != null) { c.title = `${Number(day.slice(5, 7))}/${Number(day.slice(8))} ${m ? fmtMin(m) : '自習なし'}`; if (m) { total += m; count++; } }
+      grid.append(c);
+    }
+    months.style.gridTemplateColumns = grid.style.gridTemplateColumns = `repeat(${col}, 12px)`;
+    wrap.append(months, grid);
+    const legend = el('div', 'foot-legend');
+    legend.append(el('span', null, '少ない'), ...[0, 1, 2, 3, 4].map(n => el('i', 'f' + n)), el('span', null, '多い（2時間〜）'));
+    box.append(el('p', 'foot-sum', `今年度（${Number(d.from.slice(5, 7))}月〜）：${count}日・合計${fmtMin(total)}`), wrap, legend);
+    wrap.scrollLeft = wrap.scrollWidth; // 今日のあたりを見せる
   }
   const fmtMin = (m) => m >= 60 ? `${Math.floor(m / 60)}時間${m % 60 ? (m % 60) + '分' : ''}` : `${m}分`;
   $('#btn-family').onclick = openFamily;
@@ -1301,6 +1333,7 @@
       if (d < (big ? 28 : 20) && d < hd) { hd = d; hit = u; }
     }
     if (hit) return showUserPop(hit, sx, sy);
+    if (window.Render.inBoard(w.x, w.y)) return openBoard(); // 📝 先生の黒板
     // 学年の木
     for (let i = 0; i < SM.FOREST.length; i++) {
       const p = treePos(i);
@@ -1398,6 +1431,30 @@
     c.fillStyle = '#6f4cff'; c.font = '900 40px sans-serif'; c.fillText('リンクから体験スタート ▶', W / 2, 1250);
   }
   $('#menu-invite').onclick = openInvite;
+  // ───── 📝 先生の黒板 ─────
+  const boardKey = () => 'juku-board-seen-' + (state.user ? state.user.id : '');
+  function markBoardSeen() { try { if (state.board) localStorage.setItem(boardKey(), String(state.board.at)); } catch (e) {} }
+  async function loadBoard() {
+    try { state.board = (await api('GET', '/api/blackboard')).board; } catch (e) { return; }
+    let seen = 0; try { seen = Number(localStorage.getItem(boardKey())) || 0; } catch (e) {}
+    if (state.board && state.board.at > seen && !isStaff()) { toast(`📝 先生の黒板：「${state.board.text}」`, 8000); markBoardSeen(); }
+  }
+  function openBoard() {
+    const b = state.board;
+    $('#board-text').textContent = b ? b.text : 'まだ何も書かれていません';
+    $('#board-meta').textContent = b ? `${b.role === 'owner' ? 'オーナー' : '先生'} ${b.by}・${new Date(b.at).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', timeZone: 'Asia/Tokyo' })}` : '';
+    $('#board-edit').hidden = !isStaff();
+    $('#board-input').value = b ? b.text : '';
+    markBoardSeen();
+    $('#board-dialog').showModal();
+  }
+  async function saveBoard(text) {
+    try { const r = await api('PUT', '/api/blackboard', { text }); state.board = r.board; toast(text ? '黒板に書きました' : '黒板を消しました'); $('#board-dialog').close(); }
+    catch (e) { toast(e.message); }
+  }
+  $('#board-save').onclick = () => saveBoard($('#board-input').value.trim());
+  $('#board-clear').onclick = () => saveBoard('');
+  $('#board-close').onclick = () => $('#board-dialog').close();
   // ───── ⭐ マイ席 ─────
   const myMySeat = () => (state.mySeats || []).find(s => s.id === (state.user && state.user.id));
   async function openMySeat() {
@@ -1640,6 +1697,9 @@
     ctx.scale(z, z);
     ctx.translate(-Math.round(state.cam.x), -Math.round(state.cam.y));
     ctx.drawImage(mapCanvas, 0, 0);
+    { const hw = innerWidth / 2 / z, hh = innerHeight / 2 / z, cx = Math.round(state.cam.x), cy = Math.round(state.cam.y);
+      window.Render.drawWindows(ctx, time / 1000, { x1: cx - hw, x2: cx + hw, y1: cy - hh, y2: cy + hh }); }
+    window.Render.drawBoard(ctx, state.board);
     drawMySeatPlates(time);
 
     // 入れない部屋・満員の部屋
