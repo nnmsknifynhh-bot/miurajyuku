@@ -701,5 +701,34 @@
     ctx.restore();
   }
 
-  window.Render = { buildMap, drawAvatar, drawTree, drawDecorations, seasonOf, COSTUMES };
+  // 🎅 がんばりサンタ：うしろについて歩くサンタ（赤い服）とトナカイ
+  function drawFollower(ctx, kind, x, y, t) {
+    const hop = Math.abs(Math.sin(t * 6 + (kind === 'santa' ? 0 : 1.3))) * 2;
+    ctx.fillStyle = 'rgba(0,0,0,.18)';
+    ctx.beginPath(); ctx.ellipse(x, y + 11, 9, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    if (kind === 'santa') {
+      ctx.fillStyle = '#d63a3a'; ctx.beginPath(); ctx.roundRect(x - 8, y - 4 - hop, 16, 14, 6); ctx.fill(); // 赤い服
+      ctx.fillStyle = '#fff'; ctx.fillRect(x - 8, y + 3 - hop, 16, 2.5);                                  // 白いふち
+      ctx.fillStyle = '#3a2a1a'; ctx.fillRect(x - 8, y + 1 - hop, 16, 1.6);                               // ベルト
+      ctx.font = '17px sans-serif'; ctx.fillText('🎅', x, y - 11 - hop);
+    } else { // トナカイ（どの端末でも同じに見えるよう、絵文字ではなく自分でかく）
+      const yy = y - hop;
+      ctx.strokeStyle = '#7a4a22'; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+      ctx.beginPath(); // つの
+      ctx.moveTo(x + 3, yy - 13); ctx.lineTo(x + 1, yy - 20); ctx.moveTo(x + 2, yy - 17); ctx.lineTo(x - 2, yy - 19);
+      ctx.moveTo(x + 7, yy - 13); ctx.lineTo(x + 9, yy - 20); ctx.moveTo(x + 8, yy - 17); ctx.lineTo(x + 12, yy - 19);
+      ctx.stroke();
+      ctx.fillStyle = '#a0683a'; // 体と足
+      ctx.beginPath(); ctx.ellipse(x - 2, yy + 2, 9, 6, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillRect(x - 8, yy + 5, 2.4, 6); ctx.fillRect(x + 3, yy + 5, 2.4, 6);
+      ctx.beginPath(); ctx.ellipse(x + 5, yy - 8, 5.5, 5, 0, 0, Math.PI * 2); ctx.fill(); // 頭
+      ctx.fillStyle = '#e8c9a0'; ctx.beginPath(); ctx.ellipse(x - 3, yy + 3, 5, 3, 0, 0, Math.PI * 2); ctx.fill(); // おなか
+      ctx.fillStyle = '#2b1d14'; ctx.beginPath(); ctx.arc(x + 6, yy - 9, 1, 0, Math.PI * 2); ctx.fill(); // 目
+      ctx.fillStyle = '#e53935'; ctx.beginPath(); ctx.arc(x + 10, yy - 7, 2.2, 0, Math.PI * 2); ctx.fill(); // 赤い鼻
+    }
+    ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
+  }
+
+  window.Render = { buildMap, drawAvatar, drawFollower, drawTree, drawDecorations, seasonOf, COSTUMES };
 })();

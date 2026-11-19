@@ -636,7 +636,12 @@
       const f = g.fun || {};
       state.fun = f;
       const chips = [];
-      if (f.santa && f.santa.phase === 'count') chips.push(f.santa.eligible ? `🎅 がんばりサンタ ✓ 12月1日をおたのしみに` : `🎅 がんばりサンタ ${f.santa.days}/${f.santa.need}日（1日${f.santa.minMinutes}分以上）`);
+      const sa = f.santa;
+      if (sa && (sa.phase === 'ch1' || sa.phase === 'ch2')) {
+        const ch = sa.chapters[sa.phase === 'ch1' ? 0 : 1];
+        chips.push(ch.cleared ? `🎅 ${ch.name} クリア！${sa.phase === 'ch1' ? ' サンタから手紙が届いたよ' : ' 12/1からサンタがついてくるよ'}`
+          : `🎅 ${ch.name} ${ch.days}/${sa.need}日（1日${sa.minMinutes}分以上）`);
+      } else if (sa && sa.phase === 'parade' && sa.follow.length) chips.push(sa.follow.length > 1 ? '🎅🦌 サンタとトナカイがいっしょ！（12/25まで）' : '🎅 サンタがいっしょ！（12/25まで）');
       const hm = new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Tokyo' });
       if (f.morning && hm >= f.morning.start && hm < f.morning.end) chips.push(f.morning.today >= f.morning.minutes ? `🌅 朝活 今日のスタンプ ✓（ぜんぶで${f.morning.stamps}こ）` : `🌅 朝活 ${f.morning.today}/${f.morning.minutes}分（スタンプ${f.morning.stamps}こ）`);
       $('#fun-chip').textContent = chips.join('\n'); $('#fun-chip').style.whiteSpace = 'pre-line'; $('#fun-chip').hidden = !chips.length;
@@ -652,12 +657,23 @@
       if (g.referralWeek && !state.trial) rc.push(`🎉 友だち紹介ウィーク（〜${Number(g.referralWeek.end.slice(5, 7))}/${Number(g.referralWeek.end.slice(8))}）\nメニューの「🤝 友だちを招待」から`);
       $('#ref-chip').textContent = rc.join('\n'); $('#ref-chip').hidden = !rc.length;
       // 🎅 プレゼント（12/25〜1/7・がんばった人）
-      if (f.santa && f.santa.phase === 'gift' && f.santa.eligible && !f.santa.opened && !santaAsked) { santaAsked = true; showWhenFree($('#santa-dialog')); }
+      // 💌 第1章クリア：サンタからの手紙（読むまで、入室したときに1回出る）
+      if (sa && sa.letter && !santaAsked) {
+        santaAsked = true;
+        $('#santa-title').textContent = `${state.user.displayName}さんへ`;
+        $('#santa-msg').textContent = `10月、${sa.chapters[0].days}日も自習をがんばったね。中間テストもよくがんばりました。\nごほうびに、サンタ帽をプレゼントするよ（着せかえでつけられます）。\n11月も${sa.need}日がんばったら、12月1日から25日まで、わたしが${state.user.displayName}さんのうしろをついて歩くよ。両方クリアしたら、トナカイもいっしょにね。\n　　　　　　　　　　　　サンタより 🎅`;
+        showWhenFree($('#santa-dialog'));
+      }
     } catch (e) { /* 次の機会に */ } finally { funBusy = false; }
   }
   setInterval(() => refreshFun(), 60_000);
   $('#santa-later').onclick = () => { $('#santa-dialog').close(); };
   $('#santa-open').onclick = async () => {
+    $('#santa-dialog').close();
+    try { await api('POST', '/api/me/santa/letter'); toast('🎅 サンタ帽は「ポイントと着せかえ」でつけられるよ', 5000); } catch (e) { /* 次の機会に */ }
+    refreshFun(true);
+  };
+  $('#santa-open-old') && ($('#santa-open-old').onclick = async () => {
     const box = $('#santa-box'); box.classList.add('shake'); $('#santa-open').disabled = true;
     try {
       const r = await api('POST', '/api/me/santa/open');
@@ -670,7 +686,7 @@
         refreshFun(true);
       }, 1500);
     } catch (e) { box.classList.remove('shake'); $('#santa-open').disabled = false; toast(e.message); }
-  };
+  });
 
   $('#bday-close').onclick = () => { $('#bday-dialog').close(); if (state.gb && state.gb.refreshForest) state.gb.refreshForest(); };
   $('#seat-close').onclick = () => { $('#seat-dialog').close(); standingSince = Date.now(); };
@@ -1568,14 +1584,40 @@
       const m = forest.moms;
       list.push({ tree: { name: m.name, stage: m.stage, stageName: `🌸${m.flowers}${m.tulips ? `・🌷${m.tulips}` : ''}・今月${m.families}家族が挑戦中`, goals: [], grades: [] }, x: (SM.MOM_TREE.x + 1) * T, y: (SM.MOM_TREE.y + 1) * T - 6 });
     }
+    // 🎅 がんばりサンタ：うしろについて歩くサンタとトナカイ（12/1〜12/25）
+    for (const it of list.slice()) if (it.u && it.u.follow && it.u.follow.length) for (const f of followerPos(it.u, it.x, it.y)) list.push(f);
     list.sort((a, b) => a.y - b.y);
     const season = window.Render.seasonOf();
     if (forest && forest.event) window.Render.drawDecorations(ctx, forest.event.id, time);
     for (const it of list) {
       if ('tree' in it) window.Render.drawTree(ctx, it.x, it.y, it.tree, { time: time / 1000, season, highlight: it.tree && state.user && it.tree.grades.includes(state.user.grade) });
+      else if (it.follower) window.Render.drawFollower(ctx, it.follower, it.x, it.y, time / 1000);
       else window.Render.drawAvatar(ctx, it.u, it.x, it.y, { isMe: it.isMe, time: time / 1000, now: time, speaking: state.call && state.call.isSpeaking(it.u.id) });
     }
     ctx.restore();
+  }
+
+  // 歩いた道すじを少しだけ覚えておき、その上をうしろからついてくる（すわっているときは席のとなり）
+  const trails = new Map();
+  function followerPos(u, x, y) {
+    let tr = trails.get(u.id);
+    if (!tr) trails.set(u.id, tr = [{ x, y }]);
+    const lp = tr[tr.length - 1];
+    if (Math.hypot(x - lp.x, y - lp.y) > 3) { tr.push({ x, y }); if (tr.length > 80) tr.shift(); }
+    return u.follow.map((kind, k) => {
+      let pos = null;
+      if (!u.seat) {
+        const want = 30 * (k + 1);
+        let dist = 0, px = x, py = y;
+        for (let i = tr.length - 1; i >= 0; i--) {
+          const d = Math.hypot(tr[i].x - px, tr[i].y - py);
+          if (d > 0 && dist + d >= want) { const r = (want - dist) / d; pos = { x: px + (tr[i].x - px) * r, y: py + (tr[i].y - py) * r }; break; }
+          dist += d; px = tr[i].x; py = tr[i].y;
+        }
+      }
+      if (!pos) pos = { x: x + (k === 0 ? -24 : 24), y: y + 4 };
+      return { follower: kind, x: pos.x, y: pos.y };
+    });
   }
 
   let last = performance.now();

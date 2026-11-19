@@ -313,9 +313,9 @@ app.post('/api/parent/quiz/answer', auth.requireAuth, requireParent, (req, res) 
 });
 
 // ── 季節のお楽しみ ──
-app.post('/api/me/santa/open', auth.requireAuth, (req, res) => {
+app.post('/api/me/santa/letter', auth.requireAuth, (req, res) => {
   if (req.user.role !== 'student') return bad(res, '生徒の機能です', 403);
-  const r = fun.openSanta(req.user.id);
+  const r = fun.readLetter(req.user.id);
   if (r.error) return bad(res, r.error);
   realtime.refreshGanbari(req.user.id);
   res.json({ ok: true, ...r });

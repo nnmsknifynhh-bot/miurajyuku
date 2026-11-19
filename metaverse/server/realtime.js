@@ -52,6 +52,7 @@ function pub(p) {
     bday: !!(p.bday && p.bday.public), // 誕生日（ほかの生徒にも見せる設定のときだけ。先生だけの設定は staff にだけ別に送る）
     hs: !!p.hs, title: p.title || null, plan: p.plan || null, // 高校生：称号・今日やること（🔥は週で数える）
     equip: equipView(p.equip), streak: p.streak || 0, trial: !!p.user.trial_until,
+    follow: p.follow || null, // 🎅 がんばりサンタ：うしろについて歩く仲間（12/1〜12/25）
   };
 }
 // 見る人に合わせた情報：生徒には保護者の名前を見せない。保護者には自分の子ども以外の生徒の名前を見せない（時間と🔥は見せる）
@@ -356,6 +357,7 @@ function attach(httpServer) {
     if (user.trial_until) p.referrerId = referral.referrerOf(p.id); // 体験中：招待してくれた子の名前だけ見える
     p.today10 = user.role === 'student' ? shownToday(ganbari.dayAll(p.id, ganbari.jst().day)) : null;
     p.bday = user.role === 'student' ? ganbari.birthdayInfo(p.id) : null;
+    p.follow = user.role === 'student' && !user.trial_until ? fun.followersOf(p.id) : null;
     refreshHS(p, false);
     p.room = roomIdAt(p.x, p.y);
     // 自習中に通信が切れていた生徒：すぐもどってきたら、元の席にすわらせ、切れていた間も数える
@@ -846,7 +848,7 @@ function attach(httpServer) {
         const p = online.get(r.id);
         if (p) p.socket.emit('fun-event', { kind: 'asa', stamps: r.stamps, points: r.points });
       }
-      for (const p of online.values()) { updateToday(p); refreshBirthday(p); refreshHS(p); } // 日付が変わったときも 0 にもどる
+      for (const p of online.values()) { updateToday(p); refreshBirthday(p); refreshHS(p); refreshFollow(p); } // 日付が変わったときも 0 にもどる
       // 決めた曜日・時刻を過ぎても来ていない高校生を、先生に知らせる
       for (const s of ganbari.lateStudents(new Set(online.keys()))) notify.studentLate(s, online).catch(e => console.error('遅れの通知に失敗:', e.message));
     } catch (e) { console.error('自習時間の記録に失敗:', e.message); }
@@ -935,6 +937,14 @@ function sendBirthdayCard(p) {
   } catch (e) { console.error('誕生日のお祝いに失敗:', e.message); }
 }
 // 日付が変わったときなどに、誕生日の🎂を付けたり外したりする
+// 🎅 12/1になったら仲間が加わる・12/26になったらいなくなる
+function refreshFollow(p) {
+  if (p.user.role !== 'student' || p.user.trial_until) return;
+  const f = fun.followersOf(p.id);
+  if (JSON.stringify(f) === JSON.stringify(p.follow || null)) return;
+  p.follow = f;
+  io.emit('user-updated', { id: p.id, follow: f });
+}
 function refreshBirthday(p) {
   if (p.user.role !== 'student') return;
   const b = ganbari.birthdayInfo(p.id);

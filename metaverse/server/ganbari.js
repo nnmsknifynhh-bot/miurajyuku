@@ -136,7 +136,7 @@ function defaults(today = jst()) {
     events: Object.fromEntries(EVENTS.map(e => [e.id, true])), // 季節の飾り（オン/オフ）
     birthdayMessage: 'いつもがんばっているね。すてきな1年になりますように！', // 誕生日カードのひとこと
     // 季節のお楽しみ（オン/オフと条件）
-    fun: { santa: true, santaDays: 10, asakatsu: true, asakatsuStart: '06:00', asakatsuEnd: '07:30', asakatsuMinutes: 30, asakatsuPoints: 3 },
+    fun: { santa: true, santaDays: 15, asakatsu: true, asakatsuStart: '06:00', asakatsuEnd: '07:30', asakatsuMinutes: 30, asakatsuPoints: 3 },
   };
 }
 
@@ -214,6 +214,15 @@ function checkWindows(s1, e1, s2, e2, label) {
   if (s2 < e1) return `${label}の2つ目の時間帯は、1つ目が終わってからにしてください`;
   return null;
 }
+// がんばりサンタを2章立て（10月・11月に各15日）に変えたので、前の初期値10日のまま保存されている場合だけ15日に直す（1回だけ）
+(function migrateSanta15() {
+  if (getSetting('ganbari_santa15') === '1') return;
+  try {
+    const saved = JSON.parse(getSetting('ganbari', '{}'));
+    if (saved.fun && saved.fun.santaDays === 10) { saved.fun.santaDays = 15; setSetting('ganbari', JSON.stringify(saved)); }
+  } catch (e) { /* そのまま */ }
+  setSetting('ganbari_santa15', '1');
+})();
 // 連続自習の最低時間を 90分 に変更（以前の初期値20分のまま保存されている場合だけ、1回だけ直す）
 (function migrate() {
   if (getSetting('ganbari_streak90') === '1') return;
@@ -538,6 +547,7 @@ const SHOP = [
   { id: 'friend_chick', slot: 'pet', emoji: '🐥', name: 'なかよしひよこ（おそろい）', price: 0, special: 'friend' },
   { id: 'pair_star', slot: 'head', emoji: '💫', name: 'ペア自習のきらきら星', price: 0, special: 'friend' },
   // がんばりサンタのプレゼント（12月にがんばった人だけ。お店では買えない）
+  { id: 'santa_hat', slot: 'head', emoji: '🎅', name: 'サンタからもらったサンタ帽', price: 0, special: 'santa' },
   { id: 'x_star', slot: 'head', emoji: '🌟', name: 'ツリーの星', price: 0, special: 'santa' },
   { id: 'x_reindeer', slot: 'pet', emoji: '🦌', name: 'トナカイ', price: 0, special: 'santa' },
   { id: 'x_snow', slot: 'pet', emoji: '☃️', name: 'ゆきだるまくん', price: 0, special: 'santa' },

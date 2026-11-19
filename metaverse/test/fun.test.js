@@ -26,21 +26,35 @@ test('準備', async () => {
   }
 });
 
-test('がんばりサンタ：11/1〜30に学年の最低時間（中2は60分）以上の日が10日以上で、12/1〜7に箱を開けられる（1回だけ）', () => {
-  for (let d = 1; d <= 10; d++) G.setManual(U.aaa.id, `${Y}-11-${String(d).padStart(2, '0')}`, 60, null);
-  for (let d = 1; d <= 10; d++) G.setManual(U.bbb.id, `${Y}-11-${String(d).padStart(2, '0')}`, d === 1 ? 59 : 70, null); // 1日は足りない
-  const c1 = F.santaStatus(U.aaa.id, at(`${Y}-11-20`));
-  assert.equal(c1.phase, 'count'); assert.equal(c1.days, 10); assert.equal(c1.eligible, true); assert.equal(c1.minMinutes, 60);
-  assert.equal(F.santaStatus(U.bbb.id, at(`${Y}-11-20`)).days, 9);
-  assert.equal(F.santaStatus(U.aaa.id, at(`${Y}-10-31`)), null, '期間の外');
-  assert.equal(F.santaStatus(U.aaa.id, at(`${Y}-12-08`)), null, '12/8からは開けられない');
-  assert.match(F.openSanta(U.aaa.id, at(`${Y}-11-20`)).error, /12月1日/);
-  const r = F.openSanta(U.aaa.id, at(`${Y}-12-03`));
-  assert.ok(r.item && r.item.emoji, 'クリスマスのアイテムが入っている');
-  assert.ok(G.owned(U.aaa.id).includes(r.item.id));
-  assert.match(F.openSanta(U.aaa.id, at(`${Y}-12-05`)).error, /もう開けました/);
-  assert.match(F.openSanta(U.bbb.id, at(`${Y}-12-01`)).error, /10日以上/);
-  assert.match(G.buy(U.bbb.id, 'x_reindeer'), /買えません/, 'お店では買えない');
+test('がんばりサンタ（2章）：10月15日→手紙とサンタ帽、11月15日→12/1〜25 サンタ、両方→トナカイも', () => {
+  const pad = (n) => String(n).padStart(2, '0');
+  for (let d = 1; d <= 15; d++) G.setManual(U.aaa.id, `${Y}-10-${pad(d)}`, 60, null);           // 第1章クリア
+  for (let d = 1; d <= 15; d++) G.setManual(U.aaa.id, `${Y}-11-${pad(d)}`, 70, null);           // 第2章クリア
+  for (let d = 1; d <= 15; d++) G.setManual(U.bbb.id, `${Y}-10-${pad(d)}`, d === 1 ? 59 : 70, null); // 1日足りない
+  for (let d = 1; d <= 15; d++) G.setManual(U.bbb.id, `${Y}-11-${pad(d)}`, 70, null);
+  // 第1章のとちゅう
+  const mid = F.santaStatus(U.aaa.id, at(`${Y}-10-10`));
+  assert.equal(mid.phase, 'ch1'); assert.equal(mid.chapters[0].days, 10); assert.equal(mid.chapters[0].cleared, false); assert.equal(mid.minMinutes, 60);
+  assert.equal(mid.letter, false);
+  // 第1章クリア：手紙とサンタ帽
+  const c1 = F.santaStatus(U.aaa.id, at(`${Y}-10-20`));
+  assert.equal(c1.chapters[0].cleared, true); assert.equal(c1.letter, true);
+  assert.ok(G.owned(U.aaa.id).includes('santa_hat'));
+  assert.equal(F.santaStatus(U.bbb.id, at(`${Y}-10-31`)).chapters[0].days, 14);
+  assert.ok(!G.owned(U.bbb.id).includes('santa_hat'));
+  assert.ok(F.readLetter(U.aaa.id, at(`${Y}-11-02`)).ok);
+  assert.equal(F.santaStatus(U.aaa.id, at(`${Y}-11-02`)).letter, false, '読んだら出ない');
+  assert.match(F.readLetter(U.bbb.id, at(`${Y}-11-02`)).error, /まだ/);
+  // 第2章
+  const c2 = F.santaStatus(U.bbb.id, at(`${Y}-11-20`));
+  assert.equal(c2.phase, 'ch2'); assert.equal(c2.chapters[1].days, 15); assert.equal(c2.chapters[1].cleared, true);
+  // 12/1〜12/25：ついて歩く
+  assert.deepEqual(F.followersOf(U.aaa.id, at(`${Y}-12-10`)), ['santa', 'reindeer'], '両方クリア');
+  assert.deepEqual(F.followersOf(U.bbb.id, at(`${Y}-12-10`)), ['santa'], '第2章だけ');
+  assert.equal(F.followersOf(U.aaa.id, at(`${Y}-11-30`)), null, '12/1から');
+  assert.equal(F.followersOf(U.aaa.id, at(`${Y}-12-26`)), null, '12/25まで');
+  assert.equal(F.santaStatus(U.aaa.id, at(`${Y}-09-30`)), null, '期間の外');
+  assert.match(G.buy(U.bbb.id, 'santa_hat'), /買えません/, 'お店では買えない');
 });
 
 test('朝活：6:00〜7:30に数えた時間が30分になった日にスタンプと3ポイント（バッジはなし）', () => {

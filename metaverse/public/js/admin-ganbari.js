@@ -249,13 +249,13 @@
     // ═════ 季節のお楽しみ ═════
     const f = c.fun || {};
     const funSec = section('🎉 季節のお楽しみ', 'がんばりサンタ・朝活チャレンジのオン/オフと条件です。');
-    const fSanta = check('🎅 がんばりサンタ（11/1〜30 にがんばった生徒に、12/1〜7 にプレゼント箱）', f.santa !== false);
-    const fSantaDays = numInput(f.santaDays || 10, 1, 30);
+    const fSanta = check('🎅 がんばりサンタ（第1章 10月→サンタの手紙とサンタ帽／第2章 11月→12/1〜25 サンタがついて歩く／両方でトナカイも）', f.santa !== false);
+    const fSantaDays = numInput(f.santaDays || 15, 1, 30);
     const fAsa = check('🌅 朝活チャレンジ（朝の自習で早起きスタンプとポイント）', f.asakatsu !== false);
     const fAsaMin = numInput(f.asakatsuMinutes || 30, 1, 120), fAsaPt = numInput(f.asakatsuPoints ?? 3, 0, 100);
     const fAsaS = timeInput(f.asakatsuStart || '06:00'), fAsaE = timeInput(f.asakatsuEnd || '07:30');
     const fAsaRow = el('div', 'gb-row'); fAsaRow.append(fAsaS, el('span', null, '〜'), fAsaE);
-    const fg1 = el('div', 'gb-grid'); fg1.append(field('がんばりサンタ：自習した日の数', fSantaDays, '「自習した日」は、学年ごとの連続自習🔥の最低時間（中1 45分・中2 60分・中3 90分など）以上の日です'));
+    const fg1 = el('div', 'gb-grid'); fg1.append(field('がんばりサンタ：各章で自習した日の数（10月・11月それぞれ）', fSantaDays, '「自習した日」は、学年ごとの連続自習🔥の最低時間（中1 45分・中2 60分・中3 90分など）以上の日です'));
     const fg2 = el('div', 'gb-grid'); fg2.append(field('朝活の時間帯', fAsaRow), field('朝活：スタンプがもらえる朝の自習時間（分）', fAsaMin, 'この時間帯に、自習時間として数えられた分'), field('朝活：スタンプ1こでもらえるポイント', fAsaPt));
     const saveFun = el('button', 'btn', 'お楽しみを保存する');
     saveFun.onclick = () => save({ fun: { santa: fSanta[1].checked, santaDays: Number(fSantaDays.value), asakatsu: fAsa[1].checked, asakatsuMinutes: Number(fAsaMin.value), asakatsuPoints: Number(fAsaPt.value), asakatsuStart: fAsaS.value, asakatsuEnd: fAsaE.value === '23:59' ? '23:59' : fAsaE.value } }, 'お楽しみを保存しました');
