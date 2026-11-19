@@ -1589,19 +1589,27 @@
 
   // ───────── 描画 ─────────
   // 上のバー・下のボタン・スティックの高さ（0.5秒ごとに測りなおす）
-  let insetCache = { at: -1e9, top: 0, bottom: 0 };
+  let insetCache = { at: -1e9, top: 0, over: 0, bottom: 0 };
   function uiInsets(time) {
     if (time - insetCache.at < 500) return insetCache;
     let top = 0, bottom = 0;
     const topEl = document.querySelector('.hud-top');
     if (topEl) top = Math.max(0, topEl.getBoundingClientRect().bottom);
+    // 上に出ている表示（見守り中・お知らせのチップ）の下まで
+    let over = top;
+    for (const sel of ['.top-chips', '#sc-badge']) {
+      const el = document.querySelector(sel);
+      if (!el || el.hidden || getComputedStyle(el).display === 'none') continue;
+      const r = el.getBoundingClientRect();
+      if (r.height) over = Math.max(over, r.bottom);
+    }
     for (const sel of ['.hud-bottom', '.joystick']) {
       const el = document.querySelector(sel);
       if (!el || el.hidden || getComputedStyle(el).display === 'none') continue; // position: fixed なので offsetParent は使えない
       const r = el.getBoundingClientRect();
       if (r.height) bottom = Math.max(bottom, innerHeight - r.top);
     }
-    insetCache = { at: time, top, bottom: Math.min(bottom, innerHeight * 0.4) };
+    insetCache = { at: time, top, over: Math.min(over, innerHeight * 0.45), bottom: Math.min(bottom, innerHeight * 0.4) };
     return insetCache;
   }
   function render(time) {
@@ -1616,6 +1624,9 @@
     const zone = SM.zoneAtPx(me.x, me.y);
     const lookY = zone && zone.type === 'study' ? (me.y + (zone.y1 + zone.y2 + 1) / 2 * T) / 2 : me.y;
     let tx = clamp(me.x, innerWidth / z, SM.W * T), ty = clamp(lookY, innerHeight / z, SM.H * T, ins.top / z, ins.bottom / z);
+    // 自分が上の表示（見守り中など）や下のボタンにかくれないように（教室のいちばん上のブースなど）
+    { const upper = me.y + (innerHeight / 2 - ins.over) / z - 64 / z, lower = me.y - (innerHeight / 2 - ins.bottom) / z + 24 / z; // 頭と名札の分・足もとの分
+      if (ty > upper) ty = upper; else if (ty < lower) ty = lower; }
     if (state.overview) { // 保護者：すわっている間は塾全体を見わたす（ずらして見られる）
       state.view.x = tx = clamp(state.view.x, innerWidth / z, SM.W * T);
       state.view.y = ty = clamp(state.view.y, innerHeight / z, SM.H * T, ins.top / z, ins.bottom / z);
