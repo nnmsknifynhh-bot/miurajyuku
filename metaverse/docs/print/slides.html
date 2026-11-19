@@ -44,6 +44,11 @@
   .step .ic { font-size: 40px; }
   .step b { font-size: 21px; }
   .step span { font-size: 16px; line-height: 1.45; color: var(--muted); font-weight: 700; }
+
+  .talk { display:flex; gap:12px; align-items:flex-start; }
+  .talk .who { flex:none; width:48px; height:48px; border-radius:50%; display:grid; place-items:center; font-size:26px; background:#fff; border:2px solid var(--line); }
+  .talk .bub { border:2px solid var(--line); border-radius:16px; padding:8px 16px; font-size:21px; line-height:1.5; background:#fff; }
+  .talk.me .bub { background:#eaf3ff; border-color:#b9d6ff; } .talk.kid .bub { background:#fff7e6; border-color:#f5d9a8; } .talk.mom .bub { background:#ffeef5; border-color:#f7c3d8; }
 </style>
 </head>
 <body>
@@ -61,6 +66,46 @@
   <span class="no" style="color:#fff">1</span>
 </section>
 
+<!-- 作ったわけ1 -->
+<section class="slide">
+  <div class="head"><span class="kicker k-pink">この自習室を作ったわけ</span><h1>できる子は「家で勉強してない」と言う</h1></div>
+  <div class="body" style="grid-template-columns:1.15fr 1fr;gap:28px">
+    <div class="col" style="gap:10px">
+      <div class="talk me"><div class="who">👩‍🏫</div><div class="bub">家で勉強してる？</div></div>
+      <div class="talk kid"><div class="who">🧑‍🎓</div><div class="bub">してません。</div></div>
+      <div class="talk me"><div class="who">👩‍🏫</div><div class="bub">1日の流れを教えて。</div></div>
+      <div class="talk kid"><div class="who">🧑‍🎓</div><div class="bub">寝る前にノートを見たりはしています。授業でわからなかったら、チャッピーに聞いたりして問題を解いています。</div></div>
+      <div class="talk mom"><div class="who">👩</div><div class="bub">（お母さん）あの子、ずっと教科書見てますよ。</div></div>
+    </div>
+    <div class="col" style="gap:16px;justify-content:center">
+      <div class="card" style="background:#fff7d6;border-color:#e8b923"><h3 style="font-size:28px">わたしたちは、これを<br>【勉強している】と言います。</h3><p style="font-size:20px">本人にとっては<b>当たり前のこと</b>だから、「勉強してない」と答えるのです。</p></div>
+      <div class="card"><h3>🏀 バスケの子に「ふだん走ってる？」</h3><p style="font-size:19px">「走ってない」。でもバスケは<b>ずっと走っている</b>スポーツ。走るのが当たり前だから「特別走ってはいない」と答えるのです。</p></div>
+    </div>
+  </div>
+  <span class="no">2</span>
+</section>
+
+<!-- 作ったわけ2 -->
+<section class="slide">
+  <div class="head"><span class="kicker k-pink">この自習室を作ったわけ</span><h1>勉強をバスケにたとえると</h1></div>
+  <div class="body" style="grid-template-columns:1.2fr 1fr;gap:28px">
+    <table class="t" style="font-size:21px;align-self:start">
+      <tr><th style="width:44%">🏀 バスケ</th><th>📚 勉強</th></tr>
+      <tr><td>🏆 大会</td><td><b>定期テスト</b></td></tr>
+      <tr><td>🤝 練習試合</td><td><b>テスト対策のワーク</b></td></tr>
+      <tr><td>📋 練習試合〜大会の間</td><td>長ければ作戦・戦略をしっかり立てられる。短いと難しい</td></tr>
+      <tr><td>👟 監督・コーチがいる練習</td><td><b>塾の授業の日</b></td></tr>
+      <tr><td>🔥 自主練</td><td><b>宿題・自宅学習</b></td></tr>
+    </table>
+    <div class="col" style="gap:14px">
+      <div class="card"><h3>もっとうまくなりたかったら？</h3><p>練習の日以外に、<b>自主練</b>をしますよね。勉強も同じです。</p></div>
+      <div class="shot"><img src="img/study.jpg" alt="" style="object-position:center 35%"></div>
+      <div class="note" style="font-size:21px">📚 家での「自主練」を、みんなといっしょに<b>当たり前</b>にする場所。それがこのオンライン自習室です。</div>
+    </div>
+  </div>
+  <span class="no">3</span>
+</section>
+
 <!-- 2 ねらい -->
 <section class="slide">
   <div class="head"><span class="kicker k-blue">ねらい</span><h1>「家でも勉強する」を、毎日の習慣に</h1></div>
@@ -74,7 +119,7 @@
     </ul>
     <div class="col"><div class="phone"><img src="img/study.jpg" alt=""></div><div class="cap">自習室のようす（スマホ画面）</div></div>
   </div>
-  <span class="no">2</span>
+  <span class="no">4</span>
 </section>
 
 <!-- 3 1日の流れ -->
@@ -92,7 +137,7 @@
     <div class="col"><div class="shot"><img src="img/study_wide.jpg" alt=""></div><div class="cap">頭の上に「今日○分」</div></div>
     <div class="col"><div class="phone"><img src="guide2/saver.jpg" alt=""></div><div class="cap">長時間は省電力画面（電池の節約）</div></div>
   </div>
-  <span class="no">3</span>
+  <span class="no">5</span>
 </section>
 
 <!-- 部屋 -->
@@ -110,7 +155,7 @@
       <tr><td>🗣 面談ブース</td><td>許可された方だけ（塾長のほかに3人まで）。通話・画面共有で面談</td></tr>
     </table>
   </div>
-  <span class="no">4</span>
+  <span class="no">6</span>
 </section>
 
 <!-- 集中ルール -->
@@ -126,7 +171,7 @@
     <div class="col"><div class="phone"><img src="guide2/cam.jpg" alt="" style="object-position:center bottom"></div><div class="cap">見守りカメラの案内</div></div>
     <div class="col"><div class="phone"><img src="guide2/seat.jpg" alt="" style="object-position:center top"></div><div class="cap">着席のうながし</div></div>
   </div>
-  <span class="no">5</span>
+  <span class="no">7</span>
 </section>
 
 <!-- 見守りカメラ -->
@@ -146,7 +191,7 @@
     </div>
     <div class="col"><div class="phone"><img src="guide2/cam.jpg" alt="" style="object-position:center bottom"></div><div class="cap">カメラの案内</div></div>
   </div>
-  <span class="no">6</span>
+  <span class="no">8</span>
 </section>
 
 <!-- 先生 -->
@@ -161,7 +206,7 @@
       <li>🎧 <b>個別通話</b>は、生徒が<b>教室・自習室にいるまま</b>行います。アバターに🎧が出て、まわりからも通話中とわかります。いつ・だれと・何分かは記録され、オーナーが確認・終了できます（録音なし）。</li>
     </ul>
   </div>
-  <span class="no">7</span>
+  <span class="no">9</span>
 </section>
 
 <!-- 5 がんばりが見える -->
@@ -172,7 +217,7 @@
     <div class="col"><div class="card"><h3>🌳 学年の木と短冊</h3><p>学年の平均自習時間で木が育ちます（<b>協力</b>のしくみ）。今学期の目標は先生が確認して<b>短冊</b>に。達成で⭐。</p></div><div class="shot"><img src="guide2/tanzaku.jpg" alt="" style="object-position:left top"></div><div class="cap">木にかざられた短冊と⭐</div></div>
     <div class="col"><div class="card"><h3>⭐ マイ席</h3><p>🔥30日（高校生は4週）で、自分だけの指定席。金色の名前プレートがつきます。</p></div><div class="shot"><img src="guide2/myseat_room.jpg" alt=""></div><div class="cap">すわると光るマイ席</div></div>
   </div>
-  <span class="no">8</span>
+  <span class="no">10</span>
 </section>
 
 <!-- ポイント -->
@@ -194,7 +239,7 @@
     </div>
     <div class="col"><div class="phone"><img src="img/shop.jpg" alt="" style="object-position:center top"></div><div class="cap">ポイントと着せかえの画面</div></div>
   </div>
-  <span class="no">9</span>
+  <span class="no">11</span>
 </section>
 
 <!-- 教室・飾り・窓 -->
@@ -206,7 +251,7 @@
     <div class="col"><div class="card"><h3>🪟 窓と🎃季節の飾り</h3><p style="font-size:16px">窓は朝焼け・青空・夕焼け・星空に。春は桜、冬は雪。飾りは1年で23種類。</p></div><div class="shot"><img src="guide2/win_dusk.jpg" alt="" style="object-position:left center"></div></div>
   </div>
   <div class="shot" style="height:150px;flex:none"><img src="guide2/deco_hall.jpg" alt="" style="object-position:center 30%"></div>
-  <span class="no">10</span>
+  <span class="no">12</span>
 </section>
 
 <!-- 6 季節のクエスト -->
@@ -228,7 +273,7 @@
       <div class="cap">クリアした子のうしろを、仲間がついて歩きます</div>
     </div>
   </div>
-  <span class="no">11</span>
+  <span class="no">13</span>
 </section>
 
 <!-- 7 保護者機能 -->
@@ -245,7 +290,7 @@
     <div class="col"><div class="phone"><img src="guide2/calendar.jpg" alt="" style="object-fit:contain;background:#fff"></div><div class="cap">勉強の足あとカレンダー</div></div>
     <div class="col"><div class="phone"><img src="guide2/parent_view.jpg" alt="" style="object-position:center top"></div><div class="cap">わが子のようす</div></div>
   </div>
-  <span class="no">12</span>
+  <span class="no">14</span>
 </section>
 
 <!-- 保護者の効果 -->
@@ -266,7 +311,7 @@
     </div>
     <div class="col"><div class="shot"><img src="guide2/cheer.jpg" alt="" style="object-position:30% top"></div><div class="cap">子どもの画面に届くメッセージ</div><div class="phone"><img src="guide2/parent_family.jpg" alt="" style="object-position:center top"></div><div class="cap">わが子の画面とスタンプ</div></div>
   </div>
-  <span class="no">13</span>
+  <span class="no">15</span>
 </section>
 
 <!-- 8 プライバシー -->
@@ -282,7 +327,7 @@
     </ul>
     <div class="col"><div class="shot"><img src="guide2/parent_sofa.jpg" alt=""></div><div class="cap">保護者の方はロビーのソファから</div></div>
   </div>
-  <span class="no">14</span>
+  <span class="no">16</span>
 </section>
 
 <!-- 9 保護者会・面談 -->
@@ -296,7 +341,7 @@
     </div>
     <div class="col"><div class="shot"><img src="guide2/board.jpg" alt=""></div><div class="cap">ロビーの先生の黒板</div><div class="shot"><img src="guide2/test_booth.jpg" alt="" style="object-position:center 70%"></div><div class="cap">ブース（通話・画面共有）</div></div>
   </div>
-  <span class="no">15</span>
+  <span class="no">17</span>
 </section>
 
 <!-- 10 友だち紹介 -->
@@ -313,7 +358,7 @@
     <div class="col"><div class="phone"><img src="guide2/invite.jpg" alt="" style="object-position:center 30%"></div><div class="cap">招待カード</div></div>
     <div class="col"><div class="phone"><img src="guide2/trial.jpg" alt="" style="object-position:center 30%"></div><div class="cap">体験のはじめかた</div></div>
   </div>
-  <span class="no">16</span>
+  <span class="no">18</span>
 </section>
 
 <!-- 11 はじめかた -->
@@ -327,14 +372,14 @@
     </div>
     <div class="col"><div class="shot"><img src="guide2/win_spring.jpg" alt=""></div><div class="cap">窓の外は、季節と時間で変わります</div></div>
   </div>
-  <span class="no">17</span>
+  <span class="no">19</span>
 </section>
 
 <!-- 12 おわり -->
 <section class="slide title" style="justify-content:center;align-items:center;text-align:center">
   <h1 style="font-size:60px">ご質問・ご相談は<br>お気軽に塾まで</h1>
   <p style="margin:0;font-size:28px;font-weight:700">おうちでも、みんなと、がんばれる。<br>三浦塾オンライン教室をよろしくお願いします。</p>
-  <span class="no" style="color:#fff">18</span>
+  <span class="no" style="color:#fff">20</span>
 </section>
 
 </body>
