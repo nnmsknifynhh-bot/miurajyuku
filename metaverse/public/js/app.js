@@ -186,10 +186,10 @@
     socket.on('blackboard', ({ board }) => { state.board = board; if (board && !isStaff()) { toast('📝 先生の黒板が新しくなったよ（ロビー）', 5000); markBoardSeen(); } });
     socket.on('myseat-lost', () => { toast('⭐ 🔥がとぎれたので、マイ席はお休みになりました。また続けたら、えらべるよ', 7000); refreshFun(true); });
     socket.on('referral-reward', ({ kind, points }) => {
-      const msg = kind === 'enroll' ? '🐥 友だちが入塾しました！ おそろいの「なかよしひよこ」をもらったよ。7日間のペア自習チャレンジもスタート！'
-        : kind === 'pair' ? `🤝 ペア自習チャレンジ成功！ 「ペア自習のきらきら星」💫と ${points}ポイントをもらったよ`
-        : `🌷 ご紹介のご家族が入塾しました！ 家族の木に🌷が咲き、${points}ポイントをもらいました`;
-      toast(msg, 9000); chime(0.2); refreshFun(true);
+      chime(0.2); refreshFun(true);
+      if (kind === 'enroll') return showGift('🐥', '友だちが入塾しました！', 'おそろいの「なかよしひよこ」をもらったよ。7日間のペア自習チャレンジもスタート！', 'friend_chick');
+      if (kind === 'pair') return showGift('💫', 'ペア自習チャレンジ成功！', `「ペア自習のきらきら星」と ${points}ポイントをもらったよ`, 'pair_star');
+      toast(`🌷 ご紹介のご家族が入塾しました！ 家族の木に🌷が咲き、${points}ポイントをもらいました`, 9000);
     });
     socket.on('meeting-closed', ({ message }) => { state.ready = false; showVisitOver(message); });
     socket.on('meeting-soon', ({ start, end }) => { toast(`📣 まもなく保護者会です（${start}〜${end}）。${start}になったら一度退室します。${end}からまた入れます`, 12000); chime(0.2); });
@@ -736,12 +736,12 @@
   setInterval(() => refreshFun(), 60_000);
   // 季節の2章イベントのことば
   const SEASON = {
-    santa: { icon: '🎅', bothIcon: '🎅🦌', from: 'サンタ', one: 'サンタ', both: 'サンタとトナカイ', item: 'サンタ帽', box: '💌',
+    santa: { icon: '🎅', bothIcon: '🎅🦌', from: 'サンタ', one: 'サンタ', both: 'サンタとトナカイ', item: 'サンタ帽', itemId: 'santa_hat', box: '💌',
       fxMsg: '🎄 メリークリスマス！ サンタからみんなへ、がんばったごほうびの雪とプレゼントが届いたよ',
-      letter: (ev, name) => `${Number(ev.chapters[0].from.slice(0, 2))}月、${ev.chapters[0].days}日も自習をがんばったね。中間テストもよくがんばりました。\nごほうびに、サンタ帽をプレゼントするよ（着せかえでつけられます）。\n${Number(ev.chapters[1].from.slice(0, 2))}月も${ev.need}日がんばったら、12月1日から25日まで、わたしが${name}さんのうしろをついて歩くよ。両方クリアしたら、トナカイもいっしょにね。\n　　　　　　　　サンタより 🎅` },
-    tanabata: { icon: '🎋', bothIcon: '🎋💫', from: '織姫と彦星', one: '彦星', both: '彦星と織姫', item: '笹かざり', box: '🎋',
+      letter: (ev, name) => `${Number(ev.chapters[0].from.slice(0, 2))}月、${ev.chapters[0].days}日も自習をがんばったね。中間テストもよくがんばりました。\nごほうびに、サンタ帽をプレゼントするよ（下のボタンで今すぐつけられます）。\n${Number(ev.chapters[1].from.slice(0, 2))}月も${ev.need}日がんばったら、12月1日から25日まで、わたしが${name}さんのうしろをついて歩くよ。両方クリアしたら、トナカイもいっしょにね。\n　　　　　　　　サンタより 🎅` },
+    tanabata: { icon: '🎋', bothIcon: '🎋💫', from: '織姫と彦星', one: '彦星', both: '彦星と織姫', item: '笹かざり', itemId: 'sasa', box: '🎋',
       fxMsg: '🌌 今日は七夕！ あなたががんばって天の川に橋をかけたから、織姫と彦星が会えたよ',
-      letter: (ev, name) => `${Number(ev.chapters[0].from.slice(0, 2))}月、${ev.chapters[0].days}日も自習をがんばってくれてありがとう。あなたの自習の一日一日が、天の川にかかる橋の星になっています。\nお礼に、笹かざりをおくります（着せかえでつけられます）。\n${Number(ev.chapters[1].from.slice(0, 2))}月も${ev.need}日がんばったら、7月1日から20日まで、彦星が${name}さんのうしろをついて歩きます。両方クリアしたら、織姫も会いにきて、2人そろって歩きます。\n　　　　　　織姫と彦星より 🌌` },
+      letter: (ev, name) => `${Number(ev.chapters[0].from.slice(0, 2))}月、${ev.chapters[0].days}日も自習をがんばってくれてありがとう。あなたの自習の一日一日が、天の川にかかる橋の星になっています。\nお礼に、笹かざりをおくります（下のボタンで今すぐつけられます）。\n${Number(ev.chapters[1].from.slice(0, 2))}月も${ev.need}日がんばったら、7月1日から20日まで、彦星が${name}さんのうしろをついて歩きます。両方クリアしたら、織姫も会いにきて、2人そろって歩きます。\n　　　　　　織姫と彦星より 🌌` },
   };
   const letterAsked = {};
   let letterEvent = 'santa';
@@ -755,12 +755,34 @@
     showWhenFree($('#santa-dialog'));
   }
   $('#santa-later').onclick = () => { $('#santa-dialog').close(); };
-  $('#santa-open').onclick = async () => {
+  async function readSeasonLetter(wear) {
     $('#santa-dialog').close();
     const L = SEASON[letterEvent];
-    try { await api('POST', '/api/me/event-letter', { event: letterEvent }); toast(`${L.icon} ${L.item}は「ポイントと着せかえ」でつけられるよ`, 5000); } catch (e) { /* 次の機会に */ }
+    try { await api('POST', '/api/me/event-letter', { event: letterEvent }); } catch (e) { /* 次の機会に */ }
+    if (wear) await wearNow(L.itemId);
+    else toast(`${L.icon} ${L.item}は、いつでも「ポイントと着せかえ」でつけられるよ`, 5000);
     refreshFun(true);
-  };
+  }
+  $('#santa-open').onclick = () => readSeasonLetter(false);
+  $('#santa-wear').onclick = () => readSeasonLetter(true);
+  // お店では買えない特別なアイテム：もらったその場でつけられる（着せかえ期間の外でもOK）
+  const SPECIAL_SLOT = { bday_cake: 'head', santa_hat: 'head', sasa: 'hand', friend_chick: 'pet', pair_star: 'head' };
+  async function wearNow(itemId) {
+    try {
+      await api('POST', '/api/me/equip', { slot: SPECIAL_SLOT[itemId], item: itemId });
+      toast('✨ つけたよ！ はずすときは「🎁 ポイントと着せかえ」で', 5000);
+      if (state.gb && state.gb.refreshForest) state.gb.refreshForest();
+    } catch (e) { toast(e.message || 'つけられませんでした'); }
+  }
+  let giftItem = null;
+  function showGift(icon, title, msg, itemId) {
+    giftItem = itemId;
+    $('#gift-icon').textContent = icon; $('#gift-title').textContent = title; $('#gift-msg').textContent = msg;
+    showWhenFree($('#gift-dialog'));
+  }
+  $('#gift-later').onclick = () => { $('#gift-dialog').close(); toast('「🎁 ポイントと着せかえ」で、いつでもつけられるよ', 4000); };
+  $('#gift-wear').onclick = () => { $('#gift-dialog').close(); if (giftItem) wearNow(giftItem); };
+  $('#bday-wear').onclick = () => { $('#bday-dialog').close(); wearNow('bday_cake'); };
 
   $('#bday-close').onclick = () => { $('#bday-dialog').close(); if (state.gb && state.gb.refreshForest) state.gb.refreshForest(); };
   $('#seat-close').onclick = () => { $('#seat-dialog').close(); standingSince = Date.now(); };

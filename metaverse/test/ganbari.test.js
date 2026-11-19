@@ -134,7 +134,7 @@ test('木の名前・学年・段階の時間はオーナーが変えられる',
   G.setConfig({ trees: [{ name: '中1の木', grades: ['中1'] }, { name: '中2の木', grades: ['中2'] }, { name: '中3の木', grades: ['中3'] }, { name: '高校生の木', grades: ['高1', '高2', '高3'] }] });
 });
 
-test('ポイント：今年度の自習時間で増え、買うと減る。期間限定・足りないときは買えない', () => {
+test('ポイント：今年度の自習時間で増え、買うと減る。足りないときは買えない', () => {
   const now = at(G.addDays(C().terms[1], 2));
   // a1：今年度 120分（修正）＋1分（2日目） → 10分で1ポイント → 12ポイント
   const p = G.points(U.a1.id, now);
@@ -145,8 +145,7 @@ test('ポイント：今年度の自習時間で増え、買うと減る。期�
   assert.equal(G.buy(U.a1.id, 'cat', now), null);
   assert.equal(G.points(U.a1.id, now).balance, 72 - 60);
   assert.equal(G.buy(U.a1.id, 'cat', now), 'もう持っています');
-  const july = at(`${C().yearStart.slice(0, 4)}-07-15`);
-  assert.match(G.buy(U.a1.id, 'santa', july), /期間限定/);
+  assert.equal(G.buy(U.a1.id, 'santa', now), 'そのアイテムはありません', '季節限定アイテムはなくなった');
 });
 
 test('着せかえ：持っているものだけつけられる', async () => {
@@ -276,6 +275,12 @@ test('着せかえ期間：管理画面で決めた期間だけ、買える・�
   assert.equal(G.getEquip(U.b1.id, { date: before, ignorePeriod: true }).ids.costume, 'k_bear', '持っているものは消えない');
   assert.match(G.buy(U.b1.id, 'cap', after), /着せかえ期間ではありません/);
   assert.match(G.equip(U.b1.id, 'head', null, after), /着せかえ期間ではありません/);
+  // お店では買えない特別なアイテムは、期間の外でもその場でつけられて、見える
+  db.prepare("INSERT INTO shop_owned (user_id, item, year_start, price, bought_at) VALUES (?, 'bday_cake', ?, 0, '')").run(U.b1.id, C().yearStart);
+  assert.equal(G.equip(U.b1.id, 'head', 'bday_cake', after), null);
+  assert.equal(G.getEquip(U.b1.id, { date: after }).head, '🎂', '特別なアイテムは期間外でも見える');
+  assert.equal(G.getEquip(U.b1.id, { date: after }).costume, null, 'ふつうのアイテムは期間外は見えない');
+  assert.equal(G.equip(U.b1.id, 'head', null, after), null, '特別なアイテムははずせる');
   G.setConfig({ dressup: { mode: 'always', periods: [] } });
 });
 

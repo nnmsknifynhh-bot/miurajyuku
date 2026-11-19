@@ -38,7 +38,6 @@
       for (const it of me.shop.filter(i => i.slot === g.shopSlot && (i.available || i.owned))) {
         const card = el('div', 'shop-item' + (it.id === equippedId ? ' on' : ''));
         card.append(el('div', 'emoji', it.emoji), el('div', 'nm', it.name));
-        if (it.limited) card.append(el('div', 'lim', '期間限定'));
         if (it.special === 'birthday') card.append(el('div', 'lim', '🎁 誕生日プレゼント'));
         if (it.special === 'santa') card.append(el('div', 'lim', '🎅 サンタのプレゼント'));
         if (it.special === 'tanabata') card.append(el('div', 'lim', '🎋 織姫と彦星のプレゼント'));

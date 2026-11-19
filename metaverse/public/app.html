@@ -127,10 +127,20 @@
       <p class="muted" id="santa-from">🎅 サンタから手紙が届いたよ！</p>
       <h2 id="santa-title"></h2>
       <p class="fun-msg santa-letter" id="santa-msg"></p>
-      <div class="dialog-actions"><button type="button" class="btn secondary" id="santa-later">あとで読む</button><button type="button" class="btn" id="santa-open">読んだよ！</button></div>
+      <div class="dialog-actions"><button type="button" class="btn secondary" id="santa-later">あとで読む</button><button type="button" class="btn secondary" id="santa-open">読んだよ！</button><button type="button" class="btn" id="santa-wear">🎁 今すぐつける</button></div>
     </div>
   </dialog>
 
+
+  <!-- 🎁 お店では買えないアイテムが届いた -->
+  <dialog id="gift-dialog" class="fun-card">
+    <div class="dialog-body">
+      <div class="fun-big" id="gift-icon">🎁</div>
+      <h2 id="gift-title">プレゼントが届いたよ！</h2>
+      <p class="fun-msg" id="gift-msg"></p>
+      <div class="dialog-actions"><button type="button" class="btn secondary" id="gift-later">あとで</button><button type="button" class="btn" id="gift-wear">今すぐつける</button></div>
+    </div>
+  </dialog>
 
   <!-- 📝 先生の黒板 -->
   <dialog id="board-dialog">
@@ -219,9 +229,9 @@
       <div class="bday-cake">🎂</div>
       <h2 id="bday-title"></h2>
       <p class="bday-msg" id="bday-msg"></p>
-      <p class="bday-gift" id="bday-gift" hidden>🎁 プレゼント：「🎂 バースデーケーキの帽子」<br><small>着せかえ（帽子）でつけられるよ</small></p>
+      <p class="bday-gift" id="bday-gift" hidden>🎁 プレゼント：「🎂 バースデーケーキの帽子」</p>
       <p class="bday-from">三浦塾より</p>
-      <div class="dialog-actions"><button type="button" class="btn" id="bday-close">ありがとう！</button></div>
+      <div class="dialog-actions"><button type="button" class="btn secondary" id="bday-close">ありがとう！</button><button type="button" class="btn" id="bday-wear">🎂 今すぐかぶる</button></div>
     </div>
   </dialog>
   <!-- 自習室：立ち歩きが続いたときの席えらび -->

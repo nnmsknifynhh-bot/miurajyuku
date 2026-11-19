@@ -524,7 +524,6 @@ function streak(userId, date = new Date()) {
 }
 
 // ───────── ポイントと着せかえ ─────────
-// months: 買える月（期間限定）。なければいつでも
 const SHOP = [
   // 帽子・かざり（絵文字で表示）
   { id: 'cap', slot: 'head', emoji: '🧢', name: 'キャップ', price: 20 },
@@ -534,10 +533,6 @@ const SHOP = [
   { id: 'helmet', slot: 'head', emoji: '⛑️', name: 'ヘルメット', price: 60 },
   { id: 'gradcap', slot: 'head', emoji: '🎓', name: '博士の帽子', price: 100 },
   { id: 'crown', slot: 'head', emoji: '👑', name: '王冠', price: 200 },
-  { id: 'sakura', slot: 'head', emoji: '🌸', name: '桜の髪かざり', price: 30, months: [3, 4, 5] },
-  { id: 'sunflower', slot: 'head', emoji: '🌻', name: 'ひまわり', price: 30, months: [7, 8] },
-  { id: 'maple', slot: 'head', emoji: '🍁', name: 'もみじ', price: 30, months: [10, 11] },
-  { id: 'santa', slot: 'head', emoji: '🎅', name: 'サンタ', price: 40, months: [12] },
   { id: 'star', slot: 'head', emoji: '🌟', name: 'スターのかんむり', price: 400 },
   { id: 'rainbow', slot: 'head', emoji: '🌈', name: 'にじのわっか', price: 600 },
   { id: 'diamond', slot: 'head', emoji: '💎', name: 'ダイヤのかざり', price: 1000 },
@@ -594,8 +589,6 @@ const SHOP = [
   { id: 'peacock', slot: 'pet', emoji: '🦚', name: 'くじゃく', price: 450 },
   { id: 'whale', slot: 'pet', emoji: '🐳', name: 'くじら', price: 600 },
   { id: 'brachio', slot: 'pet', emoji: '🦕', name: '首長りゅう', price: 800 },
-  { id: 'pumpkin', slot: 'pet', emoji: '🎃', name: 'かぼちゃ', price: 50, months: [10] },
-  { id: 'snowman', slot: 'pet', emoji: '⛄', name: '雪だるま', price: 50, months: [12, 1, 2] },
   // 着ぐるみ（体と頭をすっぽり。着ているあいだは帽子・洋服は表示しない）
   { id: 'k_bear', slot: 'costume', style: 'bear', emoji: '🐻', name: 'くまの着ぐるみ', price: 150 },
   { id: 'k_cat', slot: 'costume', style: 'cat', emoji: '😺', name: 'ねこの着ぐるみ', price: 150 },
@@ -607,6 +600,12 @@ const SHOP = [
   { id: 'k_dragon', slot: 'costume', style: 'dragon', emoji: '🐉', name: 'ドラゴンの着ぐるみ', price: 800 },
 ];
 const itemById = (id) => SHOP.find(i => i.id === id);
+// 季節限定アイテムはやめた：持っていた人にはポイントを返し、つけていたらはずす
+const RETIRED = ['sakura', 'sunflower', 'maple', 'santa', 'pumpkin', 'snowman'];
+db.prepare(`DELETE FROM shop_owned WHERE item IN (${RETIRED.map(() => '?').join(', ')})`).run(...RETIRED);
+for (const sl of SLOTS) db.prepare(`UPDATE avatar_equip SET ${sl} = NULL WHERE ${sl} IN (${RETIRED.map(() => '?').join(', ')})`).run(...RETIRED);
+// お店では買えない特別なアイテムは、着せかえ期間の外でもつけられる・見える
+const isSpecial = (id) => { const it = id && itemById(id); return !!(it && it.special); };
 
 function points(userId, date = new Date()) {
   const c = getConfig();
@@ -638,11 +637,9 @@ function getEquip(userId, opts = {}) {
   const ids = r ? Object.fromEntries(SLOTS.map(sl => [sl, r[sl] || null])) : EMPTY_EQUIP(); // 新年度になっても、つけたまま
   const visible = opts.ignorePeriod || dressupOpen(opts.date, c);
   const out = EMPTY_EQUIP();
-  if (visible) {
-    for (const sl of SLOTS) {
-      const it = ids[sl] && itemById(ids[sl]);
-      if (it) out[sl] = it.style || it.emoji;
-    }
+  for (const sl of SLOTS) {
+    const it = ids[sl] && itemById(ids[sl]);
+    if (it && (visible || it.special)) out[sl] = it.style || it.emoji;
   }
   return { ...out, ids, hidden: !visible };
 }
@@ -650,7 +647,6 @@ function buy(userId, itemId, date = new Date()) {
   const item = itemById(itemId);
   if (!item) return 'そのアイテムはありません';
   if (!dressupOpen(date)) return '今は着せかえ期間ではありません';
-  if (item.months && !item.months.includes(jst(date).month)) return 'このアイテムは今は買えません（期間限定）';
   if (owned(userId).includes(itemId)) return 'もう持っています';
   if (item.special) return 'このアイテムはお店では買えません';
   const pt = points(userId, date);
@@ -661,7 +657,12 @@ function buy(userId, itemId, date = new Date()) {
 }
 function equip(userId, slot, itemId, date = new Date()) {
   if (!SLOTS.includes(slot)) return 'つける場所が正しくありません';
-  if (!dressupOpen(date)) return '今は着せかえ期間ではありません';
+  if (!dressupOpen(date)) {
+    // 期間の外でも、特別なアイテムはつけられる（はずすのも）
+    const cur0 = db.prepare('SELECT * FROM avatar_equip WHERE user_id = ?').get(userId);
+    const okOutside = itemId !== null ? isSpecial(itemId) : !!(cur0 && isSpecial(cur0[slot]));
+    if (!okOutside) return '今は着せかえ期間ではありません';
+  }
   if (itemId !== null) {
     const item = itemById(itemId);
     if (!item || item.slot !== slot) return 'そのアイテムはここにはつけられません';
@@ -676,11 +677,10 @@ function equip(userId, slot, itemId, date = new Date()) {
     .run(userId, c.yearStart, ...SLOTS.map(sl => next[sl]));
   return null;
 }
-function shopFor(userId, date = new Date()) {
-  const month = jst(date).month;
+function shopFor(userId) {
   const have = new Set(owned(userId));
   return SHOP.filter(i => !i.special || have.has(i.id)) // 特別なアイテムは、もらった人にだけ見える
-    .map(i => ({ ...i, owned: have.has(i.id), available: !i.months || i.months.includes(month), limited: !!i.months }));
+    .map(i => ({ ...i, owned: have.has(i.id), available: true }));
 }
 
 // ───────── 目標の短冊 ─────────
