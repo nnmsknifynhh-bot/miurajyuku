@@ -637,11 +637,14 @@
       if (!g.hs) { $('#week-chip').hidden = true; return; }
       const w = g.hs.week, t = g.hs.today;
       const hmm = (m) => `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`;
-      const marks = Array.from({ length: w.need }, (_, i) => i < w.sessions ? '●' : '○').join('');
+      // 週のメダル：今週の合計と、次のメダルまで
+      const prev = state.hsMedal;
+      state.hsMedal = w.medal ? w.medal.id : null;
+      if (prev !== undefined && w.medal && prev !== w.medal.id) { toast(`${w.medal.icon} 今週の${w.medal.name}メダル ゲット！ +${w.medal.points}ポイント`, 7000); chime(0.2); }
       $('#week-chip').textContent = '';
-      $('#week-chip').append(document.createTextNode(`📅 今週 ${marks} ${w.sessions}/${w.need}回` + (w.achieved ? ' 達成！🎉' : '')));
+      $('#week-chip').append(document.createTextNode(`📅 今週 ${hmm(w.minutes)}` + (w.medal ? ` ${w.medal.icon}` : '') + (w.next ? `・${w.next.icon}まであと${hmm(w.next.left)}` : '・最高のメダル！🎉')));
       const sm = document.createElement('small');
-      sm.textContent = t.done ? `今日 ${hmm(t.minutes)} ✓ 1回クリア` : `今日 ${hmm(t.minutes)} / ${hmm(t.sessionMinutes)}（あと${t.sessionMinutes - t.minutes}分）`;
+      sm.textContent = `今日 ${hmm(t.minutes)}・` + g.hs.medals.map(m => `${m.icon}${m.minutes / 60}時間`).join(' ');
       $('#week-chip').append(sm);
       $('#week-chip').hidden = false;
       state.hsInfo = g.hs;

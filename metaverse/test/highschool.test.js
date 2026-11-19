@@ -91,27 +91,42 @@ test('数え方は中学生と高校生で別々（時間帯・上限）', () =>
   assert.deepEqual(G.tick(online, { date: at(day, '10:00') }), [U.jh1.id], '10時：高校生は時間帯の外');
   assert.deepEqual(G.tick(online, { date: at(day, '19:00') }).sort(), [U.hs2.id, U.jh1.id].sort());
   assert.match(G.setConfig({ hs: { window: { start: '22:00', end: '18:00' } } }), /^高校生：/);
-  assert.match(G.setConfig({ hs: { sessionsPerWeek: 9 } }), /週の回数/);
-  G.setConfig({ hs: { window: { start: '00:00', end: '24:00' }, dailyCap: 360 } });
+  assert.match(G.setConfig({ hs: { medals: [{ minutes: 300, points: 10 }, { minutes: 200, points: 20 }, { minutes: 540, points: 30 }] } }), /🥉＜🥈＜🥇/);
+  assert.match(G.setConfig({ hs: { medals: [{ minutes: 240, points: 10 }] } }), /3つ/);
+  G.setConfig({ hs: { window: { start: '16:00', end: '23:00' }, dailyCap: 360 } });
 });
 
-test('週のノルマ：3時間以上の日を1回と数え、週2回で達成。🔥は週で数え、達成した週はボーナスポイント', () => {
+test('週のメダル：週の合計で🥉4時間+10・🥈6時間+20・🥇9時間+30。🔥は🥉以上の週で数える', () => {
+  const C = G.getConfig();
+  assert.deepEqual(C.hs.medals, [{ minutes: 240, points: 10 }, { minutes: 360, points: 20 }, { minutes: 540, points: 30 }]);
+  assert.deepEqual(C.hs.window, { start: '16:00', end: '23:00' }, '高校生のポイントの時間帯は16:00〜23:00');
   const mon = G.mondayOf(today());
   const id = U.hs2.id;
-  // 先週と先々週：3時間×2日で達成。今週：1日だけ
-  for (const w of [-14, -7]) { G.setManual(id, G.addDays(mon, w), 185, null); G.setManual(id, G.addDays(mon, w + 2), 200, null); }
-  G.setManual(id, G.addDays(mon, -7 + 4), 60, null); // 3時間に足りない日は数えない
-  G.setManual(id, mon, 190, null);
+  // 先々週：合計9時間（🥇）、先週：合計6時間を毎日少しずつ（🥈）、今週：月曜に1時間40分
+  G.setManual(id, G.addDays(mon, -14), 300, null); G.setManual(id, G.addDays(mon, -12), 300, null);
+  for (let i = 0; i < 6; i++) G.setManual(id, G.addDays(mon, -7 + i), 60, null);
+  G.setManual(id, mon, 100, null);
   const h = G.hsWeeks(id, at(G.addDays(mon, 1)));
-  assert.equal(h.week.sessions, 1); assert.equal(h.week.need, 2); assert.equal(h.week.achieved, false);
+  assert.equal(h.week.minutes, 100); assert.equal(h.week.medal, null); assert.equal(h.week.achieved, false);
+  assert.equal(h.week.next.id, 'bronze'); assert.equal(h.week.next.left, 140, '🥉まであと2時間20分');
   assert.equal(h.streak, 2, '今週はまだでも、先週まで2週続いている');
   assert.equal(h.achievedWeeks, 2);
+  assert.deepEqual(h.counts, { bronze: 0, silver: 1, gold: 1 });
+  assert.equal(h.bonusPoints, 30 + 20, 'いちばん上のメダルの分だけ');
   assert.equal(G.streak(id, at(G.addDays(mon, 1))), 2, '高校生の🔥は週');
   const pt = G.points(id, at(G.addDays(mon, 1)));
-  const base = Math.floor((185 + 200 + 185 + 200 + 60 + 190) / G.getConfig().minutesPerPoint);
-  assert.equal(pt.earned, base + 2 * G.getConfig().hs.weekBonus, 'ボーナスつき');
-  G.setManual(id, G.addDays(mon, 1), 181, null);
-  assert.equal(G.hsWeeks(id, at(G.addDays(mon, 1))).streak, 3, '今週も達成');
+  assert.ok(pt.earned >= 50, 'メダルのボーナスがポイントに入る');
+  G.setManual(id, G.addDays(mon, 1), 150, null); // 今週 4時間10分 → 🥉
+  // 前の「週のノルマ（回数）」の設定は、メダルと16:00〜23:00に切りかわる
+  const D = require('../server/db.js');
+  const saved = JSON.parse(D.getSetting('ganbari', '{}'));
+  D.setSetting('ganbari', JSON.stringify({ ...saved, hs: { window: { start: '00:00', end: '24:00' }, dailyCap: 360, sessionsPerWeek: 2, sessionMinutes: 180, weekBonus: 30 } }));
+  const m = G.getConfig().hs;
+  assert.deepEqual(m.window, { start: '16:00', end: '23:00' });
+  assert.equal(m.medals[2].points, 30); assert.equal(m.sessionsPerWeek, undefined);
+  const h2 = G.hsWeeks(id, at(G.addDays(mon, 1)));
+  assert.equal(h2.week.medal.id, 'bronze'); assert.equal(h2.week.next.id, 'silver');
+  assert.equal(h2.streak, 3, '今週も🥉で3週');
 });
 
 test('称号：自習時間の合計で変わる（高校生だけ）', () => {

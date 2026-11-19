@@ -130,12 +130,14 @@
     const jh = ruleBlock(c, '📚 自習室（中学生など）');
     const hs = ruleBlock(c.hs, '☕ 高校生自習室（高校生）', '高校生（高1〜高3）の数え方です。中学生とは別に決められます。');
     // 高校生の週のノルマ
-    const hsSessions = numInput(c.hs.sessionsPerWeek, 1, 7), hsMinutes = numInput(c.hs.sessionMinutes, 10, 720);
-    const hsBonus = numInput(c.hs.weekBonus, 0, 1000), hsLate = numInput(c.hs.lateMinutes, 1, 240);
+    const MD = [['🥉', 'ブロンズ'], ['🥈', 'シルバー'], ['🥇', 'ゴールド']];
+    const medalsCfg = c.hs.medals || [{ minutes: 240, points: 10 }, { minutes: 360, points: 20 }, { minutes: 540, points: 30 }];
+    const medalInputs = medalsCfg.map(m => [numInput(m.minutes, 10, 10080), numInput(m.points, 0, 1000)]);
+    const hsLate = numInput(c.hs.lateMinutes, 1, 240);
     const hg = el('div', 'gb-grid');
-    hg.append(field('週のノルマ：週に何回', hsSessions, '例：2回'), field('1回とする時間（分）', hsMinutes, '例：180 = 3時間。この時間をこえた日を「1回」と数えます'),
-      field('ノルマ達成のボーナス（ポイント）', hsBonus, '週のノルマを達成すると、この分ポイントがふえます'), field('来ていない通知（予定の何分後）', hsLate, '来る曜日と時刻は「ユーザー」の生徒の編集で決めます'));
-    hs.box.append(el('b', null, '📅 週のノルマ'), hg, el('p', 'muted', '高校生の連続🔥は「ノルマを達成した週」が続いた数です（例：🔥3週）。'));
+    medalInputs.forEach(([mi, pi], i) => hg.append(field(`${MD[i][0]} ${MD[i][1]}：週の合計（分）`, mi, `例：${medalsCfg[i].minutes} = ${medalsCfg[i].minutes / 60}時間`), field(`${MD[i][0]} のボーナス（ポイント）`, pi, 'その週にとった、いちばん上のメダルの分だけふえます')));
+    hg.append(field('来ていない通知（予定の何分後）', hsLate, '来る曜日と時刻は「ユーザー」の生徒の編集で決めます'));
+    hs.box.append(el('b', null, '🏅 週のメダル'), hg, el('p', 'muted', '月曜〜日曜の勉強時間（全部）の合計でメダルが決まります。高校生の連続🔥は「🥉以上をとった週」が続いた数です（例：🔥3週）。保護者会の日は2時間分に数えます。'));
 
     const streakMin = numInput(c.streakMin, 1, 600), mpp = numInput(c.minutesPerPoint, 1, 120);
     const seat = check('席に座っているときだけ数える', c.requireSeat), cam = check('見守り写真がオンのときは、カメラがオンのときだけ数える', c.requireCamera);
@@ -156,7 +158,7 @@
         streakMin: Number(streakMin.value), minutesPerPoint: Number(mpp.value),
         streakByGrade: { ...(c.streakByGrade || {}), ...Object.fromEntries(sgInputs.map(([g, i]) => [g, Number(i.value)])) },
         requireSeat: seat[1].checked, requireCamera: cam[1].checked,
-        hs: { ...hs.value(), sessionsPerWeek: Number(hsSessions.value), sessionMinutes: Number(hsMinutes.value), weekBonus: Number(hsBonus.value), lateMinutes: Number(hsLate.value) },
+        hs: { ...hs.value(), medals: medalInputs.map(([mi, pi]) => ({ minutes: Number(mi.value), points: Number(pi.value) })), lateMinutes: Number(hsLate.value) },
       }, '数え方を保存しました').then(ok => { if (ok) load(root, ctx).then(() => window.scrollTo(0, y)); });
     };
     rule.append(jh.box, hs.box, grid, sgBox, seat[0], cam[0], saveRule);

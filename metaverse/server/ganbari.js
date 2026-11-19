@@ -113,6 +113,8 @@ const isHS = (grade) => HS_GRADES.includes(grade);
 const HS_TREE = { name: '高校生の木', grades: HS_GRADES };
 // 高校生の称号（自習時間の合計・時間）
 const TITLES = [[20, 'がんばり屋'], [50, '努力家'], [100, '鉄人'], [200, '勉強の達人'], [300, '受験の覇者'], [500, '伝説の受験生']];
+const DEFAULT_MEDALS = [{ minutes: 240, points: 10 }, { minutes: 360, points: 20 }, { minutes: 540, points: 30 }]; // 🥉4時間・🥈6時間・🥇9時間
+const MEDALS = [{ id: 'bronze', icon: '🥉', name: 'ブロンズ' }, { id: 'silver', icon: '🥈', name: 'シルバー' }, { id: 'gold', icon: '🥇', name: 'ゴールド' }];
 function defaults(today = jst()) {
   const y = today.month >= 4 ? today.year : today.year - 1;
   return {
@@ -130,7 +132,8 @@ function defaults(today = jst()) {
     terms: [`${y}-04-01`, `${y}-09-01`, `${y + 1}-01-01`],
     trees: [{ name: '中1の木', grades: ['中1'] }, { name: '中2の木', grades: ['中2'] }, { name: '中3の木', grades: ['中3'] }, HS_TREE],
     // 高校生（高校生自習室）の数え方。時間帯・上限・曜日は中学生とは別。週のノルマ：週○回・1回○分以上
-    hs: { window: { start: '00:00', end: '24:00' }, window2: null, dailyCap: 360, weekly: null, sessionsPerWeek: 2, sessionMinutes: 180, weekBonus: 30, lateMinutes: 15 },
+    // 高校生：週のメダル（週の勉強時間の合計で🥉🥈🥇。ボーナスはいちばん上のメダルの分だけ）
+    hs: { window: { start: '16:00', end: '23:00' }, window2: null, dailyCap: 360, weekly: null, medals: DEFAULT_MEDALS.map(m => ({ ...m })), lateMinutes: 15, medalsV1: true },
     stages: [0, 5, 15, 30, 50, 80], // 木の段階（平均時間・時間単位）
     dressup: { mode: 'always', periods: [] }, // 着せかえ期間：always＝いつでも / periods＝決めた期間だけ
     events: Object.fromEntries(EVENTS.map(e => [e.id, true])), // 季節の飾り（オン/オフ）
@@ -180,7 +183,14 @@ function getConfig() {
     saved.pointsFrom = saved.yearStart || d.yearStart;
     setSetting('ganbari', JSON.stringify({ ...d, ...saved }));
   }
-  const shs = saved.hs || {};
+  let shs = saved.hs || {};
+  if (saved.hs && !shs.medalsV1) { // 週のノルマ（回数）→ 週のメダルへ。ポイントの時間帯は16:00〜23:00に
+    const tw = (w) => w ? { ...w, start: '16:00', end: '23:00', start2: null, end2: null } : w;
+    shs = { ...shs, window: { start: '16:00', end: '23:00' }, window2: null, weekly: Array.isArray(shs.weekly) ? shs.weekly.map(tw) : null, medals: DEFAULT_MEDALS.map(m => ({ ...m })), medalsV1: true };
+    delete shs.sessionsPerWeek; delete shs.sessionMinutes; delete shs.weekBonus;
+    saved.hs = shs;
+    setSetting('ganbari', JSON.stringify(saved));
+  }
   const trees = Array.isArray(saved.trees) ? (saved.trees.length === 3 ? [...saved.trees, HS_TREE] : saved.trees) : d.trees; // 4本目（高校生の木）を足す
   return {
     ...d, ...saved, window: { ...d.window, ...(saved.window || {}) }, trees,
@@ -281,9 +291,16 @@ function setConfig(patch, actorId) {
     const hs = { ...c.hs };
     err = applyRules(hs, h);
     if (err) return '高校生：' + err;
-    if (h.sessionsPerWeek !== undefined) { if (!int(h.sessionsPerWeek, 1, 7)) return '高校生：週の回数は1〜7回にしてください'; hs.sessionsPerWeek = h.sessionsPerWeek; }
-    if (h.sessionMinutes !== undefined) { if (!int(h.sessionMinutes, 10, 720)) return '高校生：1回の時間は10〜720分にしてください'; hs.sessionMinutes = h.sessionMinutes; }
-    if (h.weekBonus !== undefined) { if (!int(h.weekBonus, 0, 1000)) return '高校生：週のボーナスは0〜1000ポイントにしてください'; hs.weekBonus = h.weekBonus; }
+    if (h.medals !== undefined) {
+      const m = h.medals;
+      if (!Array.isArray(m) || m.length !== 3) return '高校生：メダルは3つ（🥉🥈🥇）決めてください';
+      for (const x of m) {
+        if (!x || !int(x.minutes, 10, 7 * 1440)) return '高校生：メダルの時間は10分〜7日分にしてください';
+        if (!int(x.points, 0, 1000)) return '高校生：メダルのポイントは0〜1000にしてください';
+      }
+      if (!(m[0].minutes < m[1].minutes && m[1].minutes < m[2].minutes)) return '高校生：メダルの時間は 🥉＜🥈＜🥇 にしてください';
+      hs.medals = m.map(x => ({ minutes: x.minutes, points: x.points }));
+    }
     if (h.lateMinutes !== undefined) { if (!int(h.lateMinutes, 1, 240)) return '高校生：遅れの通知は1〜240分後にしてください'; hs.lateMinutes = h.lateMinutes; }
     c.hs = hs;
   }
@@ -618,7 +635,7 @@ function points(userId, date = new Date()) {
     const spentP = db.prepare('SELECT COALESCE(SUM(price), 0) AS s FROM shop_owned WHERE user_id = ?').get(userId).s;
     return { earned: earnedP, spent: spentP, balance: earnedP - spentP, yearMinutes: 0 };
   }
-  const bonus = gu && isHS(gu.grade) ? hsWeeks(userId, date, c).achievedWeeks * c.hs.weekBonus : 0; // 高校生：週のノルマ達成ボーナス
+  const bonus = gu && isHS(gu.grade) ? hsWeeks(userId, date, c).bonusPoints : 0; // 高校生：週のメダルのボーナス
   const extra = db.prepare('SELECT COALESCE(SUM(points), 0) AS s FROM bonus_points WHERE user_id = ?').get(userId).s; // 朝活など
   const earned = Math.floor(minutesBetween(userId, c.pointsFrom, today) / c.minutesPerPoint) + bonus + extra;
   const spent = db.prepare('SELECT COALESCE(SUM(price), 0) AS s FROM shop_owned WHERE user_id = ?').get(userId).s;
@@ -819,37 +836,38 @@ function reportData(token) {
 // ───────── 高校生：週のノルマ・週の連続・称号 ─────────
 // その日をふくむ週の月曜日
 const mondayOf = (day) => addDays(day, -((weekdayOf(day) + 6) % 7));
+const MEETING_CREDIT = 120; // 保護者会の日（自習できなかった日）は、2時間分に数える
+// その週の分数 → メダル（0:🥉 1:🥈 2:🥇、なし:-1）
+const medalIndex = (min, medals) => { let k = -1; medals.forEach((m, i) => { if (min >= m.minutes) k = i; }); return k; };
 /**
- * 高校生の週の記録
- * @returns {{ week:{start,sessions,need,minutes,needMinutes,achieved}, today:{minutes,sessionMinutes,done}, streak:number, achievedWeeks:number }}
+ * 高校生の週の記録（週の勉強時間の合計で🥉🥈🥇）
+ * @returns {{ week:{start,minutes,medal,next,achieved}, today:{minutes}, medals:Array, streak:number, achievedWeeks:number, bonusPoints:number, counts:{bronze,silver,gold} }}
  */
 function hsWeeks(userId, date = new Date(), c = getConfig()) {
-  const hs = c.hs, today = jst(date).day, mon = mondayOf(today);
-  const rows = db.prepare(`SELECT day, ${allExpr} AS m FROM study_days WHERE user_id = ? AND day >= ? AND day <= ?`).all(userId, mondayOf(c.pointsFrom), today); // 🔥（週）は勉強時間（全部）で数える
-  const byWeek = new Map(); // 月曜日 -> { sessions, minutes }
-  for (const r of rows) {
-    const w = mondayOf(r.day), v = byWeek.get(w) || { sessions: 0, minutes: 0 };
-    v.minutes += r.m; if (r.m >= hs.sessionMinutes) v.sessions++;
-    byWeek.set(w, v);
-  }
-  // 保護者会の日（自習できなかった日）は、1回分に数える
-  const done = new Set(rows.filter(r => r.m >= hs.sessionMinutes).map(r => r.day));
+  const hs = c.hs, medals = hs.medals || DEFAULT_MEDALS, today = jst(date).day, mon = mondayOf(today);
+  const rows = db.prepare(`SELECT day, ${allExpr} AS m FROM study_days WHERE user_id = ? AND day >= ? AND day <= ?`).all(userId, mondayOf(c.pointsFrom), today); // 勉強時間（全部）で数える
+  const byWeek = new Map(); // 月曜日 -> 分
+  const byDay = new Map(rows.map(r => [r.day, r.m]));
+  for (const r of rows) byWeek.set(mondayOf(r.day), (byWeek.get(mondayOf(r.day)) || 0) + r.m);
   for (const d of meetingDays()) {
-    if (d < mondayOf(c.pointsFrom) || d > today || done.has(d)) continue;
-    const w = mondayOf(d), v = byWeek.get(w) || { sessions: 0, minutes: 0 };
-    v.sessions++; byWeek.set(w, v);
+    if (d < mondayOf(c.pointsFrom) || d > today) continue;
+    const add = Math.max(0, MEETING_CREDIT - (byDay.get(d) || 0));
+    if (add) byWeek.set(mondayOf(d), (byWeek.get(mondayOf(d)) || 0) + add);
   }
-  const ok = (w) => (byWeek.get(w) || { sessions: 0 }).sessions >= hs.sessionsPerWeek;
-  let achievedWeeks = 0;
-  for (const w of byWeek.keys()) if (ok(w)) achievedWeeks++;
-  let streak = 0;
-  for (let w = ok(mon) ? mon : addDays(mon, -7), i = 0; i < 300 && ok(w); i++, w = addDays(w, -7)) streak++;
-  const cur = byWeek.get(mon) || { sessions: 0, minutes: 0 };
-  const todayMin = dayAll(userId, today);
+  const idx = (w) => medalIndex(byWeek.get(w) || 0, medals);
+  let achievedWeeks = 0, bonusPoints = 0;
+  const counts = { bronze: 0, silver: 0, gold: 0 };
+  for (const w of byWeek.keys()) { const k = idx(w); if (k >= 0) { achievedWeeks++; bonusPoints += medals[k].points; counts[MEDALS[k].id]++; } }
+  let streak = 0; // 🥉以上の週が続いた数
+  for (let w = idx(mon) >= 0 ? mon : addDays(mon, -7), i = 0; i < 300 && idx(w) >= 0; i++, w = addDays(w, -7)) streak++;
+  const curMin = byWeek.get(mon) || 0, k = idx(mon);
+  const nx = medals[k + 1];
+  const medalOf = (i) => i >= 0 ? { ...MEDALS[i], minutes: medals[i].minutes, points: medals[i].points } : null;
   return {
-    week: { start: mon, sessions: cur.sessions, need: hs.sessionsPerWeek, minutes: cur.minutes, needMinutes: hs.sessionsPerWeek * hs.sessionMinutes, achieved: cur.sessions >= hs.sessionsPerWeek },
-    today: { minutes: todayMin, sessionMinutes: hs.sessionMinutes, done: todayMin >= hs.sessionMinutes },
-    streak, achievedWeeks, bonus: hs.weekBonus,
+    week: { start: mon, minutes: curMin, medal: medalOf(k), next: nx ? { ...medalOf(k + 1), left: nx.minutes - curMin } : null, achieved: k >= 0 },
+    today: { minutes: dayAll(userId, today) },
+    medals: medals.map((m, i) => medalOf(i)),
+    streak, achievedWeeks, bonusPoints, counts,
   };
 }
 // 高校生の称号（自習時間の合計で決まる）。{ name, hours, next:{ name, hoursLeft } }
