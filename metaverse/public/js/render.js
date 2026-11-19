@@ -712,6 +712,22 @@
       ctx.fillStyle = '#fff'; ctx.fillRect(x - 8, y + 3 - hop, 16, 2.5);                                  // 白いふち
       ctx.fillStyle = '#3a2a1a'; ctx.fillRect(x - 8, y + 1 - hop, 16, 1.6);                               // ベルト
       ctx.font = '17px sans-serif'; ctx.fillText('🎅', x, y - 11 - hop);
+    } else if (kind === 'hikoboshi' || kind === 'orihime') { // 彦星（青い着物）・織姫（桃色の着物と羽衣）
+      const yy = y - hop, hiko = kind === 'hikoboshi';
+      if (!hiko) { // 羽衣（ふわっとした帯）
+        ctx.strokeStyle = 'rgba(255,190,220,.9)'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(x - 12, yy + 2); ctx.quadraticCurveTo(x, yy - 14 + Math.sin(t * 3) * 2, x + 12, yy + 2); ctx.stroke();
+      }
+      ctx.fillStyle = hiko ? '#3b6fd1' : '#f07fae'; // 着物
+      ctx.beginPath(); ctx.moveTo(x - 9, yy + 10); ctx.lineTo(x - 6, yy - 4); ctx.lineTo(x + 6, yy - 4); ctx.lineTo(x + 9, yy + 10); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = hiko ? '#f5d34f' : '#ffe680'; ctx.fillRect(x - 6.5, yy + 1, 13, 2.4); // 帯
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(x - 3, yy - 4); ctx.lineTo(x, yy); ctx.lineTo(x + 3, yy - 4); ctx.stroke(); // えり
+      ctx.fillStyle = '#fbe0c8'; ctx.beginPath(); ctx.arc(x, yy - 9, 5.5, 0, Math.PI * 2); ctx.fill(); // 顔
+      ctx.fillStyle = '#2b2230'; // かみ
+      if (hiko) { ctx.beginPath(); ctx.arc(x, yy - 11, 5.6, Math.PI, 0); ctx.fill(); ctx.beginPath(); ctx.arc(x, yy - 17, 2.3, 0, Math.PI * 2); ctx.fill(); }
+      else { ctx.beginPath(); ctx.arc(x, yy - 11, 5.8, Math.PI, 0); ctx.fill(); ctx.beginPath(); ctx.arc(x - 4, yy - 16, 2.6, 0, Math.PI * 2); ctx.arc(x + 4, yy - 16, 2.6, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffd23f'; ctx.beginPath(); ctx.arc(x + 5, yy - 13, 1.4, 0, Math.PI * 2); ctx.fill(); } // かんざし
+      ctx.fillStyle = '#2b2230'; ctx.fillRect(x - 2.6, yy - 9, 1.2, 1.4); ctx.fillRect(x + 1.4, yy - 9, 1.2, 1.4); // 目
     } else { // トナカイ（どの端末でも同じに見えるよう、絵文字ではなく自分でかく）
       const yy = y - hop;
       ctx.strokeStyle = '#7a4a22'; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
@@ -730,5 +746,35 @@
     ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
   }
 
-  window.Render = { buildMap, drawAvatar, drawFollower, drawTree, drawDecorations, seasonOf, COSTUMES };
+  // 特別な日の演出：12/25は雪とプレゼント、7/7は天の川と星
+  function drawFx(ctx, fx, x, y, t) {
+    ctx.save();
+    if (fx === 'tanabata') {
+      // 頭の上に天の川（星の帯）がかかり、まわりで星がきらきら
+      const cx = x, cy = y - 18;
+      const band = ctx.createLinearGradient(cx - 56, cy - 40, cx + 56, cy - 40);
+      band.addColorStop(0, 'rgba(160,180,255,0)'); band.addColorStop(0.5, 'rgba(170,190,255,.55)'); band.addColorStop(1, 'rgba(160,180,255,0)');
+      ctx.strokeStyle = band; ctx.lineWidth = 9; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.arc(cx, cy + 34, 62, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
+      for (let i = 0; i < 14; i++) {
+        const a = Math.PI * 1.15 + (i / 13) * Math.PI * 0.7, r = 62 + Math.sin(i * 2.3) * 5;
+        const sx = cx + Math.cos(a) * r, sy = cy + 34 + Math.sin(a) * r, tw = (Math.sin(t * 4 + i * 1.7) + 1) / 2, s = 1.2 + tw * 2.2;
+        ctx.fillStyle = `rgba(255,240,150,${0.45 + tw * 0.55})`;
+        ctx.beginPath(); for (let k = 0; k < 8; k++) { const rr = k % 2 ? s * 0.4 : s * 1.7, aa = k * Math.PI / 4; ctx.lineTo(sx + Math.cos(aa) * rr, sy + Math.sin(aa) * rr); } ctx.closePath(); ctx.fill();
+      }
+      ctx.font = '12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('💗', cx + Math.sin(t * 2) * 3, cy - 36 - Math.abs(Math.sin(t * 2.5)) * 3);
+    } else if (fx === 'xmas') {
+      for (let i = 0; i < 18; i++) { // ふる雪（頭の上から足もとまで）
+        const sx = x - 50 + ((i * 37) % 100) + Math.sin(t * 1.5 + i) * 4, sy = y - 70 + ((t * 20 + i * 17) % 86);
+        ctx.fillStyle = 'rgba(255,255,255,.95)'; ctx.strokeStyle = 'rgba(120,160,210,.7)'; ctx.lineWidth = 0.7;
+        ctx.beginPath(); ctx.arc(sx, sy, 1.8 + (i % 3) * 0.7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      }
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '13px sans-serif'; // 足もとにプレゼント
+      ctx.fillText('🎁', x - 9, y + 18 - Math.abs(Math.sin(t * 3)) * 2); ctx.fillText('🎁', x + 10, y + 19 - Math.abs(Math.sin(t * 3 + 1)) * 2);
+    }
+    ctx.restore();
+  }
+
+  window.Render = { buildMap, drawAvatar, drawFollower, drawFx, drawTree, drawDecorations, seasonOf, COSTUMES };
 })();

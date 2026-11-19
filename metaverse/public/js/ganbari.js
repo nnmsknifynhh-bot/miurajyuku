@@ -41,6 +41,7 @@
         if (it.limited) card.append(el('div', 'lim', '期間限定'));
         if (it.special === 'birthday') card.append(el('div', 'lim', '🎁 誕生日プレゼント'));
         if (it.special === 'santa') card.append(el('div', 'lim', '🎅 サンタのプレゼント'));
+        if (it.special === 'tanabata') card.append(el('div', 'lim', '🎋 織姫と彦星のプレゼント'));
         let b;
         if (it.owned) {
           b = el('button', 'btn small' + (it.id === equippedId ? ' secondary' : ''), it.id === equippedId ? 'はずす' : 'つける');

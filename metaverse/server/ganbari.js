@@ -136,7 +136,7 @@ function defaults(today = jst()) {
     events: Object.fromEntries(EVENTS.map(e => [e.id, true])), // 季節の飾り（オン/オフ）
     birthdayMessage: 'いつもがんばっているね。すてきな1年になりますように！', // 誕生日カードのひとこと
     // 季節のお楽しみ（オン/オフと条件）
-    fun: { santa: true, santaDays: 15, asakatsu: true, asakatsuStart: '06:00', asakatsuEnd: '07:30', asakatsuMinutes: 30, asakatsuPoints: 3 },
+    fun: { santa: true, santaDays: 15, tanabata: true, tanabataDays: 15, asakatsu: true, asakatsuStart: '06:00', asakatsuEnd: '07:30', asakatsuMinutes: 30, asakatsuPoints: 3 },
   };
 }
 
@@ -300,8 +300,8 @@ function setConfig(patch, actorId) {
   }
   if (p.fun !== undefined) {
     const f = p.fun || {}, out = { ...c.fun };
-    for (const k of ['santa', 'asakatsu']) if (f[k] !== undefined) out[k] = !!f[k];
-    const lim = { santaDays: [1, 30, 'がんばりサンタの日数は1〜30日'],
+    for (const k of ['santa', 'tanabata', 'asakatsu']) if (f[k] !== undefined) out[k] = !!f[k];
+    const lim = { santaDays: [1, 30, 'がんばりサンタの日数は1〜30日'], tanabataDays: [1, 30, '七夕の日数は1〜30日'],
       asakatsuMinutes: [1, 120, '朝活の時間は1〜120分'], asakatsuPoints: [0, 100, '朝活のポイントは0〜100'] };
     for (const [k, [mn, mx, msg]] of Object.entries(lim)) {
       if (f[k] === undefined) continue;
@@ -548,6 +548,7 @@ const SHOP = [
   { id: 'pair_star', slot: 'head', emoji: '💫', name: 'ペア自習のきらきら星', price: 0, special: 'friend' },
   // がんばりサンタのプレゼント（12月にがんばった人だけ。お店では買えない）
   { id: 'santa_hat', slot: 'head', emoji: '🎅', name: 'サンタからもらったサンタ帽', price: 0, special: 'santa' },
+  { id: 'sasa', slot: 'hand', emoji: '🎋', name: '織姫と彦星からもらった笹かざり', price: 0, special: 'tanabata' },
   { id: 'x_star', slot: 'head', emoji: '🌟', name: 'ツリーの星', price: 0, special: 'santa' },
   { id: 'x_reindeer', slot: 'pet', emoji: '🦌', name: 'トナカイ', price: 0, special: 'santa' },
   { id: 'x_snow', slot: 'pet', emoji: '☃️', name: 'ゆきだるまくん', price: 0, special: 'santa' },

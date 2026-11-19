@@ -42,9 +42,9 @@ test('がんばりサンタ（2章）：10月15日→手紙とサンタ帽、11�
   assert.ok(G.owned(U.aaa.id).includes('santa_hat'));
   assert.equal(F.santaStatus(U.bbb.id, at(`${Y}-10-31`)).chapters[0].days, 14);
   assert.ok(!G.owned(U.bbb.id).includes('santa_hat'));
-  assert.ok(F.readLetter(U.aaa.id, at(`${Y}-11-02`)).ok);
+  assert.ok(F.readLetter(U.aaa.id, 'santa', at(`${Y}-11-02`)).ok);
   assert.equal(F.santaStatus(U.aaa.id, at(`${Y}-11-02`)).letter, false, '読んだら出ない');
-  assert.match(F.readLetter(U.bbb.id, at(`${Y}-11-02`)).error, /まだ/);
+  assert.match(F.readLetter(U.bbb.id, 'santa', at(`${Y}-11-02`)).error, /まだ/);
   // 第2章
   const c2 = F.santaStatus(U.bbb.id, at(`${Y}-11-20`));
   assert.equal(c2.phase, 'ch2'); assert.equal(c2.chapters[1].days, 15); assert.equal(c2.chapters[1].cleared, true);
@@ -55,6 +55,26 @@ test('がんばりサンタ（2章）：10月15日→手紙とサンタ帽、11�
   assert.equal(F.followersOf(U.aaa.id, at(`${Y}-12-26`)), null, '12/25まで');
   assert.equal(F.santaStatus(U.aaa.id, at(`${Y}-09-30`)), null, '期間の外');
   assert.match(G.buy(U.bbb.id, 'santa_hat'), /買えません/, 'お店では買えない');
+  // 12/25：サンタがついている子にクリスマスの演出
+  assert.equal(F.fxOf(U.bbb.id, at(`${Y}-12-25`)), 'xmas');
+  assert.equal(F.fxOf(U.bbb.id, at(`${Y}-12-24`)), null);
+});
+
+test('七夕（2章）：5月15日→手紙と笹かざり、6月15日→7/1〜20 彦星、両方→織姫も。7/7は両方クリアの子に演出', () => {
+  const pad = (n) => String(n).padStart(2, '0');
+  for (let d = 1; d <= 15; d++) { G.setManual(U.aaa.id, `${Y}-05-${pad(d)}`, 60, null); G.setManual(U.aaa.id, `${Y}-06-${pad(d)}`, 60, null); }
+  for (let d = 1; d <= 15; d++) G.setManual(U.bbb.id, `${Y}-06-${pad(d)}`, 60, null);
+  const s1 = F.tanabataStatus(U.aaa.id, at(`${Y}-05-20`));
+  assert.equal(s1.phase, 'ch1'); assert.equal(s1.chapters[0].cleared, true); assert.equal(s1.letter, true);
+  assert.ok(G.owned(U.aaa.id).includes('sasa'));
+  assert.ok(F.readLetter(U.aaa.id, 'tanabata', at(`${Y}-06-01`)).ok);
+  assert.equal(F.tanabataStatus(U.aaa.id, at(`${Y}-06-01`)).letter, false);
+  assert.equal(F.tanabataStatus(U.aaa.id, at(`${Y}-04-30`)), null, '5/1から');
+  assert.deepEqual(F.followersOf(U.aaa.id, at(`${Y}-07-10`)), ['hikoboshi', 'orihime']);
+  assert.deepEqual(F.followersOf(U.bbb.id, at(`${Y}-07-10`)), ['hikoboshi'], '第2章だけ：彦星だけ');
+  assert.equal(F.followersOf(U.aaa.id, at(`${Y}-07-21`)), null, '7/20まで');
+  assert.equal(F.fxOf(U.aaa.id, at(`${Y}-07-07`)), 'tanabata', '両方クリアは7/7に演出');
+  assert.equal(F.fxOf(U.bbb.id, at(`${Y}-07-07`)), null, '彦星だけの子は演出なし（織姫に会えていない）');
 });
 
 test('朝活：6:00〜7:30に数えた時間が30分になった日にスタンプと3ポイント（バッジはなし）', () => {

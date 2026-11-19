@@ -626,7 +626,7 @@
     const show = () => { if (d.open) return; if (document.querySelector('dialog[open]')) return setTimeout(show, 1500); d.showModal(); };
     setTimeout(show, 600);
   }
-  let funBusy = false, lastFunAt = 0, santaAsked = false;
+  let funBusy = false, lastFunAt = 0;
   async function refreshFun(force) {
     if (!state.user || state.user.role !== 'student') { $('#fun-chip').hidden = true; return; }
     if (funBusy || (!force && Date.now() - lastFunAt < 50_000)) return;
@@ -636,12 +636,20 @@
       const f = g.fun || {};
       state.fun = f;
       const chips = [];
-      const sa = f.santa;
-      if (sa && (sa.phase === 'ch1' || sa.phase === 'ch2')) {
-        const ch = sa.chapters[sa.phase === 'ch1' ? 0 : 1];
-        chips.push(ch.cleared ? `🎅 ${ch.name} クリア！${sa.phase === 'ch1' ? ' サンタから手紙が届いたよ' : ' 12/1からサンタがついてくるよ'}`
-          : `🎅 ${ch.name} ${ch.days}/${sa.need}日（1日${sa.minMinutes}分以上）`);
-      } else if (sa && sa.phase === 'parade' && sa.follow.length) chips.push(sa.follow.length > 1 ? '🎅🦌 サンタとトナカイがいっしょ！（12/25まで）' : '🎅 サンタがいっしょ！（12/25まで）');
+      // 季節の2章イベント（🎅 がんばりサンタ・🎋 七夕）
+      for (const ev of [f.santa, f.tanabata]) {
+        if (!ev) continue;
+        const L = SEASON[ev.event], end = `${Number(ev.parade.to.slice(0, 2))}/${Number(ev.parade.to.slice(3))}`, start = `${Number(ev.parade.from.slice(0, 2))}/${Number(ev.parade.from.slice(3))}`;
+        if (ev.phase === 'ch1' || ev.phase === 'ch2') {
+          const ch = ev.chapters[ev.phase === 'ch1' ? 0 : 1];
+          chips.push(ch.cleared ? `${L.icon} ${ch.name} クリア！${ev.phase === 'ch1' ? ` ${L.from}から手紙が届いたよ` : ` ${start}から${L.one}がついてくるよ`}`
+            : `${L.icon} ${ch.name} ${ch.days}/${ev.need}日（1日${ev.minMinutes}分以上）`);
+        } else if (ev.phase === 'parade' && ev.follow.length) chips.push(`${ev.follow.length > 1 ? L.bothIcon + ' ' + L.both : L.icon + ' ' + L.one}がいっしょ！（${end}まで）`);
+        // 特別な日（12/25・7/7）：その日はじめて入ったときに1回
+        if (ev.fx) { const k = `juku-fx-${ev.event}-${ev.year}`; let seen = false; try { seen = !!localStorage.getItem(k); localStorage.setItem(k, '1'); } catch (e2) {} if (!seen) { toast(L.fxMsg, 9000); chime(0.25); } }
+        // 💌 第1章クリア：手紙（読むまで、入室したときに1回出る）
+        if (ev.letter && !letterAsked[ev.event]) { letterAsked[ev.event] = true; showLetter(ev); }
+      }
       const hm = new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Tokyo' });
       if (f.morning && hm >= f.morning.start && hm < f.morning.end) chips.push(f.morning.today >= f.morning.minutes ? `🌅 朝活 今日のスタンプ ✓（ぜんぶで${f.morning.stamps}こ）` : `🌅 朝活 ${f.morning.today}/${f.morning.minutes}分（スタンプ${f.morning.stamps}こ）`);
       $('#fun-chip').textContent = chips.join('\n'); $('#fun-chip').style.whiteSpace = 'pre-line'; $('#fun-chip').hidden = !chips.length;
@@ -656,37 +664,36 @@
       else if (pr && pr.result === 'success') rc.push(`🤝 ペア自習チャレンジ成功！ 💫と+${pr.points}ポイント`);
       if (g.referralWeek && !state.trial) rc.push(`🎉 友だち紹介ウィーク（〜${Number(g.referralWeek.end.slice(5, 7))}/${Number(g.referralWeek.end.slice(8))}）\nメニューの「🤝 友だちを招待」から`);
       $('#ref-chip').textContent = rc.join('\n'); $('#ref-chip').hidden = !rc.length;
-      // 🎅 プレゼント（12/25〜1/7・がんばった人）
-      // 💌 第1章クリア：サンタからの手紙（読むまで、入室したときに1回出る）
-      if (sa && sa.letter && !santaAsked) {
-        santaAsked = true;
-        $('#santa-title').textContent = `${state.user.displayName}さんへ`;
-        $('#santa-msg').textContent = `10月、${sa.chapters[0].days}日も自習をがんばったね。中間テストもよくがんばりました。\nごほうびに、サンタ帽をプレゼントするよ（着せかえでつけられます）。\n11月も${sa.need}日がんばったら、12月1日から25日まで、わたしが${state.user.displayName}さんのうしろをついて歩くよ。両方クリアしたら、トナカイもいっしょにね。\n　　　　　　　　　　　　サンタより 🎅`;
-        showWhenFree($('#santa-dialog'));
-      }
     } catch (e) { /* 次の機会に */ } finally { funBusy = false; }
   }
   setInterval(() => refreshFun(), 60_000);
+  // 季節の2章イベントのことば
+  const SEASON = {
+    santa: { icon: '🎅', bothIcon: '🎅🦌', from: 'サンタ', one: 'サンタ', both: 'サンタとトナカイ', item: 'サンタ帽', box: '💌',
+      fxMsg: '🎄 メリークリスマス！ サンタからみんなへ、がんばったごほうびの雪とプレゼントが届いたよ',
+      letter: (ev, name) => `${Number(ev.chapters[0].from.slice(0, 2))}月、${ev.chapters[0].days}日も自習をがんばったね。中間テストもよくがんばりました。\nごほうびに、サンタ帽をプレゼントするよ（着せかえでつけられます）。\n${Number(ev.chapters[1].from.slice(0, 2))}月も${ev.need}日がんばったら、12月1日から25日まで、わたしが${name}さんのうしろをついて歩くよ。両方クリアしたら、トナカイもいっしょにね。\n　　　　　　　　サンタより 🎅` },
+    tanabata: { icon: '🎋', bothIcon: '🎋💫', from: '織姫と彦星', one: '彦星', both: '彦星と織姫', item: '笹かざり', box: '🎋',
+      fxMsg: '🌌 今日は七夕！ あなたががんばって天の川に橋をかけたから、織姫と彦星が会えたよ',
+      letter: (ev, name) => `${Number(ev.chapters[0].from.slice(0, 2))}月、${ev.chapters[0].days}日も自習をがんばってくれてありがとう。あなたの自習の一日一日が、天の川にかかる橋の星になっています。\nお礼に、笹かざりをおくります（着せかえでつけられます）。\n${Number(ev.chapters[1].from.slice(0, 2))}月も${ev.need}日がんばったら、7月1日から20日まで、彦星が${name}さんのうしろをついて歩きます。両方クリアしたら、織姫も会いにきて、2人そろって歩きます。\n　　　　　　織姫と彦星より 🌌` },
+  };
+  const letterAsked = {};
+  let letterEvent = 'santa';
+  function showLetter(ev) {
+    const L = SEASON[ev.event];
+    letterEvent = ev.event;
+    $('#santa-box').textContent = L.box;
+    $('#santa-from').textContent = `${L.icon} ${L.from}から手紙が届いたよ！`;
+    $('#santa-title').textContent = `${state.user.displayName}さんへ`;
+    $('#santa-msg').textContent = L.letter(ev, state.user.displayName);
+    showWhenFree($('#santa-dialog'));
+  }
   $('#santa-later').onclick = () => { $('#santa-dialog').close(); };
   $('#santa-open').onclick = async () => {
     $('#santa-dialog').close();
-    try { await api('POST', '/api/me/santa/letter'); toast('🎅 サンタ帽は「ポイントと着せかえ」でつけられるよ', 5000); } catch (e) { /* 次の機会に */ }
+    const L = SEASON[letterEvent];
+    try { await api('POST', '/api/me/event-letter', { event: letterEvent }); toast(`${L.icon} ${L.item}は「ポイントと着せかえ」でつけられるよ`, 5000); } catch (e) { /* 次の機会に */ }
     refreshFun(true);
   };
-  $('#santa-open-old') && ($('#santa-open-old').onclick = async () => {
-    const box = $('#santa-box'); box.classList.add('shake'); $('#santa-open').disabled = true;
-    try {
-      const r = await api('POST', '/api/me/santa/open');
-      setTimeout(() => {
-        box.classList.remove('shake');
-        box.textContent = r.item ? r.item.emoji : '💰';
-        $('#santa-title').textContent = r.item ? `「${r.item.name}」が入っていたよ！` : `${r.points}ポイントが入っていたよ！`;
-        $('#santa-msg').textContent = r.item ? '着せかえでつけられるよ（お店では買えない、がんばった人だけのアイテム）' : '';
-        $('#santa-open').hidden = true; $('#santa-later').textContent = 'とじる';
-        refreshFun(true);
-      }, 1500);
-    } catch (e) { box.classList.remove('shake'); $('#santa-open').disabled = false; toast(e.message); }
-  });
 
   $('#bday-close').onclick = () => { $('#bday-dialog').close(); if (state.gb && state.gb.refreshForest) state.gb.refreshForest(); };
   $('#seat-close').onclick = () => { $('#seat-dialog').close(); standingSince = Date.now(); };
@@ -1586,12 +1593,14 @@
     }
     // 🎅 がんばりサンタ：うしろについて歩くサンタとトナカイ（12/1〜12/25）
     for (const it of list.slice()) if (it.u && it.u.follow && it.u.follow.length) for (const f of followerPos(it.u, it.x, it.y)) list.push(f);
-    list.sort((a, b) => a.y - b.y);
+    for (const it of list.slice()) if (it.u && it.u.fx) list.push({ fx: it.u.fx, x: it.x, y: it.y, z: 1e6 }); // 特別な日の演出（いちばん上にかく）
+    list.sort((a, b) => (a.z || a.y) - (b.z || b.y));
     const season = window.Render.seasonOf();
     if (forest && forest.event) window.Render.drawDecorations(ctx, forest.event.id, time);
     for (const it of list) {
       if ('tree' in it) window.Render.drawTree(ctx, it.x, it.y, it.tree, { time: time / 1000, season, highlight: it.tree && state.user && it.tree.grades.includes(state.user.grade) });
       else if (it.follower) window.Render.drawFollower(ctx, it.follower, it.x, it.y, time / 1000);
+      else if (it.fx) window.Render.drawFx(ctx, it.fx, it.x, it.y, time / 1000);
       else window.Render.drawAvatar(ctx, it.u, it.x, it.y, { isMe: it.isMe, time: time / 1000, now: time, speaking: state.call && state.call.isSpeaking(it.u.id) });
     }
     ctx.restore();
@@ -1691,5 +1700,5 @@
     }).catch(() => {});
   }
 
-  window.__world = { state, walkTo, goToRoom };
+  window.__world = { state, walkTo, goToRoom, showLetter };
 })();

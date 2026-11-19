@@ -313,9 +313,11 @@ app.post('/api/parent/quiz/answer', auth.requireAuth, requireParent, (req, res) 
 });
 
 // ── 季節のお楽しみ ──
-app.post('/api/me/santa/letter', auth.requireAuth, (req, res) => {
+app.post('/api/me/event-letter', auth.requireAuth, (req, res) => {
   if (req.user.role !== 'student') return bad(res, '生徒の機能です', 403);
-  const r = fun.readLetter(req.user.id);
+  const ev = String((req.body || {}).event || 'santa');
+  if (!fun.EVENTS[ev]) return bad(res, 'イベントが正しくありません');
+  const r = fun.readLetter(req.user.id, ev);
   if (r.error) return bad(res, r.error);
   realtime.refreshGanbari(req.user.id);
   res.json({ ok: true, ...r });
