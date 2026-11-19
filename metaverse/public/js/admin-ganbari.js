@@ -248,21 +248,24 @@
 
     // ═════ 季節のお楽しみ ═════
     const f = c.fun || {};
-    const funSec = section('🎉 季節のお楽しみ', 'がんばりサンタ・七夕・朝活チャレンジのオン/オフと条件です。');
-    const fSanta = check('🎅 がんばりサンタ（第1章 10月→サンタの手紙とサンタ帽／第2章 11月→12/1〜25 サンタがついて歩く／両方でトナカイも）', f.santa !== false);
+    const funSec = section('🎉 季節のお楽しみ', 'がんばりサンタ・七夕・ひな祭り・朝活チャレンジのオン/オフと条件です。');
+    const fSanta = check('🎅 がんばりサンタ（2学期中間のクエスト 10月→サンタの手紙とサンタ帽／2学期期末のクエスト 11月→12/1〜25 サンタがついて歩く／両方でトナカイも）', f.santa !== false);
     const fSantaDays = numInput(f.santaDays || 15, 1, 30);
-    const fTana = check('🎋 七夕（第1章 5月→織姫と彦星の手紙と笹かざり／第2章 6月→7/1〜20 彦星がついて歩く／両方で織姫も。7/7は特別な演出）', f.tanabata !== false);
+    const fTana = check('🎋 七夕（1学期中間のクエスト 5月→織姫と彦星の手紙と笹かざり／1学期期末のクエスト 6月→7/1〜20 彦星がついて歩く／両方で織姫も。7/7は特別な演出）', f.tanabata !== false);
     const fTanaDays = numInput(f.tanabataDays || 15, 1, 30);
+    const fHina = check('🎎 3学期学年末クエスト（1/20〜2/28に15日→3/1〜3/20 おだいりさま・おひなさま、20日で三人官女、25日で五人囃子も／3/21〜3/31 春のスター：1.4倍・光る・花吹雪）', f.hina !== false);
+    const fHinaDays = numInput(f.hinaDays || 15, 1, 30);
     const fAsa = check('🌅 朝活チャレンジ（朝の自習で早起きスタンプとポイント）', f.asakatsu !== false);
     const fAsaMin = numInput(f.asakatsuMinutes || 30, 1, 120), fAsaPt = numInput(f.asakatsuPoints ?? 3, 0, 100);
     const fAsaS = timeInput(f.asakatsuStart || '06:00'), fAsaE = timeInput(f.asakatsuEnd || '07:30');
     const fAsaRow = el('div', 'gb-row'); fAsaRow.append(fAsaS, el('span', null, '〜'), fAsaE);
     const fg1 = el('div', 'gb-grid'); fg1.append(field('がんばりサンタ：各章で自習した日の数（10月・11月それぞれ）', fSantaDays, '「自習した日」は、学年ごとの連続自習🔥の最低時間（中1 45分・中2 60分・中3 90分など）以上の日です'));
     const fgT = el('div', 'gb-grid'); fgT.append(field('七夕：各章で自習した日の数（5月・6月それぞれ）', fTanaDays));
+    const fgH = el('div', 'gb-grid'); fgH.append(field('ひな祭り：最初の段階の日数（三人官女は＋5日、五人囃子は＋10日）', fHinaDays));
     const fg2 = el('div', 'gb-grid'); fg2.append(field('朝活の時間帯', fAsaRow), field('朝活：スタンプがもらえる朝の自習時間（分）', fAsaMin, 'この時間帯に、自習時間として数えられた分'), field('朝活：スタンプ1こでもらえるポイント', fAsaPt));
     const saveFun = el('button', 'btn', 'お楽しみを保存する');
-    saveFun.onclick = () => save({ fun: { santa: fSanta[1].checked, santaDays: Number(fSantaDays.value), tanabata: fTana[1].checked, tanabataDays: Number(fTanaDays.value), asakatsu: fAsa[1].checked, asakatsuMinutes: Number(fAsaMin.value), asakatsuPoints: Number(fAsaPt.value), asakatsuStart: fAsaS.value, asakatsuEnd: fAsaE.value === '23:59' ? '23:59' : fAsaE.value } }, 'お楽しみを保存しました');
-    funSec.append(fSanta[0], fg1, fTana[0], fgT, fAsa[0], fg2, el('p', 'muted', '朝活は、「自習時間の数え方」で数える時間帯に朝活の時間帯が入っているときだけ数えます。'), saveFun);
+    saveFun.onclick = () => save({ fun: { santa: fSanta[1].checked, santaDays: Number(fSantaDays.value), tanabata: fTana[1].checked, tanabataDays: Number(fTanaDays.value), hina: fHina[1].checked, hinaDays: Number(fHinaDays.value), asakatsu: fAsa[1].checked, asakatsuMinutes: Number(fAsaMin.value), asakatsuPoints: Number(fAsaPt.value), asakatsuStart: fAsaS.value, asakatsuEnd: fAsaE.value === '23:59' ? '23:59' : fAsaE.value } }, 'お楽しみを保存しました');
+    funSec.append(fSanta[0], fg1, fTana[0], fgT, fHina[0], fgH, fAsa[0], fg2, el('p', 'muted', '朝活は、「自習時間の数え方」で数える時間帯に朝活の時間帯が入っているときだけ数えます。'), saveFun);
 
     // ═════ 誕生日 ═════
     const bdSec = section('🎂 誕生日のお祝い', '誕生日は「ユーザー」タブの生徒の編集で登録します（月・日だけ）。誕生日に入室すると、お祝いカードが出て「🎂 バースデーケーキの帽子」をプレゼントします。その日は名札が金色になり🎂がつき、学年の木にもケーキが飾られます（「先生だけ」にした生徒は、先生・オーナーにだけ🎂が見えます）。先生には入室のお知らせで「今日は誕生日です」と届きます。');

@@ -52,7 +52,7 @@ function pub(p) {
     bday: !!(p.bday && p.bday.public), // 誕生日（ほかの生徒にも見せる設定のときだけ。先生だけの設定は staff にだけ別に送る）
     hs: !!p.hs, title: p.title || null, plan: p.plan || null, // 高校生：称号・今日やること（🔥は週で数える）
     equip: equipView(p.equip), streak: p.streak || 0, trial: !!p.user.trial_until,
-    follow: p.follow || null, fx: p.fx || null, // 季節の2章イベント：うしろについて歩く仲間・特別な日の演出（12/25・7/7）
+    follow: p.follow || null, fx: p.fx || null, bloom: !!p.bloom, // 季節の2章イベント：うしろについて歩く仲間・特別な日の演出（12/25・7/7）
   };
 }
 // 見る人に合わせた情報：生徒には保護者の名前を見せない。保護者には自分の子ども以外の生徒の名前を見せない（時間と🔥は見せる）
@@ -359,6 +359,7 @@ function attach(httpServer) {
     p.bday = user.role === 'student' ? ganbari.birthdayInfo(p.id) : null;
     p.follow = user.role === 'student' && !user.trial_until ? fun.followersOf(p.id) : null;
     p.fx = p.follow ? fun.fxOf(p.id) : null;
+    p.bloom = user.role === 'student' && !user.trial_until ? fun.bloomOf(p.id) : false;
     refreshHS(p, false);
     p.room = roomIdAt(p.x, p.y);
     // 自習中に通信が切れていた生徒：すぐもどってきたら、元の席にすわらせ、切れていた間も数える
@@ -941,10 +942,10 @@ function sendBirthdayCard(p) {
 // 🎅 12/1になったら仲間が加わる・12/26になったらいなくなる
 function refreshFollow(p) {
   if (p.user.role !== 'student' || p.user.trial_until) return;
-  const f = fun.followersOf(p.id), fx = f ? fun.fxOf(p.id) : null;
-  if (JSON.stringify(f) === JSON.stringify(p.follow || null) && fx === (p.fx || null)) return;
-  p.follow = f; p.fx = fx;
-  io.emit('user-updated', { id: p.id, follow: f, fx });
+  const f = fun.followersOf(p.id), fx = f ? fun.fxOf(p.id) : null, bloom = fun.bloomOf(p.id);
+  if (JSON.stringify(f) === JSON.stringify(p.follow || null) && fx === (p.fx || null) && bloom === !!p.bloom) return;
+  p.follow = f; p.fx = fx; p.bloom = bloom;
+  io.emit('user-updated', { id: p.id, follow: f, fx, bloom });
 }
 function refreshBirthday(p) {
   if (p.user.role !== 'student') return;

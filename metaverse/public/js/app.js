@@ -650,6 +650,14 @@
         // 💌 第1章クリア：手紙（読むまで、入室したときに1回出る）
         if (ev.letter && !letterAsked[ev.event]) { letterAsked[ev.event] = true; showLetter(ev); }
       }
+      // 🎎 3学期：ひな祭り・春のスター
+      const hi = f.hina;
+      if (hi && hi.phase === 'count') {
+        const next = hi.tiers.find(x => !x.cleared);
+        chips.push(`🎎 ${hi.name} ${hi.days}日（1日${hi.minMinutes}分以上）` + (next ? `\nあと${next.need - hi.days}日で${next.label}` : '\n五人囃子までそろったよ！'));
+      } else if (hi && hi.phase === 'parade' && hi.cleared) chips.push(`🎎 ひな人形の行列がいっしょ！（3/20まで）`);
+      else if (hi && hi.phase === 'star' && hi.cleared) chips.push('🌸 春のスター！（3/31まで）');
+      if (hi && hi.fx) { const k = `juku-fx-hina-${hi.year}`; let seen = false; try { seen = !!localStorage.getItem(k); localStorage.setItem(k, '1'); } catch (e2) {} if (!seen) { toast('🎎 ひな祭りおめでとう！ がんばったあなたに、ひなあられがふってきたよ', 9000); chime(0.25); } }
       const hm = new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Tokyo' });
       if (f.morning && hm >= f.morning.start && hm < f.morning.end) chips.push(f.morning.today >= f.morning.minutes ? `🌅 朝活 今日のスタンプ ✓（ぜんぶで${f.morning.stamps}こ）` : `🌅 朝活 ${f.morning.today}/${f.morning.minutes}分（スタンプ${f.morning.stamps}こ）`);
       $('#fun-chip').textContent = chips.join('\n'); $('#fun-chip').style.whiteSpace = 'pre-line'; $('#fun-chip').hidden = !chips.length;
@@ -1645,7 +1653,7 @@
           dist += d; px = tr[i].x; py = tr[i].y;
         }
       }
-      if (!pos) pos = { x: x + (k === 0 ? -24 : 24), y: y + 4 };
+      if (!pos) { const side = k % 2 ? 1 : -1, d = 24 + Math.floor(k / 2) * 18; pos = { x: x + side * d, y: y + 4 }; } // すわっているときは左右にならぶ
       return { follower: kind, x: pos.x, y: pos.y };
     });
   }

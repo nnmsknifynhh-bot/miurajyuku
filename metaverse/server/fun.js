@@ -32,8 +32,8 @@ const EVENTS = {
   santa: {
     on: 'santa', days: 'santaDays', item: 'santa_hat',
     chapters: [
-      { key: 'ch1', name: '第1章 中間テスト編', from: '10-01', to: '10-31' },
-      { key: 'ch2', name: '第2章 期末テスト編', from: '11-01', to: '11-30' },
+      { key: 'ch1', name: '2学期中間のクエスト', from: '10-01', to: '10-31' },
+      { key: 'ch2', name: '2学期期末のクエスト', from: '11-01', to: '11-30' },
     ],
     parade: { from: '12-01', to: '12-25' }, one: ['santa'], both: ['santa', 'reindeer'],
     fxDay: '12-25', fx: 'xmas', fxBoth: false, // 12/25は、サンタがついている子みんな
@@ -41,8 +41,8 @@ const EVENTS = {
   tanabata: {
     on: 'tanabata', days: 'tanabataDays', item: 'sasa',
     chapters: [
-      { key: 'ch1', name: '第1章 中間テスト編', from: '05-01', to: '05-31' },
-      { key: 'ch2', name: '第2章 期末テスト編', from: '06-01', to: '06-30' },
+      { key: 'ch1', name: '1学期中間のクエスト', from: '05-01', to: '05-31' },
+      { key: 'ch2', name: '1学期期末のクエスト', from: '06-01', to: '06-30' },
     ],
     parade: { from: '07-01', to: '07-20' }, one: ['hikoboshi'], both: ['hikoboshi', 'orihime'],
     fxDay: '07-07', fx: 'tanabata', fxBoth: true, // 7/7は、織姫と彦星を会わせてあげた子（両方クリア）
@@ -75,6 +75,30 @@ function eventStatus(name, userId, date = new Date()) {
     letter: c1 && !(letter && letter.read_at), follow, fx,
   };
 }
+// ───────── 🎎 3学期：ひな祭り・春のスター ─────────
+// 3学期学年末クエスト：1/20〜2/28 に「自習した日」が15日 → 3/1〜3/20 おだいりさま・おひなさまがついて歩く（20日で三人官女、25日で五人囃子も）
+// 3/21〜3/31 は「春のスター」（アバター1.4倍・まわりが光る・歩くと花吹雪）。3/3は、ひなあられがふる
+const HINA = { name: '3学期学年末クエスト', count: { from: '01-20', to: '02-28' }, parade: { from: '03-01', to: '03-20' }, star: { from: '03-21', to: '03-31' }, fxDay: '03-03' };
+const HINA_TIERS = [
+  { plus: 0, follow: ['dairi', 'hina'], label: 'おだいりさま・おひなさま' },
+  { plus: 5, follow: ['kanjo1', 'kanjo2', 'kanjo3'], label: '三人官女' },
+  { plus: 10, follow: ['hayashi1', 'hayashi2', 'hayashi3', 'hayashi4', 'hayashi5'], label: '五人囃子' },
+];
+function hinaStatus(userId, date = new Date()) {
+  const f = cfg(), t = G.jst(date);
+  if (f.hina === false) return null;
+  const m = md(t), base = f.hinaDays || 15;
+  const phase = m >= HINA.count.from && m <= HINA.count.to ? 'count' : m >= HINA.parade.from && m <= HINA.parade.to ? 'parade' : m >= HINA.star.from && m <= HINA.star.to ? 'star' : null;
+  if (!phase) return null;
+  const days = chapterDays(userId, t.year, { from: HINA.count.from, to: HINA.count.to }, t.day);
+  const tiers = HINA_TIERS.map(x => ({ need: base + x.plus, label: x.label, cleared: days >= base + x.plus }));
+  const cleared = tiers[0].cleared;
+  const follow = phase === 'parade' && cleared ? HINA_TIERS.filter((x, i) => tiers[i].cleared).flatMap(x => x.follow) : [];
+  return {
+    event: 'hina', name: HINA.name, year: t.year, phase, days, tiers, minMinutes: G.streakMinFor(userId), cleared,
+    follow, bloom: phase === 'star' && cleared, fx: phase === 'parade' && cleared && m === HINA.fxDay ? 'hinamatsuri' : null,
+  };
+}
 const santaStatus = (userId, date) => eventStatus('santa', userId, date);
 const tanabataStatus = (userId, date) => eventStatus('tanabata', userId, date);
 function readLetter(userId, name = 'santa', date = new Date()) {
@@ -84,17 +108,22 @@ function readLetter(userId, name = 'santa', date = new Date()) {
   return { ok: true };
 }
 // いま、うしろについて歩く仲間と、特別な日の演出（12/25・7/7）
+const allStatus = (userId, date) => [...Object.keys(EVENTS).map(n => () => eventStatus(n, userId, date)), () => hinaStatus(userId, date)];
 function followersOf(userId, date = new Date()) {
-  for (const name of Object.keys(EVENTS)) {
-    try { const st = eventStatus(name, userId, date); if (st && st.follow.length) return st.follow; } catch (e) { /* 次へ */ }
+  for (const get of allStatus(userId, date)) {
+    try { const st = get(); if (st && st.follow.length) return st.follow; } catch (e) { /* 次へ */ }
   }
   return null;
 }
 function fxOf(userId, date = new Date()) {
-  for (const name of Object.keys(EVENTS)) {
-    try { const st = eventStatus(name, userId, date); if (st && st.fx) return st.fx; } catch (e) { /* 次へ */ }
+  for (const get of allStatus(userId, date)) {
+    try { const st = get(); if (st && st.fx) return st.fx; } catch (e) { /* 次へ */ }
   }
   return null;
+}
+// 🌸 春のスター（3/4〜3/31）
+function bloomOf(userId, date = new Date()) {
+  try { const st = hinaStatus(userId, date); return !!(st && st.bloom); } catch (e) { return false; }
 }
 
 // ───────── 🌅 朝活チャレンジ ─────────
@@ -127,12 +156,12 @@ function morningStatus(userId, date = new Date()) {
 // 生徒の画面用まとめ
 function statusFor(userId, date = new Date()) {
   return {
-    santa: santaStatus(userId, date), tanabata: tanabataStatus(userId, date), morning: morningStatus(userId, date),
+    santa: santaStatus(userId, date), tanabata: tanabataStatus(userId, date), hina: hinaStatus(userId, date), morning: morningStatus(userId, date),
     badges: badgesOf(userId),
   };
 }
 
 module.exports = {
-  awardBadge, badgesOf, EVENTS, eventStatus, santaStatus, tanabataStatus, readLetter, followersOf, fxOf,
+  awardBadge, badgesOf, EVENTS, eventStatus, santaStatus, tanabataStatus, readLetter, followersOf, fxOf, bloomOf, hinaStatus,
   morningTick, morningStamps, morningStatus, statusFor,
 };

@@ -854,6 +854,13 @@
       }
       ctx.font = '12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText('💗', cx + Math.sin(t * 2) * 3, cy - 36 - Math.abs(Math.sin(t * 2.5)) * 3);
+    } else if (fx === 'hinamatsuri') {
+      const cols = ['#ff9fc0', '#ffffff', '#9fd68a', '#ffe27a'];
+      for (let i = 0; i < 22; i++) { // ふってくる、ひなあられ
+        const sx = x - 55 + ((i * 41) % 110) + Math.sin(t * 1.3 + i) * 3, sy = y - 72 + ((t * 24 + i * 19) % 92);
+        ctx.fillStyle = cols[i % 4]; ctx.strokeStyle = 'rgba(180,120,140,.45)'; ctx.lineWidth = 0.6;
+        ctx.beginPath(); ctx.arc(sx, sy, 2 + (i % 2) * 0.6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      }
     } else if (fx === 'xmas') {
       for (let i = 0; i < 18; i++) { // ふる雪（頭の上から足もとまで）
         const sx = x - 50 + ((i * 37) % 100) + Math.sin(t * 1.5 + i) * 4, sy = y - 70 + ((t * 20 + i * 17) % 86);

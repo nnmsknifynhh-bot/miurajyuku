@@ -77,6 +77,24 @@ test('七夕（2章）：5月15日→手紙と笹かざり、6月15日→7/1〜2
   assert.equal(F.fxOf(U.bbb.id, at(`${Y}-07-07`)), null, '彦星だけの子は演出なし（織姫に会えていない）');
 });
 
+test('3学期学年末クエスト：1/20〜2/28の日数で3/1〜3/20の行列がふえる・3/21〜3/31は春のスター・3/3はひなあられ', () => {
+  const day = (i) => G.addDays(`${Y}-01-20`, i);
+  for (let i = 0; i < 25; i++) G.setManual(U.aaa.id, day(i), 60, null);   // 25日 → 五人囃子まで
+  for (let i = 0; i < 16; i++) G.setManual(U.bbb.id, day(i * 2), 60, null); // 16日 → おだいりさま・おひなさまだけ
+  const c = F.hinaStatus(U.bbb.id, at(`${Y}-02-20`));
+  assert.equal(c.phase, 'count'); assert.equal(c.days, 16); assert.equal(c.name, '3学期学年末クエスト'); assert.deepEqual(c.tiers.map(x => x.cleared), [true, false, false]);
+  assert.equal(F.followersOf(U.aaa.id, at(`${Y}-03-02`)).length, 10, '2人＋三人官女＋五人囃子');
+  assert.deepEqual(F.followersOf(U.bbb.id, at(`${Y}-03-02`)), ['dairi', 'hina']);
+  assert.equal(F.fxOf(U.aaa.id, at(`${Y}-03-03`)), 'hinamatsuri');
+  assert.equal(F.followersOf(U.aaa.id, at(`${Y}-03-20`)).length, 10, '3/20まで行列');
+  assert.equal(F.followersOf(U.aaa.id, at(`${Y}-03-21`)), null, '3/21にしまう');
+  assert.equal(F.bloomOf(U.aaa.id, at(`${Y}-03-20`)), false);
+  assert.equal(F.bloomOf(U.aaa.id, at(`${Y}-03-21`)), true, '春のスター');
+  assert.equal(F.bloomOf(U.bbb.id, at(`${Y}-03-31`)), true);
+  assert.equal(F.bloomOf(U.aaa.id, at(`${Y}-04-01`)), false);
+  assert.equal(F.hinaStatus(U.aaa.id, at(`${Y}-01-19`)), null);
+});
+
 test('朝活：6:00〜7:30に数えた時間が30分になった日にスタンプと3ポイント（バッジはなし）', () => {
   const before = G.points(U.bbb.id).earned;
   let got = [];
