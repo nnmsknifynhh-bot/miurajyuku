@@ -398,7 +398,8 @@
       ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
     }
     // 帽子・かざりをつけているときは、名札を少し上へ（アイテムがかくれないように）
-    const byTag = by - ((u.equip && u.equip.head && !(u.equip.costume)) || (u.equip && u.equip.costume) ? 12 : 0);
+    const byTag = by - ((u.equip && u.equip.head && !(u.equip.costume)) || (u.equip && u.equip.costume) ? 12 : 0) - (u.bloom ? 6 : 0);
+    if (u.bloom) drawSakuraCrown(ctx, x, by - 22 - ((u.equip && u.equip.head) ? 8 : 0), t); // 🌸 春のスター：桜の花かんむり
     if (opts.noTag) return; // 招待カードなど：アバターだけ
     // 名札（連続自習の日数🔥つき）
     const tag = ROLE_TAG[u.role];
@@ -809,6 +810,33 @@
     }
   }
 
+  // 🌸 春のスター：桜の花かんむり・まわりの光・花びら
+  function sakura(ctx, cx, cy, r, rot, color) {
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot); ctx.fillStyle = color || '#ffb7cf';
+    for (let i = 0; i < 5; i++) { ctx.rotate(Math.PI * 2 / 5); ctx.beginPath(); ctx.ellipse(0, -r * 0.62, r * 0.42, r * 0.62, 0, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = '#f7d046'; ctx.beginPath(); ctx.arc(0, 0, r * 0.25, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  }
+  function drawSakuraCrown(ctx, x, y, t) {
+    ctx.strokeStyle = '#7fae5a'; ctx.lineWidth = 1.6; // 葉のわっか
+    ctx.beginPath(); ctx.ellipse(x, y + 1, 10, 3, 0, 0, Math.PI * 2); ctx.stroke();
+    [[-8, 1, '#ffc4d8'], [-3.5, -1.5, '#ff9fc0'], [1.5, -2, '#ffd3e2'], [6.5, -0.5, '#ff9fc0'], [9.5, 2, '#ffc4d8']]
+      .forEach(([dx, dy, c], i) => sakura(ctx, x + dx, y + dy, 3.4, t * 0.6 + i, c));
+  }
+  function drawBloomGlow(ctx, x, y, t, s) {
+    const r = 30 * s + Math.sin(t * 2.4) * 2;
+    const g = ctx.createRadialGradient(x, y - 10 * s, 4, x, y - 10 * s, r);
+    g.addColorStop(0, 'rgba(255,214,232,.75)'); g.addColorStop(0.55, 'rgba(255,190,215,.35)'); g.addColorStop(1, 'rgba(255,190,215,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y - 10 * s, r, 0, Math.PI * 2); ctx.fill();
+  }
+  function drawPetal(ctx, p, now) {
+    const age = (now - p.born) / 1000, life = 1.6;
+    if (age > life) return false;
+    const x = p.x + p.vx * age + Math.sin(age * 4 + p.seed) * 5, y = p.y + p.vy * age + age * age * 14;
+    ctx.save(); ctx.globalAlpha = Math.max(0, 1 - age / life); ctx.translate(x, y); ctx.rotate(p.seed + age * 3);
+    ctx.fillStyle = p.c; ctx.beginPath(); ctx.ellipse(0, 0, 2.6, 1.5, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    return true;
+  }
+
   // 特別な日の演出：12/25は雪とプレゼント、7/7は天の川と星
   function drawFx(ctx, fx, x, y, t) {
     ctx.save();
@@ -839,5 +867,5 @@
     ctx.restore();
   }
 
-  window.Render = { buildMap, drawAvatar, drawFollower, drawFx, drawTree, drawDecorations, seasonOf, COSTUMES };
+  window.Render = { buildMap, drawAvatar, drawFollower, drawFx, drawBloomGlow, drawPetal, drawTree, drawDecorations, seasonOf, COSTUMES };
 })();

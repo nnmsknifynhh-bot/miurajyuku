@@ -1594,6 +1594,8 @@
     // 🎅 がんばりサンタ：うしろについて歩くサンタとトナカイ（12/1〜12/25）
     for (const it of list.slice()) if (it.u && it.u.follow && it.u.follow.length) for (const f of followerPos(it.u, it.x, it.y)) list.push(f);
     for (const it of list.slice()) if (it.u && it.u.fx) list.push({ fx: it.u.fx, x: it.x, y: it.y, z: 1e6 }); // 特別な日の演出（いちばん上にかく）
+    for (const it of list) if (it.u && it.u.bloom) spawnPetals(it.u, it.x, it.y, time);
+    if (petals.length) list.push({ petals: true, y: 0, z: 1e6 + 1 });
     list.sort((a, b) => (a.z || a.y) - (b.z || b.y));
     const season = window.Render.seasonOf();
     if (forest && forest.event) window.Render.drawDecorations(ctx, forest.event.id, time);
@@ -1601,11 +1603,30 @@
       if ('tree' in it) window.Render.drawTree(ctx, it.x, it.y, it.tree, { time: time / 1000, season, highlight: it.tree && state.user && it.tree.grades.includes(state.user.grade) });
       else if (it.follower) window.Render.drawFollower(ctx, it.follower, it.x, it.y, time / 1000);
       else if (it.fx) window.Render.drawFx(ctx, it.fx, it.x, it.y, time / 1000);
+      else if (it.petals) { for (let i = petals.length - 1; i >= 0; i--) if (!window.Render.drawPetal(ctx, petals[i], time)) petals.splice(i, 1); }
+      else if (it.u && it.u.bloom) { // 🌸 春のスター：まわりが光って、アバターが大きい（すわっているときは少しひかえめ）
+        const s = it.u.seat ? 1.15 : 1.4;
+        window.Render.drawBloomGlow(ctx, it.x, it.y, time / 1000, s);
+        ctx.save(); ctx.translate(it.x, it.y + 12); ctx.scale(s, s); ctx.translate(-it.x, -(it.y + 12));
+        window.Render.drawAvatar(ctx, it.u, it.x, it.y, { isMe: it.isMe, time: time / 1000, now: time, speaking: state.call && state.call.isSpeaking(it.u.id) });
+        ctx.restore();
+      }
       else window.Render.drawAvatar(ctx, it.u, it.x, it.y, { isMe: it.isMe, time: time / 1000, now: time, speaking: state.call && state.call.isSpeaking(it.u.id) });
     }
     ctx.restore();
   }
 
+  // 🌸 歩くと花吹雪：動いたぶんだけ花びらをまく
+  const petals = [], lastBloom = new Map();
+  function spawnPetals(u, x, y, now) {
+    const lp = lastBloom.get(u.id);
+    lastBloom.set(u.id, { x, y });
+    if (!lp || petals.length > 260) return;
+    const d = Math.hypot(x - lp.x, y - lp.y);
+    const n = d > 0.5 ? 2 : (Math.random() < 0.04 ? 1 : 0); // 止まっているときも、ときどきひらり
+    const colors = ['#ffc4d8', '#ff9fc0', '#ffd9e6', '#ffffff'];
+    for (let i = 0; i < n; i++) petals.push({ x: x + (Math.random() - 0.5) * 22, y: y - 6 - Math.random() * 30, vx: (Math.random() - 0.5) * 30 - (x - lp.x) * 2, vy: -8 - Math.random() * 10, born: now, seed: Math.random() * 6, c: colors[(Math.random() * 4) | 0] });
+  }
   // 歩いた道すじを少しだけ覚えておき、その上をうしろからついてくる（すわっているときは席のとなり）
   const trails = new Map();
   function followerPos(u, x, y) {
