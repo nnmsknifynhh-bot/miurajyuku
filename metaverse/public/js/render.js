@@ -398,8 +398,7 @@
       ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
     }
     // 帽子・かざりをつけているときは、名札を少し上へ（アイテムがかくれないように）
-    const byTag = by - ((u.equip && u.equip.head && !(u.equip.costume)) || (u.equip && u.equip.costume) ? 12 : 0) - (u.bloom ? 6 : 0);
-    if (u.bloom) drawSakuraCrown(ctx, x, by - 22 - ((u.equip && u.equip.head) ? 8 : 0), t); // 🌸 春のスター：桜の花かんむり
+    const byTag = by - ((u.equip && u.equip.head && !(u.equip.costume)) || (u.equip && u.equip.costume) ? 12 : 0);
     if (opts.noTag) return; // 招待カードなど：アバターだけ
     // 名札（連続自習の日数🔥つき）
     const tag = ROLE_TAG[u.role];

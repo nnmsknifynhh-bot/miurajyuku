@@ -1604,8 +1604,8 @@
       else if (it.follower) window.Render.drawFollower(ctx, it.follower, it.x, it.y, time / 1000);
       else if (it.fx) window.Render.drawFx(ctx, it.fx, it.x, it.y, time / 1000);
       else if (it.petals) { for (let i = petals.length - 1; i >= 0; i--) if (!window.Render.drawPetal(ctx, petals[i], time)) petals.splice(i, 1); }
-      else if (it.u && it.u.bloom) { // 🌸 春のスター：まわりが光って、アバターが大きい（すわっているときは少しひかえめ）
-        const s = it.u.seat ? 1.15 : 1.4;
+      else if (it.u && it.u.bloom) { // 🌸 春のスター：まわりが光って、アバターが1.4倍
+        const s = 1.4;
         window.Render.drawBloomGlow(ctx, it.x, it.y, time / 1000, s);
         ctx.save(); ctx.translate(it.x, it.y + 12); ctx.scale(s, s); ctx.translate(-it.x, -(it.y + 12));
         window.Render.drawAvatar(ctx, it.u, it.x, it.y, { isMe: it.isMe, time: time / 1000, now: time, speaking: state.call && state.call.isSpeaking(it.u.id) });
