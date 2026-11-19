@@ -310,6 +310,9 @@ body.is-trial .not-trial { display: none !important; }
 .muted.small { font-size: 12px; }
 /* 💌 サンタからの手紙 */
 .santa-letter { white-space: pre-line; text-align: left; background: #fffaf0; border: 2px dashed #e8b4a0; border-radius: 12px; padding: 12px 14px; line-height: 1.8; }
+/* ⭐ マイ席 */
+.seat-grid button.mine { background: #fff3c4; border-color: #e0a800; box-shadow: 0 0 0 2px #ffd23f inset; }
+.seat-grid button.other-mine { opacity: .55; }
 /* 保護者：のこり時間 */
 .visit-chip { background: rgba(255,240,246,.96); border-color: #f0a6c4; color: #8a2f58; }
 .visit-chip.warn { background: #ffe0e0; border-color: #e57373; color: #b71c1c; }

@@ -172,6 +172,8 @@
       state.classes = d.classes || {}; state.classCall = !!d.classCall;
       state.path = []; state.pathSeat = null; state.ready = true;
       state.testQueue = d.testQueue || null;
+      state.mySeats = d.mySeats || [];
+      if (state.user.role === 'student') setTimeout(goMySeat, 1800);
       { const mine = state.testQueue && state.testQueue.booths.find(b => b.userId === d.me.id); state.testBooth = mine ? mine.seat : null; }
       buildReactions(); updateAll(); refreshWeek(true); refreshFun(true); renderTest();
       if (isParent()) parentInit(d.visit);
@@ -179,6 +181,8 @@
     });
     // ── 保護者 ──
     socket.on('visit-over', ({ message }) => showVisitOver(message));
+    socket.on('myseats', (list) => { state.mySeats = list || []; });
+    socket.on('myseat-lost', () => { toast('⭐ 🔥がとぎれたので、マイ席はお休みになりました。また続けたら、えらべるよ', 7000); refreshFun(true); });
     socket.on('referral-reward', ({ kind, points }) => {
       const msg = kind === 'enroll' ? '🐥 友だちが入塾しました！ おそろいの「なかよしひよこ」をもらったよ。7日間のペア自習チャレンジもスタート！'
         : kind === 'pair' ? `🤝 ペア自習チャレンジ成功！ 「ペア自習のきらきら星」💫と ${points}ポイントをもらったよ`
@@ -649,6 +653,16 @@
         if (ev.fx) { const k = `juku-fx-${ev.event}-${ev.year}`; let seen = false; try { seen = !!localStorage.getItem(k); localStorage.setItem(k, '1'); } catch (e2) {} if (!seen) { toast(L.fxMsg, 9000); chime(0.25); } }
         // 💌 第1章クリア：手紙（読むまで、入室したときに1回出る）
         if (ev.letter && !letterAsked[ev.event]) { letterAsked[ev.event] = true; showLetter(ev); }
+      }
+      // ⭐ マイ席
+      const ms = g.mySeat;
+      if (ms && !state.trial) {
+        if (ms.eligible && !ms.seat) {
+          chips.push('⭐ マイ席をえらべるよ！ メニューの「⭐ マイ席」から');
+          const k = 'juku-myseat-ok-' + state.user.id; let seen = false; try { seen = !!localStorage.getItem(k); localStorage.setItem(k, '1'); } catch (e2) {}
+          if (!seen) { toast(`⭐ 🔥${ms.need}${ms.unit}達成！ 自分だけの「マイ席」をえらべるようになったよ`, 8000); chime(0.25); }
+        } else if (!ms.eligible && ms.streak >= Math.ceil(ms.need / 3)) chips.push(`⭐ マイ席まで 🔥${ms.streak}/${ms.need}${ms.unit}`);
+        if (!ms.eligible) { try { localStorage.removeItem('juku-myseat-ok-' + state.user.id); } catch (e2) {} }
       }
       // 🎎 3学期：ひな祭り・春のスター
       const hi = f.hina;
@@ -1383,6 +1397,49 @@
     c.fillStyle = '#6f4cff'; c.font = '900 40px sans-serif'; c.fillText('リンクから体験スタート ▶', W / 2, 1250);
   }
   $('#menu-invite').onclick = openInvite;
+  // ───── ⭐ マイ席 ─────
+  const myMySeat = () => (state.mySeats || []).find(s => s.id === (state.user && state.user.id));
+  async function openMySeat() {
+    $('#me-menu').hidden = true;
+    let d;
+    try { d = await api('GET', '/api/me/myseat'); } catch (e) { return toast(e.message); }
+    $('#myseat-note').textContent = d.eligible
+      ? `🔥${d.streak}${d.unit}続いているね！ 好きな席をえらぶと、机に名前プレートがつきます。いないときは、ほかの子も座れます。🔥がとぎれたら返します。`
+      : `🔥が${d.need}${d.unit}続いたら、自分だけの「マイ席」をえらべます（いま🔥${d.streak}${d.unit}）。`;
+    const map = $('#myseat-map'); map.textContent = '';
+    const seats = d.seats.map(s => { const [x, y] = s.id.split(',').map(Number); return { ...s, x, y }; });
+    const groups = (SM.SEAT_GROUPS[d.room] || [{ label: '席' }]).map(gp => [gp.label, seats.filter(s =>
+      (gp.x1 == null || (s.x >= gp.x1 && s.x <= gp.x2)) && (gp.y1 == null || (s.y >= gp.y1 && s.y <= gp.y2)))]);
+    for (const [label, side] of groups) {
+      if (!side.length) continue;
+      const xs = [...new Set(side.map(s => s.x))].sort((a, b) => a - b), ys = [...new Set(side.map(s => s.y))].sort((a, b) => a - b);
+      const box = el('div', 'seat-side'), grid = el('div', 'seat-grid');
+      grid.style.gridTemplateColumns = `repeat(${xs.length}, minmax(0, 44px))`;
+      for (const st of side) {
+        const mine = st.id === d.seat, b = el('button', mine ? 'mine' : st.taken ? 'other-mine' : null, mine ? '⭐' : st.taken ? '🌟' : '🪑');
+        b.type = 'button'; b.disabled = !d.eligible || st.taken || mine;
+        b.title = mine ? 'あなたのマイ席' : st.taken ? 'ほかの子のマイ席' : 'この席をマイ席にする';
+        b.style.gridColumn = xs.indexOf(st.x) + 1; b.style.gridRow = ys.indexOf(st.y) + 1;
+        b.onclick = async () => {
+          try { await api('POST', '/api/me/myseat', { seat: st.id }); toast('⭐ マイ席に決めたよ！ 次から入ると、この席に案内します', 5000); $('#myseat-dialog').close(); walkTo(st.x, st.y, true, true); }
+          catch (e) { toast(e.message); }
+        };
+        grid.append(b);
+      }
+      box.append(el('b', null, label), grid); map.append(box);
+    }
+    if (!$('#myseat-dialog').open) $('#myseat-dialog').showModal();
+  }
+  $('#menu-myseat').onclick = openMySeat;
+  $('#myseat-close').onclick = () => $('#myseat-dialog').close();
+  // 入ったとき：マイ席が空いていれば、そこへ案内する
+  function goMySeat() {
+    const m = myMySeat(), me = state.me;
+    if (!m || !me || me.seat || state.path.length || document.querySelector('dialog[open]')) return;
+    const [x, y] = m.seat.split(',').map(Number);
+    if (occupiedSeats().has(m.seat)) return toast('⭐ マイ席は、いまほかの子が使っています。ほかの席にすわってね', 5000);
+    if (walkTo(x, y, true, true)) toast('⭐ マイ席へ案内します', 3000);
+  }
   $('#family-invite').onclick = () => { $('#family-dialog').close(); openInvite(); };
   $('#invite-close').onclick = () => $('#invite-dialog').close();
   $('#invite-line').onclick = () => { window.open('https://line.me/R/share?text=' + encodeURIComponent(inviteText()), '_blank', 'noopener'); };
@@ -1571,6 +1628,7 @@
     ctx.scale(z, z);
     ctx.translate(-Math.round(state.cam.x), -Math.round(state.cam.y));
     ctx.drawImage(mapCanvas, 0, 0);
+    drawMySeatPlates(time);
 
     // 入れない部屋・満員の部屋
     for (const zone of SM.ZONES) {
@@ -1623,6 +1681,28 @@
     ctx.restore();
   }
 
+  // ⭐ マイ席：机に金色の名前プレート。本人がすわっているときは、席がほんのり光る
+  function drawMySeatPlates(time) {
+    for (const s of state.mySeats || []) {
+      const [sx, sy] = s.seat.split(',').map(Number);
+      const deskY = SM.seatFacing(sx, sy) === 'up' ? sy - 1 : sy + 1;
+      const owner = s.id === state.me.id ? state.me : state.others.get(s.id);
+      if (owner && owner.seat === s.seat) {
+        const g = ctx.createRadialGradient((sx + 0.5) * T, (sy + 0.5) * T, 2, (sx + 0.5) * T, (sy + 0.5) * T, T * 1.1);
+        g.addColorStop(0, `rgba(255,214,90,${0.38 + Math.sin(time / 500) * 0.08})`); g.addColorStop(1, 'rgba(255,214,90,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc((sx + 0.5) * T, (sy + 0.5) * T, T * 1.1, 0, Math.PI * 2); ctx.fill();
+      }
+      const label = s.name ? '⭐' + (s.name.length > 4 ? s.name.slice(0, 4) : s.name) : '⭐';
+      ctx.font = 'bold 8px sans-serif';
+      const w = Math.max(14, ctx.measureText(label).width + 6), px = (sx + 0.5) * T, py = deskY < sy ? (sy + 1) * T + 3 : (deskY + 0.5) * T - 9; // いつも本人の足もと側に（名札や頭にかくれないように）
+      const gr = ctx.createLinearGradient(px - w / 2, 0, px + w / 2, 0);
+      gr.addColorStop(0, '#d4a017'); gr.addColorStop(0.5, '#f7d36a'); gr.addColorStop(1, '#d4a017');
+      ctx.fillStyle = gr; ctx.beginPath(); ctx.roundRect(px - w / 2, py - 5.5, w, 11, 3); ctx.fill();
+      ctx.strokeStyle = '#a07a10'; ctx.lineWidth = 0.6; ctx.stroke();
+      ctx.fillStyle = '#4a3200'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(label, px, py + 0.5);
+      ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
+    }
+  }
   // 🌸 歩くと花吹雪：動いたぶんだけ花びらをまく
   const petals = [], lastBloom = new Map();
   function spawnPetals(u, x, y, now) {

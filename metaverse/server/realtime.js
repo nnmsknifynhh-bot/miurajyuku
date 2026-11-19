@@ -14,6 +14,7 @@ const ganbari = require('./ganbari');
 const fun = require('./fun');
 const parents = require('./parents');
 const referral = require('./referral');
+const myseat = require('./myseat');
 const kanken = require('./kanken');
 const { can, canEnterRoom } = require('./permissions');
 
@@ -359,6 +360,7 @@ function attach(httpServer) {
     p.bday = user.role === 'student' ? ganbari.birthdayInfo(p.id) : null;
     p.follow = user.role === 'student' && !user.trial_until ? fun.followersOf(p.id) : null;
     p.fx = p.follow ? fun.fxOf(p.id) : null;
+    if (user.role === 'student' && myseat.checkKeep(p.id)) setTimeout(() => { socket.emit('myseat-lost'); broadcastMySeats(); }, 500); // 🔥がとぎれていたらマイ席を返す
     p.bloom = user.role === 'student' && !user.trial_until ? fun.bloomOf(p.id) : false;
     refreshHS(p, false);
     p.room = roomIdAt(p.x, p.y);
@@ -392,6 +394,7 @@ function attach(httpServer) {
       me: { ...pub(p), bday: !!p.bday }, users: [...online.values()].filter(o => o !== p).map(o => pubFor(o, p)), rooms: roomCounts(), reactions: user.role === 'parent' ? PARENT_REACTIONS : REACTIONS,
       visit: visit ? { endsAt: visit.endsAt, again: visit.again, meeting: !!visit.meeting, mendan: !!visit.mendan } : null,
       classes: classState(), classCall: livekit.enabled, testQueue: user.role === 'parent' ? null : testState(),
+      mySeats: mySeatsFor(p),
     });
     if (gap && p.room === gap.room && Date.now() - gap.at <= STUDY_GAP_MS) socket.emit('study-resumed', { minutes: gapMinutes, seat: p.seat });
     for (const o of online.values()) if (o !== p) o.socket.emit('user-joined', pubFor(p, o));
@@ -840,6 +843,10 @@ function attach(httpServer) {
         if (s !== p.streak) { p.streak = s; io.emit('user-updated', { id, streak: s }); }
         p.socket.emit('study-minute');
       }
+      // ⭐ マイ席：🔥がとぎれたら返す（日がかわったとき）
+      let seatsChanged = false;
+      for (const p of online.values()) if (p.user.role === 'student' && myseat.checkKeep(p.id)) { p.socket.emit('myseat-lost'); seatsChanged = true; }
+      if (seatsChanged) broadcastMySeats();
       // ペア自習チャレンジ：7日そろったら2人にごほうび
       for (const id of added.counted) {
         const won = referral.settlePair(id);
@@ -1138,10 +1145,18 @@ function referralRewarded(r) {
   }
   if (r.kind === 'parent') refreshMoms();
 }
+// ⭐ マイ席の名前プレート（保護者・体験中の子には、ほかの子の名前は出さない）
+function mySeatsFor(viewer) {
+  return myseat.list().map(s => {
+    const hide = (viewer.user.role === 'parent' && !(viewer.childIds && viewer.childIds.has(s.id))) || (viewer.user.trial_until && s.id !== viewer.referrerId);
+    return { id: s.id, seat: s.seat, room: s.room, name: hide ? '' : s.name };
+  });
+}
+function broadcastMySeats() { for (const o of online.values()) o.socket.emit('myseats', mySeatsFor(o)); }
 function refreshMoms() { if (io) io.emit('moms-updated', parents.momsTree()); }
 
 module.exports = {
-  shownToday, refreshMoms, parentMeetingChanged, mendanChanged, referralRewarded,
+  shownToday, refreshMoms, parentMeetingChanged, mendanChanged, referralRewarded, broadcastMySeats,
   isQuickRejoin, refreshGanbari, refreshBirthday, refreshAllGanbari, _online: online,
   storeStudyPhoto, getStudyPhoto, studyPhotoTimes, canViewStudyPhotos, setStudyPhotosFeature, studyPhotosEnabled,
   attach, kick, refreshUser, refreshRooms, presence, roomCounts, classState, endClass, endCallOf, REACTIONS, _reset };

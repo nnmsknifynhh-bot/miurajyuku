@@ -12,6 +12,7 @@ const ganbari = require('./ganbari');
 const fun = require('./fun');
 const parents = require('./parents');
 const referral = require('./referral');
+const myseat = require('./myseat');
 const SchoolMap = require('../public/shared/map.js');
 const kanken = require('./kanken');
 
@@ -187,6 +188,7 @@ app.get('/api/me/ganbari', auth.requireAuth, (req, res) => {
     hs: ganbari.isHS(u.grade) ? { ...ganbari.hsWeeks(u.id), title: ganbari.titleOf(u.id), plan: ganbari.planOf(u.id), visitDays: u.visit_days ? u.visit_days.split(',').map(Number) : [], visitTime: u.visit_time || null } : null,
     fun: u.role === 'student' && !u.trial_until ? fun.statusFor(u.id) : null, parent: u.role === 'parent',
     pair: u.role === 'student' && !u.trial_until ? referral.pairOf(u.id) : null,
+    mySeat: u.role === 'student' ? myseat.statusOf(u.id) : null,
     referralWeek: referral.weekOn() ? referral.getConfig().week : null,
     rules: { minutesPerPoint: c.minutesPerPoint, streakMin: ganbari.streakMinFor(u.id, c), window: c.window, window2: c.window2, requireSeat: c.requireSeat, today: ganbari.ruleFor(today, c, ganbari.isHS(u.grade) ? 'hs' : null) },
   });
@@ -310,6 +312,20 @@ app.post('/api/parent/quiz/answer', auth.requireAuth, requireParent, (req, res) 
   const r = parents.answerQuiz(req.user.id, String(req.body.qid || ''), String(req.body.choice || ''));
   if (r.error) return bad(res, r.error);
   res.json({ ...r, points: ganbari.points(req.user.id).balance });
+});
+
+// ⭐ マイ席：えらべる席と、いまの状態
+app.get('/api/me/myseat', auth.requireAuth, (req, res) => {
+  const st = myseat.statusOf(req.user.id);
+  if (!st) return bad(res, '生徒の機能です', 403);
+  const taken = new Set(myseat.list().filter(s => s.id !== req.user.id).map(s => s.seat));
+  res.json({ ...st, seats: myseat.seatsOf(st.room).map(id => ({ id, taken: taken.has(id) })) });
+});
+app.post('/api/me/myseat', auth.requireAuth, (req, res) => {
+  const r = myseat.choose(req.user.id, String((req.body || {}).seat || ''));
+  if (r.error) return bad(res, r.error);
+  realtime.broadcastMySeats();
+  res.json(r);
 });
 
 // ── 季節のお楽しみ ──

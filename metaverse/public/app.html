@@ -132,6 +132,15 @@
   </dialog>
 
 
+  <!-- ⭐ マイ席 -->
+  <dialog id="myseat-dialog">
+    <div class="dialog-body">
+      <h2>⭐ マイ席</h2>
+      <p class="muted" id="myseat-note"></p>
+      <div class="seat-map" id="myseat-map"></div>
+      <div class="dialog-actions"><button type="button" class="btn secondary" id="myseat-close">とじる</button></div>
+    </div>
+  </dialog>
   <!-- 🤝 友だちを招待（招待カード） -->
   <dialog id="invite-dialog">
     <div class="dialog-body">
@@ -281,6 +290,7 @@
 
   <nav class="me-menu" id="me-menu" hidden>
     <a href="/admin" id="menu-admin" hidden>⚙️ 管理画面</a>
+    <button id="menu-myseat" class="student-only not-trial">⭐ マイ席</button>
     <button id="menu-invite" class="student-only not-trial">🤝 友だちを招待</button>
     <button id="menu-shop" class="student-only not-trial">🎁 ポイントと着せかえ</button>
     <button id="menu-goal" class="student-only not-trial">🎯 今学期の目標</button>
