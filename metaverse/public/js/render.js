@@ -712,6 +712,8 @@
       ctx.fillStyle = '#fff'; ctx.fillRect(x - 8, y + 3 - hop, 16, 2.5);                                  // 白いふち
       ctx.fillStyle = '#3a2a1a'; ctx.fillRect(x - 8, y + 1 - hop, 16, 1.6);                               // ベルト
       ctx.font = '17px sans-serif'; ctx.fillText('🎅', x, y - 11 - hop);
+    } else if (HINA[kind]) { // 🎎 ひな人形（おだいりさま・おひなさま・三人官女・五人囃子）
+      drawHina(ctx, kind, x, y - hop, t);
     } else if (kind === 'hikoboshi' || kind === 'orihime') { // 彦星（青い着物）・織姫（桃色の着物と羽衣）
       const yy = y - hop, hiko = kind === 'hikoboshi';
       if (!hiko) { // 羽衣（ふわっとした帯）
@@ -744,6 +746,67 @@
       ctx.fillStyle = '#e53935'; ctx.beginPath(); ctx.arc(x + 10, yy - 7, 2.2, 0, Math.PI * 2); ctx.fill(); // 赤い鼻
     }
     ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
+  }
+
+  // 🎎 ひな人形：着物の色と、持ち物
+  const HINA = {
+    dairi: { robe: '#2a2a3a', under: '#7a1f2b', hair: 'kanmuri' },                 // おだいりさま：黒の束帯・冠・しゃく
+    hina: { robe: '#b8323c', under: '#f2c14e', layers: ['#3c8a5a', '#7b4fa6', '#f2c14e'], hair: 'long' }, // おひなさま：十二単
+    kanjo1: { robe: '#ffffff', hakama: '#d6303a', hair: 'long', item: 'choshi' },  // 三人官女：白い着物と赤いはかま
+    kanjo2: { robe: '#ffffff', hakama: '#d6303a', hair: 'long', item: 'sanbo' },
+    kanjo3: { robe: '#ffffff', hakama: '#d6303a', hair: 'long', item: 'hisage' },
+    hayashi1: { robe: '#e98a2f', hakama: '#3f6fb5', hair: 'eboshi', item: 'taiko' }, // 五人囃子：太鼓・大鼓・小鼓・笛・謡
+    hayashi2: { robe: '#4f9d63', hakama: '#3f6fb5', hair: 'eboshi', item: 'okawa' },
+    hayashi3: { robe: '#d24f7c', hakama: '#3f6fb5', hair: 'eboshi', item: 'kotsuzumi' },
+    hayashi4: { robe: '#7a5bc4', hakama: '#3f6fb5', hair: 'eboshi', item: 'fue' },
+    hayashi5: { robe: '#2f9bb3', hakama: '#3f6fb5', hair: 'eboshi', item: 'ogi' },
+  };
+  function drawHina(ctx, kind, x, yy, t) {
+    const h = HINA[kind];
+    // 着物（すそが広がる形）
+    if (h.layers) { // 十二単：すそに色の重なり
+      h.layers.forEach((c, i) => { ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(x - 11 + i, yy + 11 - i * 1.6); ctx.lineTo(x - 6, yy - 4); ctx.lineTo(x + 6, yy - 4); ctx.lineTo(x + 11 - i, yy + 11 - i * 1.6); ctx.closePath(); ctx.fill(); });
+    }
+    ctx.fillStyle = h.robe;
+    ctx.beginPath(); ctx.moveTo(x - 9, h.hakama ? yy + 4 : yy + 7); ctx.lineTo(x - 6, yy - 4); ctx.lineTo(x + 6, yy - 4); ctx.lineTo(x + 9, h.hakama ? yy + 4 : yy + 7); ctx.closePath(); ctx.fill();
+    if (h.robe === '#ffffff') { ctx.strokeStyle = 'rgba(0,0,0,.15)'; ctx.lineWidth = 0.8; ctx.stroke(); }
+    if (h.hakama) { ctx.fillStyle = h.hakama; ctx.beginPath(); ctx.moveTo(x - 9, yy + 4); ctx.lineTo(x + 9, yy + 4); ctx.lineTo(x + 10, yy + 11); ctx.lineTo(x - 10, yy + 11); ctx.closePath(); ctx.fill(); }
+    ctx.strokeStyle = h.under || '#d6303a'; ctx.lineWidth = 1.4; // えり
+    ctx.beginPath(); ctx.moveTo(x - 3.5, yy - 4); ctx.lineTo(x, yy + 0.5); ctx.lineTo(x + 3.5, yy - 4); ctx.stroke();
+    // 顔とかみ
+    ctx.fillStyle = '#fdf1e6'; ctx.beginPath(); ctx.arc(x, yy - 9, 5.4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#1e1a22';
+    if (h.hair === 'long') { // 長いかみ（うしろに流れる）
+      ctx.beginPath(); ctx.arc(x, yy - 10.5, 5.8, Math.PI, 0); ctx.fill();
+      ctx.fillRect(x - 6.2, yy - 10.5, 2.2, 12); ctx.fillRect(x + 4, yy - 10.5, 2.2, 12);
+    } else ctx.beginPath(), ctx.arc(x, yy - 10.8, 5.6, Math.PI, 0), ctx.fill();
+    if (h.hair === 'kanmuri') { // 冠と、うしろにのびる纓（えい）
+      ctx.fillRect(x - 3.5, yy - 18, 7, 4.5); ctx.beginPath(); ctx.moveTo(x + 2, yy - 18); ctx.quadraticCurveTo(x + 4, yy - 26, x + 1, yy - 27); ctx.lineWidth = 1.6; ctx.strokeStyle = '#1e1a22'; ctx.stroke();
+      ctx.fillStyle = '#e8cf9a'; ctx.fillRect(x + 6, yy - 6, 1.6, 9); // しゃく
+    }
+    if (kind === 'hina') { // 金の冠と、ひおうぎ（扇）
+      ctx.fillStyle = '#f2c14e'; ctx.beginPath(); ctx.moveTo(x - 4, yy - 15); ctx.lineTo(x - 2, yy - 19); ctx.lineTo(x, yy - 16); ctx.lineTo(x + 2, yy - 19); ctx.lineTo(x + 4, yy - 15); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#f7e1b0'; ctx.beginPath(); ctx.moveTo(x + 5, yy + 2); ctx.arc(x + 5, yy + 2, 7, -Math.PI * 0.95, -Math.PI * 0.55); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = '#d6303a'; ctx.lineWidth = 0.8; ctx.stroke();
+    }
+    if (h.hair === 'eboshi') { ctx.fillStyle = '#1e1a22'; ctx.beginPath(); ctx.moveTo(x - 4, yy - 14); ctx.lineTo(x + 1, yy - 22); ctx.lineTo(x + 4, yy - 14); ctx.closePath(); ctx.fill(); } // えぼし
+    ctx.fillStyle = '#2b2230'; ctx.fillRect(x - 2.6, yy - 9, 1.2, 1.3); ctx.fillRect(x + 1.4, yy - 9, 1.2, 1.3); // 目
+    ctx.fillStyle = 'rgba(240,120,140,.55)'; ctx.beginPath(); ctx.arc(x - 3.2, yy - 6.8, 1.1, 0, Math.PI * 2); ctx.arc(x + 3.2, yy - 6.8, 1.1, 0, Math.PI * 2); ctx.fill(); // ほっぺ
+    // 持ち物
+    const it = h.item;
+    if (it === 'choshi') { ctx.strokeStyle = '#b8862e'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(x - 10, yy - 8); ctx.lineTo(x + 2, yy + 2); ctx.stroke(); ctx.fillStyle = '#d9a63a'; ctx.beginPath(); ctx.arc(x - 10, yy - 8, 2.4, 0, Math.PI * 2); ctx.fill(); } // 長柄の銚子
+    if (it === 'sanbo') { ctx.fillStyle = '#e2c27a'; ctx.fillRect(x - 5, yy - 1, 10, 2); ctx.fillRect(x - 3, yy + 1, 6, 3); ctx.fillStyle = '#f5f0e6'; ctx.beginPath(); ctx.arc(x, yy - 2, 2.2, 0, Math.PI * 2); ctx.fill(); } // 三方
+    if (it === 'hisage') { ctx.fillStyle = '#c99a3a'; ctx.beginPath(); ctx.arc(x + 6, yy + 1, 3, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#8a6420'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(x + 6, yy - 2, 3, Math.PI, 0); ctx.stroke(); } // 提子
+    if (it === 'taiko') { ctx.fillStyle = '#c0392b'; ctx.beginPath(); ctx.ellipse(x, yy + 3, 6, 3.5, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#f3e3c3'; ctx.beginPath(); ctx.ellipse(x, yy + 2, 4.5, 2, 0, 0, Math.PI * 2); ctx.fill(); } // 太鼓
+    if (it === 'okawa') { ctx.fillStyle = '#c0392b'; ctx.fillRect(x - 10, yy - 2, 6, 3); ctx.fillStyle = '#f3e3c3'; ctx.beginPath(); ctx.arc(x - 10, yy - 0.5, 2.6, 0, Math.PI * 2); ctx.arc(x - 4, yy - 0.5, 2.6, 0, Math.PI * 2); ctx.fill(); } // 大鼓（ひざ）
+    if (it === 'kotsuzumi') { ctx.fillStyle = '#c0392b'; ctx.fillRect(x + 4, yy - 13, 3, 6); ctx.fillStyle = '#f3e3c3'; ctx.beginPath(); ctx.arc(x + 5.5, yy - 13, 2.4, 0, Math.PI * 2); ctx.arc(x + 5.5, yy - 7, 2.4, 0, Math.PI * 2); ctx.fill(); } // 小鼓（肩）
+    if (it === 'fue') { ctx.strokeStyle = '#7a4a22'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(x - 1, yy - 6); ctx.lineTo(x + 11, yy - 9); ctx.stroke(); } // 笛
+    if (it === 'ogi') { ctx.fillStyle = '#f2c14e'; ctx.beginPath(); ctx.moveTo(x + 4, yy + 1); ctx.arc(x + 4, yy + 1, 7, -Math.PI * 0.85, -Math.PI * 0.45); ctx.closePath(); ctx.fill(); } // 謡の扇
+    if (kind.startsWith('hayashi')) { // 音符がふわっと
+      const n = Number(kind.slice(-1)), ph = (t * 0.8 + n * 0.37) % 1;
+      ctx.globalAlpha = 1 - ph; ctx.fillStyle = '#7a5bc4'; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(n % 2 ? '♪' : '♫', x + 7, yy - 18 - ph * 10); ctx.globalAlpha = 1;
+    }
   }
 
   // 特別な日の演出：12/25は雪とプレゼント、7/7は天の川と星
