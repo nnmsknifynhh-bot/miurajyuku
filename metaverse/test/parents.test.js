@@ -184,7 +184,7 @@ test('10分（テストでは1.5秒）で自動退室・その日はもう入れ
 });
 
 const G = require('../server/ganbari.js');
-const hmPlus = (min) => { const d = new Date(Date.now() + 9 * 3600000 + min * 60000); return d.toISOString().slice(11, 16); };
+const hmPlus = (min) => { const d = new Date(Date.now() + 9 * 3600000 + min * 60000); const s = d.toISOString(); return s.slice(0, 10) > new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10) ? '23:59' : s.slice(11, 16); }; // 日をまたぐときは 23:59 まで
 
 test('ロビーのソファに生徒はすわれない', async () => {
   const c = U.kid.c2 || (U.kid.c2 = await connect(U.kid.cookie));
@@ -218,8 +218,20 @@ test('面談ブース：オーナーが許可した人だけ（今日だけ）�
   const m = await connect(U.mama.cookie);
   assert.ok(m.init && m.init.visit.mendan, m.events.map(e => e.ev).join());
   assert.ok(await walk(m, dx, dy), m.rejected.join());
+  // オーナーのほかに3人まで：3人入っていると、4人目は入れない
+  m.s.disconnect(); await sleep(100);
+  const online = require('../server/realtime.js')._online;
+  const fakes = [-1, -2, -3].map(id => ({ id, user: { role: id === -1 ? 'teacher' : 'student' }, room: 'mendan', x: 0, y: 0, socket: { emit() {} } }));
+  fakes.forEach(f => online.set(f.id, f));
+  const m2 = await connect(U.mama.cookie);
+  assert.equal(await walk(m2, dx, dy), false);
+  assert.ok(m2.rejected.some(t => /満員.*3人まで/.test(t)), m2.rejected.join());
+  online.delete(-3); // 1人出たら入れる
+  { const o = online.get(U.mama.id); m2.me.x = o.x; m2.me.y = o.y; }
+  assert.ok(await walk(m2, dx, dy), m2.rejected.join());
+  fakes.forEach(f => online.delete(f.id));
   await http('POST', `/api/admin/mendan/${U.mama.id}`, { allow: false }, owner);
-  m.s.disconnect();
+  m2.s.disconnect();
 });
 
 test('保護者会：時間中は保護者も教室へ・生徒は入れない・🔥はとぎれない', async () => {

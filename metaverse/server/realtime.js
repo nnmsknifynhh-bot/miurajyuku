@@ -117,6 +117,7 @@ function broadcastRooms() {
   roomsTimer = setTimeout(() => { roomsTimer = null; io.emit('rooms', roomCounts()); }, 100);
 }
 
+const MENDAN_MAX = 3; // 面談ブースに入れるのは、オーナーのほかに3人まで
 // 入室チェック：権限と定員
 function entryError(p, roomId) {
   const room = getRoom(roomId);
@@ -124,6 +125,12 @@ function entryError(p, roomId) {
   if (!canEnterRoom(p.user, room)) {
     if (p.user.role === 'student' && room.type === 'study') return room.id === 'class3' ? '高校生自習室は高校生の部屋です' : '高校生は「高校生自習室」で自習してね';
     return p.user.role === 'teacher' ? `${room.name}には入れません（担当の教室ではありません）` : `${room.name}には入れません`;
+  }
+  if (roomId === 'mendan') { // 面談ブース：オーナーのほかに3人まで（生徒・保護者・先生あわせて）
+    if (p.user.role === 'owner') return null;
+    let n = 0;
+    for (const o of online.values()) if (o !== p && o.room === 'mendan' && o.user.role !== 'owner') n++;
+    return n >= MENDAN_MAX ? `面談ブースは満員です（オーナーのほかに${MENDAN_MAX}人まで）` : null;
   }
   if (p.user.role === 'student') {
     let n = 0;
