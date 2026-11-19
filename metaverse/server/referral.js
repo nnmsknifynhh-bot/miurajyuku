@@ -131,7 +131,7 @@ function giveItem(userId, item) {
 function bonus(userId, reason, points) {
   return db.prepare('INSERT OR IGNORE INTO bonus_points (user_id, reason, points, created_at) VALUES (?, ?, ?, ?)').run(userId, reason, points, now()).changes > 0;
 }
-// 入塾したときのごほうび。生徒の紹介：2人におそろいのアイテム＋ペア自習チャレンジ開始。保護者の紹介：母達の木に🌷・保護者に＋50ポイント
+// 入塾したときのごほうび。生徒の紹介：2人におそろいのアイテム＋ペア自習チャレンジ開始。保護者の紹介：家族の木に🌷・保護者に＋50ポイント
 function markEnrolled(newId) {
   const r = db.prepare('SELECT r.*, u.role AS referrerRole FROM referrals r JOIN users u ON u.id = r.referrer_id WHERE r.new_id = ?').get(newId);
   if (!r || r.enrolled_at) return null;
@@ -202,7 +202,7 @@ function settlePair(userId, date = new Date()) {
   return null;
 }
 
-// 保護者の紹介で入塾した数（母達の木の🌷）
+// 保護者の紹介で入塾した数（家族の木の🌷）
 function tulips() {
   return db.prepare("SELECT COUNT(*) AS n FROM referrals r JOIN users u ON u.id = r.referrer_id WHERE u.role = 'parent' AND r.enrolled_at IS NOT NULL").get().n;
 }

@@ -1,4 +1,4 @@
-// 保護者：招待コードで登録・ロビーで1日1回10分・毎日5問の4択・見たよスタンプ・母達の木
+// 保護者：招待コードで登録・ロビーで1日1回10分・毎日5問の4択・見たよスタンプ・家族の木
 const crypto = require('crypto');
 const { db, now, audit, getSetting, setSetting } = require('./db');
 const G = require('./ganbari');
@@ -251,7 +251,7 @@ function deleteQuestion(id) { return db.prepare('DELETE FROM parent_questions WH
   addQuestions(rows.map((r, i) => ({ line: i + 1, subject: r[0], question: r[1], answer: r[2], wrong: [r[3], r[4], r[5]] })));
 })();
 
-// ───────── 見たよスタンプ・母達の木 ─────────
+// ───────── 見たよスタンプ・家族の木 ─────────
 function sendCheer(parentId, studentId, stamp, date = new Date()) {
   if (!childIds(parentId).has(studentId)) return { error: '自分のお子さんにだけ送れます' };
   if (!STAMPS.includes(stamp)) return { error: 'スタンプをえらんでください' };
@@ -277,7 +277,7 @@ function momsTree(date = new Date()) {
   const families = db.prepare("SELECT COUNT(DISTINCT user_id) AS n FROM parent_visits WHERE day >= ? AND day <= ?").get(`${month}-01`, `${month}-31`).n;
   let stage = 0;
   for (let i = 0; i < MOM_STAGES.length; i++) if (flowers >= MOM_STAGES[i]) stage = i;
-  return { name: '母達の木', tulips: require('./referral').tulips(), flowers, families, stage, stageName: G.STAGE_NAMES[stage], nextFlowers: MOM_STAGES[stage + 1] ?? null };
+  return { name: '家族の木', tulips: require('./referral').tulips(), flowers, families, stage, stageName: G.STAGE_NAMES[stage], nextFlowers: MOM_STAGES[stage + 1] ?? null };
 }
 
 module.exports = {

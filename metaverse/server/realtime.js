@@ -1086,7 +1086,7 @@ function presence() {
 
 function _reset() { online.clear(); lastPos.clear(); lastOffline.clear(); calls.clear(); studyPhotos.clear(); }
 
-// 母達の木が変わったら、みんなの画面を更新
+// 家族の木が変わったら、みんなの画面を更新
 // ── 保護者会（予定の時刻で自動で始まり・終わる） ──
 function meetingClosedMessage() {
   const m = parents.getMeeting();

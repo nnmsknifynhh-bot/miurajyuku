@@ -186,7 +186,7 @@
     socket.on('referral-reward', ({ kind, points }) => {
       const msg = kind === 'enroll' ? '🐥 友だちが入塾しました！ おそろいの「なかよしひよこ」をもらったよ。7日間のペア自習チャレンジもスタート！'
         : kind === 'pair' ? `🤝 ペア自習チャレンジ成功！ 「ペア自習のきらきら星」💫と ${points}ポイントをもらったよ`
-        : `🌷 ご紹介のご家族が入塾しました！ 母達の木に🌷が咲き、${points}ポイントをもらいました`;
+        : `🌷 ご紹介のご家族が入塾しました！ 家族の木に🌷が咲き、${points}ポイントをもらいました`;
       toast(msg, 9000); chime(0.2); refreshFun(true);
     });
     socket.on('meeting-closed', ({ message }) => { state.ready = false; showVisitOver(message); });
@@ -557,7 +557,7 @@
           const b = el('button', 'btn secondary small', s); b.type = 'button';
           b.onclick = async () => {
             stamps.querySelectorAll('button').forEach(x => { x.disabled = true; });
-            try { await api('POST', '/api/parent/cheer', { studentId: k.id, stamp: s }); toast(`🌸 送りました！「母達の木」に花が1つ咲きました`, 4500); openFamily(); }
+            try { await api('POST', '/api/parent/cheer', { studentId: k.id, stamp: s }); toast(`🌸 送りました！「家族の木」に花が1つ咲きました`, 4500); openFamily(); }
             catch (e) { toast(e.message); stamps.querySelectorAll('button').forEach(x => { x.disabled = false; }); }
           };
           stamps.append(b);
@@ -566,7 +566,7 @@
       card.append(stamps); list.append(card);
     }
     const m = d.moms;
-    $('#family-moms').textContent = `🌸 母達の木：花${m.flowers}こ${m.tulips ? `・🌷${m.tulips}` : ''}（${m.stageName}）・今月${m.families}家族が挑戦中・あなたは🔥${d.streak}日連続・${d.points}ポイント`;
+    $('#family-moms').textContent = `🌸 家族の木：花${m.flowers}こ${m.tulips ? `・🌷${m.tulips}` : ''}（${m.stageName}）・今月${m.families}家族が挑戦中・あなたは🔥${d.streak}日連続・${d.points}ポイント`;
     if (!$('#family-dialog').open) $('#family-dialog').showModal();
   }
   const fmtMin = (m) => m >= 60 ? `${Math.floor(m / 60)}時間${m % 60 ? (m % 60) + '分' : ''}` : `${m}分`;
@@ -1363,7 +1363,7 @@
     $('#invite-title').textContent = parent ? '🌷 お友だちのご家族に紹介する' : '🤝 友だちを招待しよう';
     $('#invite-note').textContent = `${invite.week ? '🎉 友だち紹介ウィーク中！ ' : ''}リンクを送ると、${invite.days}日間オンライン自習室を体験できます（記録は残りません）。`;
     $('#invite-rewards').textContent = parent
-      ? `紹介したご家族のお子さんが入塾すると、母達の木に🌷が咲き、${invite.rewards.parentPoints}ポイントもらえます。`
+      ? `紹介したご家族のお子さんが入塾すると、家族の木に🌷が咲き、${invite.rewards.parentPoints}ポイントもらえます。`
       : `友だちが入塾したら、2人におそろいの「なかよしひよこ🐥」。さらに7日間2人とも🔥を続けたら「ペア自習のきらきら星💫」と${invite.rewards.pairPoints}ポイント！`;
     $('#invite-card').hidden = parent; $('#invite-share').hidden = parent;
     if (!parent) drawInviteCard();
@@ -1662,7 +1662,7 @@
     list.push({ u: me, x: me.x, y: me.y, isMe: true });
     const forest = state.gb && state.gb.forest;
     SM.FOREST.forEach((f, i) => { const p = treePos(i); list.push({ tree: forest ? forest.trees[i] : null, x: p.x, y: p.y }); });
-    // 母達の木（ロビー）：見たよスタンプで花が咲く
+    // 家族の木（ロビー）：見たよスタンプで花が咲く
     if (forest && forest.moms) {
       const m = forest.moms;
       list.push({ tree: { name: m.name, stage: m.stage, stageName: `🌸${m.flowers}${m.tulips ? `・🌷${m.tulips}` : ''}・今月${m.families}家族が挑戦中`, goals: [], grades: [] }, x: (SM.MOM_TREE.x + 1) * T, y: (SM.MOM_TREE.y + 1) * T - 6 });

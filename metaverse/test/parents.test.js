@@ -1,4 +1,4 @@
-// 保護者：招待コードで登録・ロビーだけ・1日1回10分・名前の表示ルール・毎日5問・見たよスタンプ・母達の木
+// 保護者：招待コードで登録・ロビーだけ・1日1回10分・名前の表示ルール・毎日5問・見たよスタンプ・家族の木
 process.env.DB_PATH = ':memory:';
 process.env.TEST_LEAVE_MS = '300';
 process.env.PARENT_VISIT_MS = '1500';
@@ -156,7 +156,7 @@ test('見たよスタンプ：わが子にだけ・1日1回・花が咲く・子
   k2.s.disconnect(); await sleep(400);
   const k3 = await connect(U.kid.cookie); await sleep(150);
   assert.ok(!k3.events.some(e => e.ev === 'cheer'));
-  // 森のデータ：母達の木・保護者からはほかの子の目標名は出ない
+  // 森のデータ：家族の木・保護者からはほかの子の目標名は出ない
   const f = (await http('GET', '/api/forest', null, U.mama.cookie)).data;
   assert.equal(f.moms.flowers, before.moms.flowers + 1);
 });

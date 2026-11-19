@@ -94,7 +94,7 @@
   fill(40, 28, 45, 31, 'm');
   fill(36, 23, 38, 23, 'k');                 // 受付
   fill(35, 21, 35, 22, 'B');                 // 下駄箱
-  // 母達の木と、まわりのソファ3つ（2人がけ）。保護者はロビーのここにすわる
+  // 家族の木と、まわりのソファ3つ（2人がけ）。保護者はロビーのここにすわる
   fill(46, 21, 50, 24, 'r');
   set(48, 23, 'Y'); set(49, 23, 'Y');
   const SOFAS = [
@@ -156,7 +156,7 @@
   const tileCenter = (tx, ty) => ({ x: (tx + 0.5) * TILE, y: (ty + 0.5) * TILE });
   // 椅子の向き：机が上にあれば上向き、下にあれば下向き
   const seatFacing = (tx, ty) => {
-    if (tileAt(tx, ty) === 'O') return 'up'; // ソファは母達の木のほうを向く
+    if (tileAt(tx, ty) === 'O') return 'up'; // ソファは家族の木のほうを向く
     const up = tileAt(tx, ty - 1), down = tileAt(tx, ty + 1);
     if (up === 'D' || up === 'b' || up === 'q') return 'up';
     if (down === 'D' || down === 'b' || down === 'q') return 'down';

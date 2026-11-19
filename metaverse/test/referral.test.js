@@ -125,7 +125,7 @@ test('ペア自習チャレンジ：7日間2人とも🔥なら、2人に限定�
   assert.equal(R.settlePair(U.taro.id, new Date(`${G.addDays(start, 6)}T23:30:00+09:00`)), null, '2回目はなし');
 });
 
-test('保護者の紹介：入塾したら母達の木に🌷・保護者に＋50ポイント', async () => {
+test('保護者の紹介：入塾したら家族の木に🌷・保護者に＋50ポイント', async () => {
   const r = await http('POST', '/api/trial/start', { code: U.mama.code, name: 'はな', grade: '中1' });
   assert.equal(r.status, 200);
   const id = (await http('GET', '/api/me', null, r.cookie)).data.user.id;
