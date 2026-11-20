@@ -50,7 +50,8 @@ async function walk(c, tx, ty) {
 let owner, stu, tch;
 test('準備', async () => {
   owner = (await http('POST', '/api/setup', { displayName: '三浦', loginId: 'owner', password: 'ownerpass1' })).cookie;
-  await http('POST', '/api/admin/users', { role: 'student', displayName: 'はな', loginId: 'hana', password: 'password123' }, owner);
+  await http('PATCH', '/api/admin/kanken/config', { enabled: false }, owner); // 入室前の漢字テストはこのテストでは出さない
+  await http('POST', '/api/admin/users', { role: 'student', displayName: 'はな', loginId: 'hana', password: 'password123', grade: '小5' }, owner);
   await http('POST', '/api/admin/users', { role: 'teacher', displayName: '佐藤', loginId: 'sato', password: 'password123', rooms: ['class2'] }, owner);
   stu = (await http('POST', '/api/login', { loginId: 'hana', password: 'password123' })).cookie;
   tch = (await http('POST', '/api/login', { loginId: 'sato', password: 'password123' })).cookie;

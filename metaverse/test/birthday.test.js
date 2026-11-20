@@ -32,6 +32,7 @@ const notToday = () => (today() === '01-01' ? '01-02' : '01-01');
 let owner; const U = {};
 test('準備：誕生日の登録は月・日だけ。おかしな日付は受けつけない', async () => {
   owner = (await http('POST', '/api/setup', { displayName: '三浦', loginId: 'owner', password: 'ownerpass1' })).cookie;
+  await http('PATCH', '/api/admin/kanken/config', { enabled: false }, owner); // 入室前の漢字テストはこのテストでは出さない
   const add = async (k, body) => {
     const r = await http('POST', '/api/admin/users', { password: 'password123', ...body, loginId: k, displayName: k }, owner);
     assert.equal(r.status, 201, k);

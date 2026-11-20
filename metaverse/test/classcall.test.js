@@ -70,6 +70,7 @@ let owner;
 const U = {};
 test('準備', async () => {
   owner = (await http('POST', '/api/setup', { displayName: '三浦', loginId: 'owner', password: 'ownerpass1' })).cookie;
+  await http('PATCH', '/api/admin/kanken/config', { enabled: false }, owner); // 入室前の漢字テストはこのテストでは出さない
   const add = async (key, body) => {
     const r = await http('POST', '/api/admin/users', { password: 'password123', ...body, loginId: key, displayName: key }, owner);
     assert.equal(r.status, 201, key);
@@ -78,8 +79,8 @@ test('準備', async () => {
   await add('tch1', { role: 'teacher', rooms: ['class2'] });
   await add('tch2', { role: 'teacher', rooms: ['class2'] });
   await add('tch3', { role: 'teacher', rooms: ['class2'], permissions: { enter_classroom: true, start_class_call: true, share_screen: false, handle_students: true, start_private_call: true, manage_classroom: false } });
-  await add('stu1', { role: 'student' });
-  await add('stu2', { role: 'student' });
+  await add('stu1', { role: 'student', grade: '小5' }); // 教室2は小学生自習室（授業もできる）
+  await add('stu2', { role: 'student', grade: '小5' });
   for (const k of Object.keys(U)) U[k].c = await connect(U[k].cookie);
 });
 
@@ -137,7 +138,7 @@ test('トークン：教室にいる生徒は聞くだけ。教室の外・授�
   assert.deepEqual(g.canPublishSources || [], []);
   assert.equal(g.canSubscribe, true);
   assert.equal(jwt(r.token).sub, `u-${U.stu1.id}`);
-  assert.equal(await walk(U.stu2.c, 10, 23), true); // 自習室（授業の教室ではない）
+  assert.equal(await walk(U.stu2.c, 25, 16), true); // ろうか（授業の教室ではない）
   assert.equal((await ask(U.stu2.c, 'lk-token')).ok, false);
 });
 

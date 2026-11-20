@@ -44,6 +44,7 @@ const today = () => G.jst().day;
 let owner; const U = {};
 test('準備：高校生2人・中学生1人', async () => {
   owner = (await http('POST', '/api/setup', { displayName: '三浦', loginId: 'owner', password: 'ownerpass1' })).cookie;
+  await http('PATCH', '/api/admin/kanken/config', { enabled: false }, owner); // 入室前の漢字テストはこのテストでは出さない
   const add = async (k, body) => {
     const r = await http('POST', '/api/admin/users', { password: 'password123', ...body, loginId: k, displayName: k }, owner);
     assert.equal(r.status, 201, k + JSON.stringify(r.data));
@@ -51,7 +52,7 @@ test('準備：高校生2人・中学生1人', async () => {
   };
   await add('hs1', { role: 'student', grade: '高1' });
   await add('hs2', { role: 'student', grade: '高2' });
-  await add('jh1', { role: 'student', grade: '小6' });
+  await add('jh1', { role: 'student', grade: '中2' });
 });
 
 test('教室3は高校生自習室になっている。高校生だけ入れて、中学生などは自習室', async () => {

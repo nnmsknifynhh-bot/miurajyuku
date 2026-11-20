@@ -71,6 +71,7 @@ let owner;
 const U = {};
 test('準備：先生（教室1・教室2）、個別通話の権限がない先生、生徒3人', async () => {
   owner = (await http('POST', '/api/setup', { displayName: '三浦', loginId: 'owner', password: 'ownerpass1' })).cookie;
+  await http('PATCH', '/api/admin/kanken/config', { enabled: false }, owner); // 入室前の漢字テストはこのテストでは出さない
   const add = async (key, body) => {
     const r = await http('POST', '/api/admin/users', { password: 'password123', ...body, loginId: key, displayName: key }, owner);
     assert.equal(r.status, 201, key);
@@ -79,7 +80,8 @@ test('準備：先生（教室1・教室2）、個別通話の権限がない先
   await add('tch1', { role: 'teacher', rooms: ['class2'] });
   await add('tch2', { role: 'teacher', rooms: [] }); // 担当の教室なし（教室2の生徒は担当外）
   await add('tch4', { role: 'teacher', rooms: ['class2'], permissions: { enter_classroom: true, start_class_call: true, start_private_call: false, share_screen: true, handle_students: true } });
-  for (const k of ['stu1', 'stu2', 'stu3']) await add(k, { role: 'student' });
+  for (const k of ['stu1', 'stu2']) await add(k, { role: 'student', grade: '小5' }); // 教室2は小学生自習室
+  await add('stu3', { role: 'student' });
   for (const k of Object.keys(U)) U[k].c = await connect(U[k].cookie);
   assert.equal(await walk(U.tch1.c, 25, 1), true);
   assert.equal(await walk(U.tch2.c, 25, 16), true); // ろうか
@@ -102,9 +104,11 @@ test('個別通話の権限がない先生は呼び出せない', async () => {
   assert.equal(r.ok, false); assert.match(r.error, /権限/);
 });
 
-test('担当外の教室にいる生徒は呼び出せない（自習室の生徒は呼び出せる）', async () => {
-  const r = await ask(U.tch2.c, 'pc-invite', { studentId: U.stu1.id });
-  assert.equal(r.ok, false); assert.match(r.error, /担当の教室か自習室/);
+test('担当の教室がない先生も、自習の部屋（自習室・小学生自習室）の生徒は呼び出せる', async () => {
+  const r = await ask(U.tch2.c, 'pc-invite', { studentId: U.stu1.id }); // 小学生自習室
+  assert.equal(r.ok, true, r.error);
+  await ask(U.tch2.c, 'pc-end', { callId: r.callId });
+  await sleep(50);
   const ok = await ask(U.tch2.c, 'pc-invite', { studentId: U.stu3.id });
   assert.equal(ok.ok, true);
   await ask(U.tch2.c, 'pc-end', { callId: ok.callId });
