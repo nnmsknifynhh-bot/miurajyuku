@@ -180,7 +180,8 @@ app.get('/api/me/ganbari', auth.requireAuth, (req, res) => {
   const today = ganbari.jst().day;
   const term = ganbari.termOf(today, c);
   const u = req.user;
-  res.json({
+  const dg = isESUser(u) ? startphoto.goalOf(u.id) : null;
+  res.json({ esShop: isESUser(u) ? { boughtThisMonth: ganbari.esBoughtThisMonth(u.id) } : null, dailyGoal: dg ? { minutes: dg, all: ganbari.dayAll(u.id, today), done: ganbari.dayAll(u.id, today) >= dg } : null,
     grade: u.grade || null, todayMinutes: ganbari.dayTotal(u.id, today), todayAll: ganbari.dayAll(u.id, today),
     termMinutes: term ? ganbari.minutesBetween(u.id, term.start, term.end) : 0, term,
     points: ganbari.points(u.id), streak: u.role === 'parent' ? parents.visitStreak(u.id) : ganbari.streak(u.id), equip: ganbari.getEquip(u.id),
@@ -424,12 +425,16 @@ app.get('/api/study/photos', auth.requireAuth, (req, res) => {
 });
 
 // ═════ 入室前の「今日最初に取り組むページ」の写真 ═════
+const isESUser = (u) => u.role === 'student' && ganbari.isES(u.grade);
 app.get('/api/me/start-photo', auth.requireAuth, async (req, res) => {
-  try { res.json({ required: await startphoto.requiredAsync(req.user) }); } catch (e) { res.json({ required: false }); }
+  // 小学生は、写真といっしょに「今日の目標時間」を決める
+  const goal = isESUser(req.user) ? { choices: startphoto.GOAL_CHOICES, last: startphoto.lastGoal(req.user.id) || 45 } : null;
+  try { res.json({ required: await startphoto.requiredAsync(req.user), goal }); } catch (e) { res.json({ required: false, goal }); }
 });
 app.post('/api/me/start-photo', express.raw({ type: 'image/jpeg', limit: '450kb' }), auth.requireAuth, async (req, res) => {
   if (req.user.role !== 'student') return bad(res, '生徒の機能です', 403);
   try {
+    if (isESUser(req.user) && req.get('X-Goal-Minutes')) { const ge = startphoto.setGoal(req.user.id, req.get('X-Goal-Minutes')); if (ge) return bad(res, ge, 400); }
     const err = await startphoto.save(req.user.id, req.body);
     if (err) return bad(res, err, 400);
     res.json({ ok: true });
@@ -754,7 +759,7 @@ admin.post('/presence/:id/disconnect', requireOwner, (req, res) => {
 // ── がんばり（オーナー） ──
 admin.get('/ganbari/config', requireOwner, (req, res) => {
   const c = ganbari.getConfig();
-  res.json({ config: c, terms: ganbari.allTerms(c), current: ganbari.termOf(ganbari.jst().day, c), grades: ganbari.GRADES, stageNames: ganbari.STAGE_NAMES, events: ganbari.EVENTS });
+  res.json({ config: c, terms: ganbari.allTerms(c), current: ganbari.termOf(ganbari.jst().day, c), grades: ganbari.GRADES, stageNames: ganbari.STAGE_NAMES, events: ganbari.EVENTS, shop: ganbari.SHOP });
 });
 admin.patch('/ganbari/config', requireOwner, (req, res) => {
   const err = ganbari.setConfig(req.body, req.user.id);

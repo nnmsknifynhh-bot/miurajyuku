@@ -1,5 +1,6 @@
 // 第2段階 リアルタイム機能テスト：入室チェック（権限・定員）、座席、挙手、切断
 process.env.DB_PATH = ':memory:';
+process.env.GHOST_MS = '200'; // 帰った生徒を残す時間（テストでは短く）
 const test = require('node:test');
 const assert = require('node:assert');
 const { io: ioc } = require('socket.io-client');
@@ -244,7 +245,9 @@ test('切断すると人数とほかの人の画面から消える', async () =>
   const watcher = students[9].c;
   const before = watcher.rooms.class1.students;
   st.c.s.disconnect();
-  await sleep(300);
+  await sleep(100);
+  assert.ok(!watcher.events.some(e => e.ev === 'user-left' && e.data.id === st.id), '自習の部屋から帰った生徒は、ほかの生徒の画面にしばらく残る');
+  await sleep(400);
   assert.ok(watcher.events.some(e => e.ev === 'user-left' && e.data.id === st.id));
   assert.equal(watcher.rooms.class1.students, before - 1);
 });

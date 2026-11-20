@@ -33,6 +33,8 @@
       closed.hidden = open;
       if (!open) closed.textContent = '🔒 今は着せかえ期間ではありません。' + (me.dressup.next ? `次は ${fmt(me.dressup.next.start)}〜${fmt(me.dressup.next.end)}${me.dressup.next.name ? '（' + me.dressup.next.name + '）' : ''} です。` : 'ポイントはそのままたまります。');
       else if (me.dressup.now) { closed.hidden = false; closed.textContent = `✨ 着せかえ期間中（〜${fmt(me.dressup.now.end)}まで）`; }
+      // 🎒 小学生：1か月に1回まで交換できる
+      if (me.esShop) { closed.hidden = false; closed.textContent = (open ? closed.textContent + '　' : '') + (me.esShop.boughtThisMonth ? '🎒 今月はもう交換したよ。来月またね！' : '🎒 小学生は1か月に1回、アイテムと交換できるよ'); }
       const box = $('#shop-items'); box.textContent = '';
       const equippedId = me.myItems ? me.myItems[g.shopSlot] : null;
       for (const it of me.shop.filter(i => i.slot === g.shopSlot && (i.available || i.owned))) {
@@ -46,9 +48,13 @@
           b = el('button', 'btn small' + (it.id === equippedId ? ' secondary' : ''), it.id === equippedId ? 'はずす' : 'つける');
           b.disabled = !open;
           b.onclick = () => doEquip(it.id === equippedId ? null : it.id);
+        } else if (it.locked) {
+          card.classList.add('locked');
+          b = el('button', 'btn small secondary', '🔒 中学生から');
+          b.disabled = true;
         } else {
           b = el('button', 'btn small' + (me.points.balance < it.price ? ' secondary' : ''), `${it.price}pt`);
-          b.disabled = !open || me.points.balance < it.price;
+          b.disabled = !open || me.points.balance < it.price || !!(me.esShop && me.esShop.boughtThisMonth);
           b.onclick = () => doBuy(it);
         }
         card.append(b);

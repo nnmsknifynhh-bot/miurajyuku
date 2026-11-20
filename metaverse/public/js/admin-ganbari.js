@@ -165,6 +165,19 @@
     };
     rule.append(jh.box, es.box, hs.box, grid, sgBox, seat[0], cam[0], saveRule);
 
+    // ═════ 🎒 小学生ショップ ═════
+    {
+      const esSec = section('🎒 小学生ショップ', 'チェックしたアイテムだけ、小学生が買えます（中学生の半分くらいの値段）。チェックしていないアイテムは「🔒 中学生から」と表示されます。小学生は1か月に1回まで交換できます。交換できる期間は「👕 着せかえ期間」と同じです。');
+      const grid = el('div', 'gb-grid');
+      const boxes = (cfg.shop || []).filter(i => !i.special).map(i => {
+        const cb = check(`${i.emoji} ${i.name}（${i.price}→${Math.max(10, Math.round(i.price / 2 / 10) * 10)}pt）`, c.esItems.includes(i.id));
+        cb[1].value = i.id; grid.append(cb[0]); return cb[1];
+      });
+      const sv = el('button', 'btn', '保存する');
+      sv.onclick = () => save({ esItems: boxes.filter(b => b.checked).map(b => b.value) }, '小学生ショップを保存しました');
+      esSec.append(grid, sv);
+    }
+
     // ═════ 学期と年度 ═════
     const termSec = section('📅 学期と年度', `今は ${cfg.current ? cfg.current.name : '学期の期間外'}です。保護者レポートは学期ごとに作れます。`);
     const t1 = dateInput(c.terms[0]), t2 = dateInput(c.terms[1]), t3 = dateInput(c.terms[2]);

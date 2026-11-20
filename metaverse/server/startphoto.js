@@ -30,6 +30,18 @@ async function pg() {
   return pool;
 }
 
+// ── 小学生の「今日の目標時間」（写真といっしょに決める。小さいので SQLite に） ──
+db.exec('CREATE TABLE IF NOT EXISTS daily_goals (user_id INTEGER NOT NULL, day TEXT NOT NULL, minutes INTEGER NOT NULL, PRIMARY KEY (user_id, day))');
+const GOAL_CHOICES = [15, 20, 30, 45, 60, 90, 120];
+function setGoal(userId, minutes) {
+  const m = Number(minutes);
+  if (!GOAL_CHOICES.includes(m)) return '目標の時間をえらんでください';
+  db.prepare('INSERT INTO daily_goals (user_id, day, minutes) VALUES (?, ?, ?) ON CONFLICT (user_id, day) DO UPDATE SET minutes = excluded.minutes').run(userId, jstDay(), m);
+  return null;
+}
+function goalOf(userId, day = jstDay()) { const r = db.prepare('SELECT minutes FROM daily_goals WHERE user_id = ? AND day = ?').get(userId, day); return r ? r.minutes : null; }
+function lastGoal(userId) { const r = db.prepare('SELECT minutes FROM daily_goals WHERE user_id = ? ORDER BY day DESC LIMIT 1').get(userId); return r ? r.minutes : null; }
+
 // ── 今日撮った人（入室のチェックはすぐ答える必要があるので、メモリにも持つ） ──
 let todaySet = { day: null, ids: new Set(), loaded: false };
 async function loadToday() {
@@ -100,4 +112,4 @@ async function getImage(userId, day) {
   return r ? Buffer.from(r.image) : null;
 }
 
-module.exports = { enabledNow, required, requiredAsync, save, listDay, getImage, KEEP_DAYS, MAX_BYTES, _loadToday: loadToday };
+module.exports = { GOAL_CHOICES, setGoal, goalOf, lastGoal, enabledNow, required, requiredAsync, save, listDay, getImage, KEEP_DAYS, MAX_BYTES, _loadToday: loadToday };

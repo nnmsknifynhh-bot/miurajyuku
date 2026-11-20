@@ -366,3 +366,11 @@ body.is-trial .not-trial { display: none !important; }
 .wc-btns { display: flex; gap: 8px; flex-wrap: wrap; }
 .wc-btns button { font-size: 24px; min-width: 52px; min-height: 48px; border-radius: 14px; border: 2px solid var(--line); background: #fffaf0; }
 .wc-close { position: absolute; top: 4px; right: 6px; border: 0; background: none; font-size: 20px; color: var(--muted); }
+
+/* 🎯 小学生：今日の目標時間 */
+.sp-goal { display: grid; gap: 6px; background: #eef7ff; border: 2px solid #9ccbff; border-radius: 12px; padding: 8px 10px; }
+.sp-goal-btns { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.sp-goal-btns button { min-width: 54px; min-height: 40px; border-radius: 12px; border: 2px solid #9ccbff; background: #fff; font-weight: 800; font-size: 15px; }
+.sp-goal-btns button.on { background: #2f7de1; border-color: #2f7de1; color: #fff; }
+.goal-chip { background: #eef7ff !important; border-color: #9ccbff !important; }
+.shop-item.locked { opacity: .55; }

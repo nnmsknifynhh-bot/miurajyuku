@@ -98,3 +98,33 @@ test('小学生の木：小学生の時間で育つ', () => {
   assert.equal(f.trees[4].name, '小学生の木');
   assert.deepEqual(f.trees[4].grades, ['小1', '小2', '小3', '小4', '小5', '小6']);
 });
+
+test('小学生ショップ：買えるのは小学生用だけ・半分くらいの値段・1か月に1回まで。ほかは🔒', () => {
+  const { db } = require('../server/db.js');
+  G.setManual(U.es5.id, G.addDays(today(), -3), 600, null); // 60ポイント分
+  const shop = G.shopFor(U.es5.id);
+  const cap = shop.find(i => i.id === 'cap'), dragon = shop.find(i => i.id === 'dragon');
+  assert.equal(cap.price, 10); assert.equal(cap.locked, false);
+  assert.equal(dragon.locked, true);
+  assert.match(G.buy(U.es5.id, 'dragon'), /中学生になったら/);
+  assert.equal(G.buy(U.es5.id, 'cap'), null);
+  assert.match(G.buy(U.es5.id, 'chick'), /1か月に1回/);
+  assert.equal(G.esBoughtThisMonth(U.es5.id), true);
+  // 先月に買ったことにすると、今月また買える
+  db.prepare("UPDATE shop_owned SET bought_at = '2000-01-15T00:00:00.000Z' WHERE user_id = ?").run(U.es5.id);
+  assert.equal(G.buy(U.es5.id, 'chick'), null);
+  // 中学生はふつう
+  assert.equal(G.shopFor(U.jh2.id).find(i => i.id === 'cap').price, 20);
+});
+
+test('小学生の今日の目標時間：写真といっしょに決める（小学生だけ）', async () => {
+  const S = require('../server/startphoto.js');
+  assert.equal(S.setGoal(U.es5.id, 7), '目標の時間をえらんでください');
+  assert.equal(S.setGoal(U.es5.id, 45), null);
+  assert.equal(S.goalOf(U.es5.id), 45);
+  const g = (await http('GET', '/api/me/ganbari', null, U.es5.cookie)).data.dailyGoal;
+  assert.equal(g.minutes, 45);
+  assert.equal((await http('GET', '/api/me/ganbari', null, U.jh2.cookie)).data.dailyGoal, null);
+  assert.equal((await http('GET', '/api/me/start-photo', null, U.jh2.cookie)).data.goal, null, '中学生は目標なし');
+  assert.ok((await http('GET', '/api/me/start-photo', null, U.es5.cookie)).data.goal.choices.includes(45));
+});

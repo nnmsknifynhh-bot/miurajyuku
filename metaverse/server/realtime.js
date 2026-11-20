@@ -55,6 +55,7 @@ function pub(p) {
     hs: !!p.hs, title: p.title || null, plan: p.plan || null, // 高校生：称号・今日やること（🔥は週で数える）
     equip: equipView(p.equip), streak: p.streak || 0, trial: !!p.user.trial_until,
     asa: !!p.asa, // 🌅 今日の朝活に成功
+    goalDone: !!p.goalDone, // 🎯 小学生：今日の目標時間を達成（時間は本人にしか見せない）
     follow: p.follow || null, fx: p.fx || null, bloom: !!p.bloom, // 季節の2章イベント：うしろについて歩く仲間・特別な日の演出（12/25・7/7）
   };
 }
@@ -93,9 +94,25 @@ const callOf = (p) => (p && p.callId ? calls.get(p.callId) || null : null);
 function inActiveCall(p) { const c = callOf(p); return !!(c && c.status === 'active'); }
 
 // 部屋ごとの人数（定員の対象は生徒のみ。先生・オーナーは数えない）
+// 自習室から帰った生徒は、ほかの生徒・保護者の画面に10分のこす（「自分も帰ろう」とならないように）。先生・オーナーには本当の状態
+const GHOST_MS = Number(process.env.GHOST_MS || 10 * 60_000);
+const ghosts = new Map(); // userId -> { p, timer }
+const seesGhosts = (viewer) => !isStaff(viewer);
+function addGhost(p) {
+  const g = { p, timer: setTimeout(() => removeGhost(p.id, true), GHOST_MS) };
+  if (g.timer.unref) g.timer.unref();
+  ghosts.set(p.id, g);
+}
+function removeGhost(id, announce) {
+  const g = ghosts.get(id);
+  if (!g) return;
+  clearTimeout(g.timer); ghosts.delete(id);
+  if (announce && io) { for (const o of online.values()) if (seesGhosts(o)) o.socket.emit('user-left', { id }); broadcastRooms(); }
+}
 function roomCounts() {
   const c = {};
   for (const r of getRooms()) c[r.id] = { name: r.name, type: r.type, capacity: r.capacity, students: 0, staff: 0 };
+  for (const g of ghosts.values()) if (g.p.room && c[g.p.room]) c[g.p.room].students++;
   for (const p of online.values()) {
     if (!p.room || !c[p.room]) continue;
     if (p.user.role === 'student') c[p.room].students++; else c[p.room].staff++;
@@ -437,6 +454,7 @@ function attach(httpServer) {
     p.follow = user.role === 'student' && !user.trial_until ? fun.followersOf(p.id) : null;
     p.fx = p.follow ? fun.fxOf(p.id) : null;
     p.asa = user.role === 'student' && !user.trial_until ? fun.morningDone(p.id) : false;
+    { const g = user.role === 'student' ? startphoto.goalOf(p.id) : null; p.goalDone = !!(g && ganbari.dayAll(p.id, ganbari.jst().day) >= g); }
     if (user.role === 'student' && myseat.checkKeep(p.id)) setTimeout(() => { socket.emit('myseat-lost'); broadcastMySeats(); }, 500); // 🔥がとぎれていたらマイ席を返す
     p.bloom = user.role === 'student' && !user.trial_until ? fun.bloomOf(p.id) : false;
     refreshHS(p, false);
@@ -457,6 +475,7 @@ function attach(httpServer) {
     // 授業中の先生が再接続したら、授業の自動終了を取り消す
     const myClass = p.room && classes.get(p.room);
     if (myClass && myClass.teacherId === p.id) { clearTimeout(myClass.graceTimer); myClass.graceTimer = null; }
+    removeGhost(p.id, false); // 10分以内にもどってきたら、そのまま
     online.set(p.id, p);
     if (isStaff(p)) socket.join('staff');
 
@@ -468,7 +487,7 @@ function attach(httpServer) {
     }
 
     socket.emit('init', {
-      me: { ...pub(p), bday: !!p.bday }, users: [...online.values()].filter(o => o !== p).map(o => pubFor(o, p)), rooms: roomCounts(), reactions: user.role === 'parent' ? PARENT_REACTIONS : REACTIONS,
+      me: { ...pub(p), bday: !!p.bday }, users: [...online.values()].filter(o => o !== p).map(o => pubFor(o, p)).concat(seesGhosts(p) ? [...ghosts.values()].filter(g => g.p.id !== p.id).map(g => pubFor(g.p, p)) : []), rooms: roomCounts(), reactions: user.role === 'parent' ? PARENT_REACTIONS : REACTIONS,
       visit: visit ? { endsAt: visit.endsAt, again: visit.again, meeting: !!visit.meeting, mendan: !!visit.mendan } : null,
       classes: classState(), classCall: livekit.enabled, testQueue: user.role === 'parent' ? null : testState(),
       mySeats: mySeatsFor(p),
@@ -883,7 +902,11 @@ function attach(httpServer) {
       if (p.user.role === 'student' && SM.isStudyRoom(p.room) && !p.away) studyGaps.set(p.id, { at: Date.now(), seat: p.seat, room: p.room });
       online.delete(p.id);
       pendingMoves.delete(p.id);
-      io.emit('user-left', { id: p.id });
+      if (p.user.role === 'student' && SM.isStudyRoom(p.room)) {
+        // ほかの生徒・保護者の画面には10分のこす（先生・オーナーにはすぐ知らせる）
+        addGhost(p);
+        for (const o of online.values()) if (!seesGhosts(o)) o.socket.emit('user-left', { id: p.id });
+      } else io.emit('user-left', { id: p.id });
       broadcastRooms();
     });
   });
@@ -922,6 +945,8 @@ function attach(httpServer) {
         if (!p) continue;
         const s = ganbari.streak(id);
         if (s !== p.streak) { p.streak = s; io.emit('user-updated', { id, streak: s }); }
+        // 🎯 小学生：今日の目標時間に届いたら、名札に✅（時間はほかの子には見せない）
+        if (!p.goalDone) { const g = startphoto.goalOf(id); if (g && ganbari.dayAll(id, ganbari.jst().day) >= g) { p.goalDone = true; io.emit('user-updated', { id, goalDone: true }); p.socket.emit('goal-done', { minutes: g }); } }
         p.socket.emit('study-minute');
       }
       // ⭐ マイ席：🔥がとぎれたら返す（日がかわったとき）
@@ -1080,7 +1105,10 @@ function shownToday(m) {
 // 今日の自習時間（表示用に丸めたもの）を更新して、変わったら全員に知らせる
 function updateToday(p) {
   if (p.user.role !== 'student') return;
-  const v = shownToday(ganbari.dayAll(p.id, ganbari.jst().day));
+  const all = ganbari.dayAll(p.id, ganbari.jst().day);
+  // 日がかわったら、目標の✅ももどす
+  { const g = startphoto.goalOf(p.id), done = !!(g && all >= g); if (done !== !!p.goalDone) { p.goalDone = done; if (io) io.emit('user-updated', { id: p.id, goalDone: done }); } }
+  const v = shownToday(all);
   if (v === p.today10) return;
   p.today10 = v;
   if (io) io.emit('user-updated', { id: p.id, today: v });
@@ -1173,7 +1201,7 @@ function presence() {
   }));
 }
 
-function _reset() { online.clear(); lastPos.clear(); lastOffline.clear(); calls.clear(); studyPhotos.clear(); }
+function _reset() { for (const g of ghosts.values()) clearTimeout(g.timer); ghosts.clear(); online.clear(); lastPos.clear(); lastOffline.clear(); calls.clear(); studyPhotos.clear(); }
 
 // 家族の木が変わったら、みんなの画面を更新
 // ── 保護者会（予定の時刻で自動で始まり・終わる） ──

@@ -460,7 +460,7 @@
     const tag = ROLE_TAG[u.role];
     // 高校生：称号を名前の前に、🔥は「週」で数える
     const fire = u.hs ? (u.streak >= 1 ? ` 🔥${u.streak}週` : '') : (u.streak >= 1 ? ` 🔥${u.streak}` : '');
-    const label = (u.myChild ? '💗 ' : '') + (u.bday ? '🎂 ' : '') + (tag ? tag + ' ' : '') + (u.title ? `【${u.title}】` : '') + u.name + fire + (u.asa ? ' 🌅' : '');
+    const label = (u.myChild ? '💗 ' : '') + (u.bday ? '🎂 ' : '') + (tag ? tag + ' ' : '') + (u.title ? `【${u.title}】` : '') + u.name + fire + (u.asa ? ' 🌅' : '') + (u.goalDone ? ' ✅' : '');
     ctx.font = 'bold 12px sans-serif';
     const tw = Math.min(200, ctx.measureText(label).width + 12);
     ctx.fillStyle = opts.isMe ? 'rgba(47,125,225,.95)' : TAG_BG[u.role];

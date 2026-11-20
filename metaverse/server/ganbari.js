@@ -141,6 +141,7 @@ function defaults(today = jst()) {
     trees: [{ name: '中1の木', grades: ['中1'] }, { name: '中2の木', grades: ['中2'] }, { name: '中3の木', grades: ['中3'] }, HS_TREE, ES_TREE],
     // 高校生（高校生自習室）の数え方。時間帯・上限・曜日は中学生とは別。週のノルマ：週○回・1回○分以上
     es: { ...ES_RULES(), esV1: true }, // 小学生の数え方（時間帯・上限・曜日）
+    esItems: [...ES_ITEMS_DEFAULT], // 小学生ショップで買えるアイテム
     // 高校生：週のメダル（週の勉強時間の合計で🥉🥈🥇。ボーナスはいちばん上のメダルの分だけ）
     hs: { window: { start: '16:00', end: '23:00' }, window2: null, dailyCap: 360, weekly: null, medals: DEFAULT_MEDALS.map(m => ({ ...m })), lateMinutes: 15, medalsV1: true },
     stages: [0, 5, 15, 30, 50, 80], // 木の段階（平均時間・時間単位）
@@ -320,6 +321,10 @@ function setConfig(patch, actorId) {
     }
     if (h.lateMinutes !== undefined) { if (!int(h.lateMinutes, 1, 240)) return '高校生：遅れの通知は1〜240分後にしてください'; hs.lateMinutes = h.lateMinutes; }
     c.hs = hs;
+  }
+  if (p.esItems !== undefined) {
+    if (!Array.isArray(p.esItems)) return '小学生ショップのアイテムが正しくありません';
+    c.esItems = [...new Set(p.esItems.filter(id => { const it = itemById(id); return it && !it.special; }))];
   }
   if (p.es !== undefined) {
     const es = { ...c.es };
@@ -640,6 +645,17 @@ const SHOP = [
   { id: 'k_dragon', slot: 'costume', style: 'dragon', emoji: '🐉', name: 'ドラゴンの着ぐるみ', price: 800 },
 ];
 const itemById = (id) => SHOP.find(i => i.id === id);
+// 🎒 小学生ショップ：かわいい・シンプルなもの（男の子が多いので、かっこいい系も少し）を安めに。ほかは🔒「中学生になったら」
+const ES_ITEMS_DEFAULT = ['cap', 'ribbon', 'strawhat', 'helmet', 'gradcap', 'uniform', 'parka', 'jersey', 'glasses', 'sunglasses', 'goggles',
+  'wand', 'sword', 'shield', 'chick', 'cat', 'dog', 'rabbit', 'panda', 'k_bear', 'k_cat', 'k_penguin', 'k_dino'];
+const esPrice = (price) => Math.max(10, Math.round(price / 2 / 10) * 10); // 中学生の半分くらい
+const jstMonthOf = (iso) => new Date(new Date(iso).getTime() + 9 * 3600e3).toISOString().slice(0, 7);
+// 小学生：今月もう交換したか（1か月に1回まで）
+function esBoughtThisMonth(userId, date = new Date()) {
+  const m = jstMonthOf(date.toISOString());
+  return db.prepare('SELECT bought_at FROM shop_owned WHERE user_id = ? AND price > 0').all(userId).some(r => r.bought_at && jstMonthOf(r.bought_at) === m);
+}
+const gradeOfUser = (userId) => (db.prepare('SELECT grade FROM users WHERE id = ?').get(userId) || {}).grade;
 // 季節限定アイテムはやめた：持っていた人にはポイントを返し、つけていたらはずす
 const RETIRED = ['sakura', 'sunflower', 'maple', 'santa', 'pumpkin', 'snowman'];
 db.prepare(`DELETE FROM shop_owned WHERE item IN (${RETIRED.map(() => '?').join(', ')})`).run(...RETIRED);
@@ -689,10 +705,16 @@ function buy(userId, itemId, date = new Date()) {
   if (!dressupOpen(date)) return '今は着せかえ期間ではありません';
   if (owned(userId).includes(itemId)) return 'もう持っています';
   if (item.special) return 'このアイテムはお店では買えません';
+  let price = item.price;
+  if (isES(gradeOfUser(userId))) { // 小学生：小学生ショップのものだけ・安め・1か月に1回まで
+    if (!getConfig().esItems.includes(itemId)) return 'このアイテムは中学生になったら買えるよ';
+    if (esBoughtThisMonth(userId, date)) return '小学生は1か月に1回まで交換できるよ。来月またね';
+    price = esPrice(item.price);
+  }
   const pt = points(userId, date);
-  if (pt.balance < item.price) return `ポイントが足りません（あと${item.price - pt.balance}ポイント）`;
+  if (pt.balance < price) return `ポイントが足りません（あと${price - pt.balance}ポイント）`;
   db.prepare('INSERT INTO shop_owned (user_id, item, year_start, price, bought_at) VALUES (?, ?, ?, ?, ?)')
-    .run(userId, itemId, getConfig().yearStart, item.price, now());
+    .run(userId, itemId, getConfig().yearStart, price, now());
   return null;
 }
 function equip(userId, slot, itemId, date = new Date()) {
@@ -719,8 +741,13 @@ function equip(userId, slot, itemId, date = new Date()) {
 }
 function shopFor(userId) {
   const have = new Set(owned(userId));
+  const es = isES(gradeOfUser(userId)), esItems = es ? getConfig().esItems : null;
   return SHOP.filter(i => !i.special || have.has(i.id)) // 特別なアイテムは、もらった人にだけ見える
-    .map(i => ({ ...i, owned: have.has(i.id), available: true }));
+    .map(i => {
+      if (!es || i.special) return { ...i, owned: have.has(i.id), available: true };
+      const ok = esItems.includes(i.id);
+      return { ...i, price: ok ? esPrice(i.price) : i.price, owned: have.has(i.id), available: true, locked: !ok && !have.has(i.id) };
+    });
 }
 
 // ───────── 目標の短冊 ─────────
@@ -1003,7 +1030,7 @@ module.exports = {
   normBirthday, birthdayInfo, celebrateBirthday,
   creditGap,
   streakMinFor,
-  ruleFor, WEEKDAYS, groupOf, isES, ES_GRADES,
+  ruleFor, WEEKDAYS, groupOf, isES, ES_GRADES, esBoughtThisMonth, esPrice,
   SLOTS, EVENTS, currentEvent, dressupOpen, dressupInfo,
   GRADES, STAGE_NAMES, SHOP, jst, addDays, getConfig, setConfig, termOf, allTerms, dayTotal, dayAll, allBetween, minutesBetween, daysBetween, setManual, tick,
   streak, points, owned, getEquip, buy, equip, shopFor, setGoal, goalOf, listGoals, reviewGoal, forest, studentSummary, studyDetail, newYear,

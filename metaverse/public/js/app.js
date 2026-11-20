@@ -37,7 +37,7 @@
     // 生徒は、入室の前に漢字の読みテスト（必要なときだけ）
     if (u.role === 'student') {
       try { if ((await api('GET', '/api/quiz/status')).required) await runQuiz(); } catch (e) { /* テストなしで入室 */ }
-      try { if ((await api('GET', '/api/me/start-photo')).required) await runStartPhoto(); } catch (e) { /* 写真なしで入室（サーバーが止めたらもう一度） */ }
+      try { const sp = await api('GET', '/api/me/start-photo'); if (sp.required) await runStartPhoto(sp.goal); } catch (e) { /* 写真なしで入室（サーバーが止めたらもう一度） */ }
     }
     connect();
     requestAnimationFrame(loop);
@@ -75,9 +75,19 @@
   }
 
   // ───────── 入室前の写真：今日最初に取り組むページ（その日はじめて入るとき） ─────────
-  function runStartPhoto() {
+  function runStartPhoto(goal) {
     const box = $('#start-photo'), video = $('#sp-video'), img = $('#sp-preview'), msg = $('#sp-msg');
-    let stream = null, blob = null, url = null;
+    let stream = null, blob = null, url = null, goalMin = goal ? goal.last : null;
+    // 小学生：今日の目標時間（前の日にえらんだ時間が最初から入っている）
+    $('#sp-goal').hidden = !goal;
+    if (goal) {
+      const gb = $('#sp-goal-btns'); gb.textContent = '';
+      for (const m of goal.choices) {
+        const b = el('button', m === goalMin ? 'on' : null, `${m}分`); b.type = 'button';
+        b.onclick = () => { goalMin = m; gb.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); };
+        gb.append(b);
+      }
+    }
     const stop = () => { if (stream) stream.getTracks().forEach(t => t.stop()); stream = null; };
     const show = (mode) => { // 'live' | 'preview' | 'file'
       video.hidden = mode !== 'live'; img.hidden = mode !== 'preview';
@@ -120,7 +130,7 @@
         if (!blob) return;
         $('#sp-enter').disabled = true; msg.textContent = '送っています…';
         try {
-          const r = await fetch('/api/me/start-photo', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
+          const r = await fetch('/api/me/start-photo', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'image/jpeg', ...(goalMin ? { 'X-Goal-Minutes': String(goalMin) } : {}) }, body: blob });
           if (!r.ok) { let m = '送れませんでした。もう一度ためしてね'; try { m = (await r.json()).error || m; } catch (e) {} throw new Error(m); }
           stop(); if (url) URL.revokeObjectURL(url);
           box.hidden = true; toast('📸 今日のページを撮ったよ。がんばろう！', 3500);
@@ -158,7 +168,8 @@
     });
     // 高校生が決めた曜日に来ていないとき（先生・オーナーへ）
     socket.on('student-late', ({ name, weekday, time }) => { toast(`⏰ ${name}さんがまだ来ていません（${weekday}曜 ${time}〜の予定）`, 9000); chime(); });
-    socket.on('study-minute', () => { if (state.user && state.user.role === 'student') { refreshWeek(); refreshFun(); } });
+    socket.on('study-minute', () => { if (state.user && state.user.role === 'student') { refreshWeek(); refreshFun(); refreshGoal(); } });
+    socket.on('goal-done', ({ minutes }) => { toast(`🎯 今日の目標 ${minutes}分 たっせい！ すごいね！`, 6000); chime(0.2); refreshGoal(); });
     // 季節のお楽しみ
     // ── スピーキング・ライティングテストの順番待ち ──
     socket.on('test-queue', (q) => { state.testQueue = q; renderTest(); });
@@ -219,7 +230,8 @@
     });
     // 今日の写真を撮っていない（サーバーが入室を止めた）とき
     socket.on('photo-required', async () => {
-      await runStartPhoto();
+      let goal = null; try { goal = (await api('GET', '/api/me/start-photo')).goal; } catch (e) {}
+      await runStartPhoto(goal);
       socket.connect();
     });
     socket.on('connect_error', (err) => {
@@ -236,7 +248,7 @@
       state.path = []; state.pathSeat = null; state.ready = true;
       state.testQueue = d.testQueue || null;
       state.mySeats = d.mySeats || [];
-      loadBoard(); loadMorning();
+      loadBoard(); loadMorning(); refreshGoal();
       if (state.user.role === 'student') setTimeout(goMySeat, 1800);
       { const mine = state.testQueue && state.testQueue.booths.find(b => b.userId === d.me.id); state.testBooth = mine ? mine.seat : null; }
       buildReactions(); updateAll(); refreshWeek(true); refreshFun(true); renderTest();
@@ -1551,6 +1563,16 @@
   $('#menu-invite').onclick = openInvite;
   // ───── 📝 先生の黒板 ─────
   const boardKey = () => 'juku-board-seen-' + (state.user ? state.user.id : '');
+  // 🎯 小学生：今日の目標時間（あと何分かは自分にだけ見える）
+  async function refreshGoal() {
+    if (!state.user || state.user.role !== 'student') return;
+    let g; try { g = (await api('GET', '/api/me/ganbari')).dailyGoal; } catch (e) { return; }
+    const chip = $('#goal-chip');
+    if (!g) { chip.hidden = true; return; }
+    chip.textContent = g.done ? `🎯 今日の目標 ${g.minutes}分 ✅ たっせい！` : `🎯 今日の目標 ${g.minutes}分・あと${g.minutes - g.all}分`;
+    chip.hidden = false;
+  }
+
   // 「ようこそ」リアクションのカード（30秒で消える）
   let wcTimer = null;
   function showWelcomeCard(text, kinds, onPick) {
