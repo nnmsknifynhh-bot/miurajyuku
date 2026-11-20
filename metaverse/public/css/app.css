@@ -390,3 +390,4 @@ body.is-trial .not-trial { display: none !important; }
 .family-gift p { margin: 4px 0 0; }
 .morning-bday { margin: 10px 0 0; padding: 8px 10px; border-radius: 10px; background: #fff6d6; font-weight: 800; }
 .pgift-who { margin: -6px 0 4px; font-weight: 800; color: #b06a00; }
+.hair-prev { width: 60px; height: 60px; display: block; margin: 0 auto; }

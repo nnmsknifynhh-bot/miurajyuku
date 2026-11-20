@@ -226,7 +226,7 @@
     treeSec.append(saveTree);
 
     // ═════ 着せかえ期間 ═════
-    const dsSec = section('👕 着せかえ期間', '着せかえ（帽子・洋服・眼鏡・杖や剣・ペット・着ぐるみ）を買ったり着たりできる期間です。期間の外では、着せかえは誰にも見えません（持っているアイテムとポイントは消えません）。');
+    const dsSec = section('👕 着せかえ期間', '着せかえ（帽子・洋服・眼鏡・杖や剣・ペット・髪型・着ぐるみ）を買ったり着たりできる期間です。期間の外では、着せかえは誰にも見えません（持っているアイテムとポイントは消えません）。');
     const modeWrap = el('div', 'gb-row');
     const mkRadio = (val, label) => { const l = el('label', 'gb-check'); const r = el('input'); r.type = 'radio'; r.name = 'ds-mode'; r.value = val; r.checked = c.dressup.mode === val; l.append(r, document.createTextNode(label)); modeWrap.append(l); return r; };
     const rAlways = mkRadio('always', 'いつでも'); mkRadio('periods', '期間を決める');

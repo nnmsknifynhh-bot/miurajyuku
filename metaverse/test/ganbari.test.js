@@ -371,3 +371,11 @@ test('新年度：ポイントと着せかえは引きつぎ、学年を1つ上�
   assert.equal(db.prepare('SELECT grade FROM users WHERE id = ?').get(U.b1.id).grade, '中3');
   assert.match((await http('POST', '/api/admin/ganbari/new-year', { terms: [`${y}-04-01`, `${y}-09-01`, `${y + 1}-01-01`] }, owner)).data.error, /後にして/);
 });
+
+test('髪型：お店で買ってつけられる（hair の場所）。小学生ショップにもある', () => {
+  const G2 = require('../server/ganbari.js');
+  assert.ok(G2.SLOTS.includes('hair'));
+  const hairs = G2.SHOP.filter(i => i.slot === 'hair').map(i => i.id);
+  for (const id of ['h_spiky', 'h_regent', 'h_pony']) assert.ok(hairs.includes(id), id);
+  assert.ok(G2.getConfig().esItems.includes('h_pony') && !G2.getConfig().esItems.includes('h_regent'));
+});

@@ -84,10 +84,10 @@ db.exec(`CREATE TABLE IF NOT EXISTS late_alerts (user_id INTEGER NOT NULL, day T
 db.exec(`CREATE TABLE IF NOT EXISTS bonus_points (user_id INTEGER NOT NULL, reason TEXT NOT NULL, points INTEGER NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (user_id, reason))`);
 db.exec(`CREATE TABLE IF NOT EXISTS birthday_cards (user_id INTEGER NOT NULL, year INTEGER NOT NULL, shown_at TEXT NOT NULL, PRIMARY KEY (user_id, year))`);
 // 着せかえの場所を増やした（洋服・手に持つもの・着ぐるみ）
-for (const col of ['clothes', 'hand', 'costume']) {
+for (const col of ['clothes', 'hand', 'costume', 'hair']) { // 髪型（hair）もあとから足した
   if (!db.prepare('PRAGMA table_info(avatar_equip)').all().some(c => c.name === col)) db.exec(`ALTER TABLE avatar_equip ADD COLUMN ${col} TEXT`);
 }
-const SLOTS = ['head', 'clothes', 'face', 'hand', 'pet', 'costume'];
+const SLOTS = ['head', 'clothes', 'face', 'hand', 'pet', 'costume', 'hair'];
 
 // ───────── 日付（日本時間） ─────────
 function jst(d = new Date()) {
@@ -197,6 +197,11 @@ function getConfig() {
     saved.es = { ...ES_RULES(), ...(saved.es || {}), esV1: true };
     saved.streakByGrade = { ...Object.fromEntries(ES_GRADES.map(g => [g, ES_STREAK_MIN])), ...(saved.streakByGrade || d.streakByGrade) };
     saved.esV1 = true;
+    setSetting('ganbari', JSON.stringify(saved));
+  }
+  if (Array.isArray(saved.esItems) && !saved.hairV1) { // 髪型を足したとき、小学生ショップにも足す（1回だけ）
+    saved.esItems = [...new Set([...saved.esItems, ...ES_HAIR])];
+    saved.hairV1 = true;
     setSetting('ganbari', JSON.stringify(saved));
   }
   let shs = saved.hs || {};
@@ -634,6 +639,17 @@ const SHOP = [
   { id: 'peacock', slot: 'pet', emoji: '🦚', name: 'くじゃく', price: 450 },
   { id: 'whale', slot: 'pet', emoji: '🐳', name: 'くじら', price: 600 },
   { id: 'brachio', slot: 'pet', emoji: '🦕', name: '首長りゅう', price: 800 },
+  // 髪型（形と色で表示。着ぐるみのときは見えない）
+  { id: 'h_mash', slot: 'hair', style: 'mash', emoji: '💇', name: 'マッシュヘア', price: 30 },
+  { id: 'h_long', slot: 'hair', style: 'long', emoji: '💇', name: 'ロングヘア', price: 30 },
+  { id: 'h_spiky', slot: 'hair', style: 'spiky', emoji: '💇', name: 'ツンツンヘア', price: 40 },
+  { id: 'h_pony', slot: 'hair', style: 'ponytail', emoji: '💇', name: 'ポニーテール', price: 40 },
+  { id: 'h_twin', slot: 'hair', style: 'twintail', emoji: '💇', name: 'ツインテール', price: 50 },
+  { id: 'h_bun', slot: 'hair', style: 'bun', emoji: '💇', name: 'おだんごヘア', price: 50 },
+  { id: 'h_regent', slot: 'hair', style: 'regent', emoji: '💇', name: 'リーゼント', price: 80 },
+  { id: 'h_mohawk', slot: 'hair', style: 'mohawk', emoji: '💇', name: 'モヒカン', price: 100 },
+  { id: 'h_afro', slot: 'hair', style: 'afro', emoji: '💇', name: 'アフロ', price: 120 },
+  { id: 'h_gold', slot: 'hair', style: 'gold', emoji: '💇', name: 'スーパー金髪ツンツン', price: 300 },
   // 着ぐるみ（体と頭をすっぽり。着ているあいだは帽子・洋服は表示しない）
   { id: 'k_bear', slot: 'costume', style: 'bear', emoji: '🐻', name: 'くまの着ぐるみ', price: 150 },
   { id: 'k_cat', slot: 'costume', style: 'cat', emoji: '😺', name: 'ねこの着ぐるみ', price: 150 },
@@ -646,8 +662,9 @@ const SHOP = [
 ];
 const itemById = (id) => SHOP.find(i => i.id === id);
 // 🎒 小学生ショップ：かわいい・シンプルなもの（男の子が多いので、かっこいい系も少し）を安めに。ほかは🔒「中学生になったら」
+const ES_HAIR = ['h_mash', 'h_long', 'h_spiky', 'h_pony', 'h_twin', 'h_bun']; // 小学生ショップの髪型
 const ES_ITEMS_DEFAULT = ['cap', 'ribbon', 'strawhat', 'helmet', 'gradcap', 'uniform', 'parka', 'jersey', 'glasses', 'sunglasses', 'goggles',
-  'wand', 'sword', 'shield', 'chick', 'cat', 'dog', 'rabbit', 'panda', 'k_bear', 'k_cat', 'k_penguin', 'k_dino'];
+  'wand', 'sword', 'shield', 'chick', 'cat', 'dog', 'rabbit', 'panda', 'k_bear', 'k_cat', 'k_penguin', 'k_dino', ...ES_HAIR];
 const esPrice = (price) => Math.max(10, Math.round(price / 2 / 10) * 10); // 中学生の半分くらい
 const jstMonthOf = (iso) => new Date(new Date(iso).getTime() + 9 * 3600e3).toISOString().slice(0, 7);
 // 小学生：今月もう交換したか（1か月に1回まで）

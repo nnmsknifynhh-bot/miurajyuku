@@ -39,7 +39,13 @@
       const equippedId = me.myItems ? me.myItems[g.shopSlot] : null;
       for (const it of me.shop.filter(i => i.slot === g.shopSlot && (i.available || i.owned))) {
         const card = el('div', 'shop-item' + (it.id === equippedId ? ' on' : ''));
-        card.append(el('div', 'emoji', it.emoji), el('div', 'nm', it.name));
+        if (it.slot === 'hair' && it.style && window.Render) { // 髪型：じっさいの頭をかいて見せる
+          const cv = document.createElement('canvas'); cv.className = 'hair-prev'; cv.width = 120; cv.height = 120;
+          const cx = cv.getContext('2d'); cx.scale(2.6, 2.6);
+          const st = window.__world && window.__world.state && window.__world.state.me;
+          window.Render.drawAvatar(cx, { color: (st && st.color) || '#64b5f6', role: 'student', dir: 'down', equip: { hair: it.style }, name: '' }, 23, 31, { time: 0, noTag: true });
+          card.append(cv, el('div', 'nm', it.name));
+        } else card.append(el('div', 'emoji', it.emoji), el('div', 'nm', it.name));
         if (it.special === 'birthday') card.append(el('div', 'lim', '🎁 誕生日プレゼント'));
         if (it.special === 'santa') card.append(el('div', 'lim', '🎅 サンタのプレゼント'));
         if (it.special === 'tanabata') card.append(el('div', 'lim', '🎋 織姫と彦星のプレゼント'));
