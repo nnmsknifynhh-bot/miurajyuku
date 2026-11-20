@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>中学生 攻略本</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap">
+<style>
+  @page { size: A4; margin: 0; }
+  :root { --ink: #1f2a37; --muted: #5d6b7a; --blue: #2f7de1; --teal: #14a3a3; --green: #2fae74; --orange: #ff8a3d; --red: #e5484d; --gold: #f2b233; --navy: #23395d; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { font-family: 'Zen Maru Gothic', sans-serif; color: var(--ink); font-weight: 700; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .page { width: 210mm; height: 297mm; padding: 6mm 8mm; position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 1.8mm; background: #f2f7fc; }
+  .page::before { content: ''; position: absolute; inset: 0; background-image: linear-gradient(rgba(47,125,225,.07) 1px, transparent 1px), linear-gradient(90deg, rgba(47,125,225,.07) 1px, transparent 1px); background-size: 6mm 6mm; z-index: 0; }
+  .page > * { position: relative; z-index: 1; flex-shrink: 0; }
+  .top { display: grid; grid-template-columns: 1fr 62mm; gap: 3mm; align-items: stretch; }
+  .title { background: linear-gradient(135deg, #23395d, #2f7de1 60%, #14a3a3); color: #fff; border-radius: 5mm; padding: 3.4mm 5mm; box-shadow: 0 1.2mm 0 #162a47; position: relative; overflow: hidden; }
+  .title::after { content: 'LEVEL UP!'; position: absolute; right: 3mm; bottom: 1.5mm; font-size: 9mm; font-weight: 900; color: rgba(255,255,255,.12); letter-spacing: .5mm; }
+  .title small { display: inline-block; background: var(--gold); color: #3a2a00; border-radius: 4mm; padding: .5mm 3mm; font-size: 3.6mm; font-weight: 900; }
+  .title h1 { margin: 1.2mm 0 .6mm; font-size: 10mm; font-weight: 900; line-height: 1.12; }
+  .title p { margin: 0; font-size: 3.7mm; line-height: 1.5; }
+  .shot { border-radius: 3.5mm; overflow: hidden; border: .9mm solid #fff; box-shadow: 0 .8mm 2.2mm rgba(20,40,70,.25); background: #fff; }
+  .shot img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .sec { display: flex; align-items: center; gap: 2mm; font-size: 5mm; font-weight: 900; color: var(--navy); margin-top: .4mm; }
+  .sec .tag { background: var(--navy); color: #fff; font-size: 3mm; border-radius: 2mm; padding: .4mm 2mm; letter-spacing: .3mm; }
+  .sec::after { content: ''; flex: 1; height: .9mm; border-radius: 1mm; background: linear-gradient(90deg, var(--blue), var(--teal), transparent); }
+  .steps { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1.6mm; }
+  .step { background: #fff; border: .7mm solid #bcd6f5; border-radius: 3.5mm; padding: 1.2mm 1.4mm; text-align: center; position: relative; }
+  .step .n { position: absolute; top: -2.2mm; left: -1.4mm; width: 6mm; height: 6mm; border-radius: 50%; background: var(--blue); color: #fff; font-size: 3.4mm; display: grid; place-items: center; font-weight: 900; }
+  .step .ic { font-size: 5.4mm; line-height: 1.1; }
+  .step b { display: block; font-size: 3.7mm; font-weight: 900; }
+  .step span { font-size: 2.9mm; color: var(--muted); line-height: 1.35; display: block; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2.2mm; }
+  .card { background: #fff; border-radius: 4mm; padding: 1.8mm 2.6mm; border-left: 2mm solid; box-shadow: 0 .5mm 1.4mm rgba(20,40,70,.1); display: flex; flex-direction: column; gap: 1mm; }
+  .card h2 { margin: 0; font-size: 4.3mm; font-weight: 900; }
+  .card p { margin: 0; font-size: 3.05mm; line-height: 1.4; }
+  .card .shot { height: 17mm; }
+  .card b.hl { color: var(--red); }
+  table.t { width: 100%; border-collapse: collapse; font-size: 3mm; margin-top: .4mm; }
+  table.t td, table.t th { border-bottom: .3mm solid #e2eaf3; padding: .5mm 1mm; text-align: left; }
+  table.t th { background: #eef5ff; font-weight: 900; }
+  .quests { background: #fff; border-radius: 4mm; overflow: hidden; border: .8mm solid #bcd6f5; }
+  .quests table { width: 100%; border-collapse: collapse; font-size: 3.05mm; }
+  .quests th { background: var(--navy); color: #fff; padding: 1.2mm 2mm; text-align: left; font-weight: 900; }
+  .quests td { padding: .8mm 2mm; border-top: .3mm solid #e2eaf3; line-height: 1.35; vertical-align: top; }
+  .quests td b { color: var(--blue); }
+  .quests tr.s td:first-child { font-weight: 900; white-space: nowrap; }
+  .qnote { margin: 0; font-size: 3mm; color: var(--muted); }
+  .rules { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.6mm; }
+  .rule { background: #fff; border: .7mm dashed #9cbbe0; border-radius: 3.5mm; padding: 1.3mm 2mm; font-size: 2.95mm; line-height: 1.4; }
+  .goal { background: linear-gradient(135deg, #2f7de1, #14a3a3); color: #fff; border-radius: 4mm; padding: 1.8mm 4mm; text-align: center; font-size: 4.4mm; font-weight: 900; box-shadow: 0 1mm 0 #1d5aa8; }
+</style>
+</head>
+<body>
+<section class="page">
+  <div class="top">
+    <div class="title">
+      <small>📚 中学生のための</small>
+      <h1>三浦塾オンライン<br>攻略本</h1>
+      <p>家での勉強は、部活でいう「自主練」。<br>みんなと同じ時間に、同じ場所で、自主練を当たり前にしよう。</p>
+    </div>
+    <div class="shot"><img src="guide2/room_study.jpg" alt="" style="object-position:center 60%"></div>
+  </div>
+
+  <div class="sec"><span class="tag">STEP</span>入室のしかた</div>
+  <div class="steps">
+    <div class="step"><span class="n">1</span><div class="ic">📱</div><b>ログイン</b><span>IDとパスワード（ブラウザでOK）</span></div>
+    <div class="step"><span class="n">2</span><div class="ic">📝</div><b>漢字テスト</b><span>中1：5〜4級／中2：4〜3級／中3：3〜準2級</span></div>
+    <div class="step"><span class="n">3</span><div class="ic">📸</div><b>今日のページ</b><span>問題集・ノートを開いて撮影（1日1回）</span></div>
+    <div class="step"><span class="n">4</span><div class="ic">📚</div><b>中学生自習室へ</b><span>「🏫 へや」で移動</span></div>
+    <div class="step"><span class="n">5</span><div class="ic">🪑</div><b>すわって開始</b><span>すわると時間を記録</span></div>
+  </div>
+
+  <div class="sec"><span class="tag">SYSTEM</span>つよくなるしくみ</div>
+  <div class="grid3">
+    <div class="card" style="border-color:var(--red)"><h2>🔥 連続自習</h2><p>1日の最低時間をこえた日が続くと🔥がふえる。</p>
+      <table class="t"><tr><th>中1</th><th>中2</th><th>中3</th></tr><tr><td>45分</td><td>60分</td><td><b class="hl">90分</b></td></tr></table>
+      <p><b>授業の曜日・保護者会の日</b>はとぎれない。<b>30日</b>で自分だけの<b>マイ席</b>（金色の名前プレート）！</p></div>
+    <div class="card" style="border-color:var(--gold)"><h2>🎁 ポイント</h2><p><b>朝6:00〜7:30・夜19:00〜23:00</b>は<b>10分で1ポイント</b>。時間帯の外も「今日○分」と🔥には入る。</p>
+      <p>中学生は<b>全アイテム解禁</b>！ よろい・宇宙服・ドラゴン・自習王のトロフィー（1000pt）まで。</p></div>
+    <div class="card" style="border-color:var(--green)"><h2>🌳 学年の木と短冊</h2><p>学年の<b>1人あたり平均</b>で、芽→花→実り。競争じゃなく<b>協力</b>。今学期の目標は先生が確認して<b>短冊</b>に、達成で⭐。</p><div class="shot"><img src="guide2/tanzaku.jpg" alt="" style="object-position:left 20%"></div></div>
+    <div class="card" style="border-color:var(--orange)"><h2>🌅 朝活</h2><p>朝6:00〜7:30に<b>30分</b>で＋<b>3ポイント</b>。ロビーの掲示板に名前がのり、名札に🌅。</p><div class="shot"><img src="guide2/asa_board.jpg" alt="" style="object-position:center 15%"></div></div>
+    <div class="card" style="border-color:var(--teal)"><h2>🎤 テスト教室</h2><p>スピーキング・ライティングのテストは「🎤 テストに並ぶ」で順番待ち。<b>待っている間も自習時間</b>になる。</p><div class="shot"><img src="guide2/room_test.jpg" alt=""></div></div>
+    <div class="card" style="border-color:var(--blue)"><h2>👔 先生・オーナー</h2><p>1.4倍大きいスーツ姿。近くに来たら💬で質問OK。<b>個別通話</b>は席にいるまま（🎧マーク）。</p><div class="shot"><img src="guide2/teacher.jpg" alt=""></div></div>
+  </div>
+
+  <div class="sec"><span class="tag">QUEST</span>季節のクエスト（学年の最低時間をこえた日を数える）</div>
+  <div class="quests">
+    <table>
+      <tr><th style="width:24%">クエスト</th><th style="width:20%">期間</th><th>クリア（15日）すると</th></tr>
+      <tr class="s"><td>🎋 1学期中間</td><td><b>5/1〜5/31</b></td><td>織姫と彦星から手紙＋🎋笹かざり（その場で「今すぐつける」）</td></tr>
+      <tr class="s"><td>🎋 1学期期末</td><td><b>6/1〜6/30</b></td><td><b>7/1〜7/20</b> 彦星がついて歩く。両方クリアで<b>織姫</b>も。<b>7/7</b>は天の川</td></tr>
+      <tr class="s"><td>🎅 2学期中間</td><td><b>10/1〜10/31</b></td><td>サンタから手紙＋🎅サンタ帽</td></tr>
+      <tr class="s"><td>🎅 2学期期末</td><td><b>11/1〜11/30</b></td><td><b>12/1〜12/25</b> サンタがついて歩く。両方クリアで<b>トナカイ</b>も。<b>12/25</b>は雪とプレゼント</td></tr>
+      <tr class="s"><td>🎎 3学期学年末</td><td><b>1/20〜2/28</b></td><td><b>3/1〜3/20</b> ひな人形の行列。15日：おだいりさま・おひなさま／20日：＋三人官女／25日：＋五人囃子。<b>3/3</b>はひなあられ</td></tr>
+    </table>
+  </div>
+  <p class="qnote">💡 1か月で15日＝2日に1回より少し多いくらい。学校ごとにテストの日がちがっても大丈夫。画面の左上に「○/15日」。</p>
+
+  <div class="sec"><span class="tag">RULE</span>中学生自習室のルール</div>
+  <div class="rules">
+    <div class="rule">🤫 <b>しずかに集中</b>。生徒どうしの吹き出し・スタンプはなし（先生と話すときだけ）。</div>
+    <div class="rule">📷 <b>見守りカメラ</b>：ランダムな時間に写真が<b>先生だけ</b>に届く。保存はしない。</div>
+    <div class="rule">🪑 <b>10秒</b>立ち歩くと席えらびが出る。かならずすわろう。</div>
+    <div class="rule">📱 アプリを閉じる・ほかの画面を見ると<b>時間が止まる</b>。長時間は充電しながら。</div>
+  </div>
+  <div class="goal">🏆 大会（定期テスト）で勝つのは、毎日の自主練を続けた人。今日も1ページから！</div>
+</section>
+</body>
+</html>
