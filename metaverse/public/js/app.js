@@ -96,9 +96,9 @@
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }, audio: false });
         video.srcObject = stream; await video.play().catch(() => {});
-        show('live'); msg.textContent = 'ノートや問題集のページを、カメラに向けてね';
+        show('live'); msg.textContent = '開いたノート・問題集と筆記用具が写るようにしてね';
       } catch (e) {
-        show('file'); msg.textContent = 'カメラが使えないときは「カメラで撮る」を押してね';
+        show('file'); msg.textContent = '「カメラで撮る」を押して、開いた問題集とノートを撮ってね';
       }
     }
     return new Promise((resolve) => {

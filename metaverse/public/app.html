@@ -44,11 +44,16 @@
     <div class="quiz-card">
       <p class="quiz-top">📸 入室の前に</p>
       <h2 class="sp-title">今日最初に取り組むページを撮ろう！</h2>
+      <ul class="sp-how">
+        <li>📖 <b>ノートや問題集を開いて</b>、これから解くページを出す</li>
+        <li>✏️ <b>筆記用具</b>もいっしょに置いて、勉強をはじめる準備をした机を撮る</li>
+        <li>💻 <b>パソコンの人</b>は、問題集を開いて<b>パソコンのカメラに向けて</b>ね</li>
+      </ul>
       <div class="sp-view">
         <video id="sp-video" playsinline muted autoplay></video>
         <img id="sp-preview" alt="撮った写真" hidden>
-        <p class="sp-msg" id="sp-msg"></p>
       </div>
+      <p class="sp-msg" id="sp-msg"></p>
       <div class="sp-actions">
         <button class="btn big" id="sp-shot">📸 撮る</button>
         <label class="btn big secondary" id="sp-file-label" hidden>📷 カメラで撮る<input type="file" id="sp-file" accept="image/*" capture="environment" hidden></label>

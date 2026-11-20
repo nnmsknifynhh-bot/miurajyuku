@@ -350,8 +350,12 @@ body.is-trial .not-trial { display: none !important; }
 /* 入室前の写真（今日最初に取り組むページ） */
 .sp .quiz-card { gap: 10px; }
 .sp-title { margin: 0; font-size: 21px; }
-.sp-view { position: relative; background: #1e2430; border-radius: 16px; overflow: hidden; aspect-ratio: 3 / 4; max-height: 52vh; margin: 0 auto; width: 100%; display: grid; place-items: center; }
+.sp-view { position: relative; background: #1e2430; border-radius: 16px; overflow: hidden; aspect-ratio: 3 / 4; height: min(36vh, calc((100vw - 68px) * 4 / 3)); max-width: 100%; margin: 0 auto; display: grid; place-items: center; }
 .sp-view video, .sp-view img { width: 100%; height: 100%; object-fit: cover; }
-.sp-msg { position: absolute; left: 10px; right: 10px; bottom: 10px; margin: 0; color: #fff; font-weight: 700; font-size: 14px; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
+.sp-msg { margin: 0; color: #8a4b00; font-weight: 800; font-size: 14px; }
 .sp-actions { display: grid; gap: 8px; }
 .sp-actions label.btn { display: grid; place-items: center; cursor: pointer; }
+.sp-how { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; text-align: left; font-size: 14px; background: #fff7e6; border: 2px dashed #f5c26b; border-radius: 12px; padding: 8px 10px; }
+.sp-how li { line-height: 1.45; }
+@media (max-height: 740px) { .sp-view { height: 34vh; } }
+.sp .quiz-card { max-height: calc(100dvh - 24px); overflow: auto; }
