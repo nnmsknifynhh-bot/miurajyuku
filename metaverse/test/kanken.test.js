@@ -37,7 +37,7 @@ test('準備：中1・中2・中3・小5の生徒と先生', async () => {
     U[k] = { id: r.data.user.id, cookie: (await http('POST', '/api/login', { loginId: 'usr' + k, password: 'password123' })).cookie };
   };
   await add('c1', { role: 'student', grade: '中1' }); await add('c2', { role: 'student', grade: '中2' });
-  await add('c3', { role: 'student', grade: '中3' }); await add('e5', { role: 'student', grade: '小5' });
+  await add('c3', { role: 'student', grade: '中3' }); await add('e5', { role: 'student', grade: '小5' }); await add('e3', { role: 'student', grade: '小3' }); await add('e4', { role: 'student', grade: '小4' });
   await add('tch', { role: 'teacher', rooms: ['class1'] });
 });
 
@@ -61,6 +61,8 @@ test('学年に合った級から出る（中1：5〜4級、中2：4〜3級、�
   assert.deepEqual(await levels('c1'), ['4級', '5級']);
   assert.deepEqual(await levels('c2'), ['3級', '4級']);
   assert.deepEqual(await levels('c3'), ['3級', '準2級']);
+  assert.deepEqual(await levels('e3'), ['8級', '9級'], '小3：9級（小2の漢字）・8級（小3の漢字）');
+  assert.deepEqual(await levels('e4'), ['7級', '8級'], '小4：8級・7級（小4の漢字）');
   assert.equal((await http('POST', '/api/quiz/question', {}, U.tch.cookie)).status, 403);
 });
 
@@ -117,7 +119,7 @@ test('まとめて登録：表計算ソフトから貼り付けた問題を一�
   const rows = [];
   for (let i = 0; i < 300; i++) rows.push({ line: i + 1, level: '4級', word: `試験${i}`, answer: 'しけん', wrong: ['しげん', 'じけん', 'しかん'] });
   rows.push({ line: 301, level: '4級', word: '噴水', answer: 'ふんすい', wrong: ['ほんすい', 'ぶんすい', 'ふきみず'] }); // サンプルと同じ → とばす
-  rows.push({ line: 302, level: '9級', word: 'x', answer: 'a', wrong: ['b', 'c', 'd'] });                       // 級がおかしい
+  rows.push({ line: 302, level: '11級', word: 'x', answer: 'a', wrong: ['b', 'c', 'd'] });                       // 級がおかしい
   rows.push({ line: 303, level: '3級', word: '既存', answer: 'きぞん', wrong: ['きぞん', 'きそん', 'すでぞん'] });  // 同じ読みがある
   const r = await http('POST', '/api/admin/kanken/questions/bulk', { rows }, owner);
   assert.equal(r.status, 200);
