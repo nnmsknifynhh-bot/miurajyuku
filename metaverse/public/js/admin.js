@@ -254,6 +254,14 @@
       for (const p of parents) {
         const row = el('div', 'gb-row');
         row.append(el('span', null, `${p.name}（ID: ${p.loginId}）${p.active ? '' : '・無効'}`));
+        // 🎂 保護者の誕生日（その日、子どもの画面に「おうちの人の誕生日」カードが出る）
+        const bi = el('input'); bi.type = 'text'; bi.placeholder = '誕生日 例: 04-05'; bi.value = p.birthday || ''; bi.style.width = '9em'; bi.setAttribute('aria-label', '保護者の誕生日（月-日）');
+        const bs = el('button', 'btn small secondary', '🎂 保存'); bs.type = 'button';
+        bs.onclick = async () => {
+          const v = bi.value.trim().replace(/[／/]/g, '-').replace(/^(\d)-/, '0$1-').replace(/-(\d)$/, '-0$1');
+          try { await api('PATCH', `/api/admin/users/${p.id}`, { birthday: v || null }); toast(v ? '誕生日を保存しました' : '誕生日を消しました'); } catch (e) { toast(e.message); }
+        };
+        row.append(bi, bs);
         const b = el('button', 'btn small danger', '外す');
         b.onclick = async () => {
           if (!confirm(`${p.name} さんと ${u.displayName} さんのつながりを外しますか？\n（保護者のアカウントは残ります。無効にするときはユーザー一覧から）`)) return;

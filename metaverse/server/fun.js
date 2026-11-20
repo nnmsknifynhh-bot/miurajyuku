@@ -155,7 +155,10 @@ function morningBoard(date = new Date()) {
   const names = db.prepare(`SELECT u.display_name AS name FROM study_morning m JOIN users u ON u.id = m.user_id
     WHERE m.day = ? AND m.minutes >= ? AND u.role = 'student' AND u.is_active = 1 AND u.trial_until IS NULL
     ORDER BY COALESCE(m.done_at, '9'), u.display_name`).all(t.day, f.asakatsuMinutes).map(r => r.name);
-  return { day: t.day, names, start: f.asakatsuStart, end: f.asakatsuEnd, minutes: f.asakatsuMinutes, over: t.hm >= f.asakatsuEnd };
+  // 🎂 今日のお誕生日（ほかの生徒にも見せる設定の子だけ）
+  const bdays = db.prepare("SELECT display_name AS name, birthday FROM users WHERE role = 'student' AND is_active = 1 AND trial_until IS NULL AND birthday IS NOT NULL AND birthday_public = 1 ORDER BY display_name").all()
+    .filter(r => require('./birthday').isTodayMD(r.birthday, date)).map(r => r.name);
+  return { day: t.day, names, bdays, start: f.asakatsuStart, end: f.asakatsuEnd, minutes: f.asakatsuMinutes, over: t.hm >= f.asakatsuEnd };
 }
 // 今日の朝活が成功しているか（名札の🌅）
 function morningDone(userId, date = new Date()) {

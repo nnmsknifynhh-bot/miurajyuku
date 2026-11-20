@@ -374,3 +374,19 @@ body.is-trial .not-trial { display: none !important; }
 .sp-goal-btns button.on { background: #2f7de1; border-color: #2f7de1; color: #fff; }
 .goal-chip { background: #eef7ff !important; border-color: #9ccbff !important; }
 .shop-item.locked { opacity: .55; }
+
+/* 🎂 誕生日の子へケーキを渡す */
+.cake-card { border-color: #f5c542; background: #fffbea; }
+.cake-give { font-size: 17px !important; font-weight: 800; padding: 0 16px; background: linear-gradient(135deg, #ffd96b, #f5a623) !important; border-color: #d4a017 !important; color: #5a3a00; }
+/* 🎂 おうちの人の誕生日 */
+.pgift-h { display: block; margin: 10px 0 6px; text-align: left; }
+.pgift-choices { display: flex; flex-wrap: wrap; gap: 6px; }
+.pgift-choices button { border: 2px solid var(--line); background: #fff; border-radius: 12px; padding: 8px 10px; font-size: 15px; font-weight: 700; min-height: 44px; }
+.pgift-choices button.on { border-color: #f5a623; background: #fff3d1; }
+.pgift-chip { position: fixed; right: 12px; top: calc(110px + env(safe-area-inset-top)); z-index: 30; border: 2px solid #f5c542; background: #fffbea; border-radius: 999px; padding: 6px 12px; font-weight: 800; box-shadow: var(--shadow); }
+.family-gifts { display: grid; gap: 8px; margin-bottom: 10px; }
+.family-gift { background: linear-gradient(135deg, #fff6d6, #ffe7f0); border: 2px solid #f5c542; border-radius: 14px; padding: 10px 12px; }
+.family-gift b { display: block; font-size: 16px; }
+.family-gift p { margin: 4px 0 0; }
+.morning-bday { margin: 10px 0 0; padding: 8px 10px; border-radius: 10px; background: #fff6d6; font-weight: 800; }
+.pgift-who { margin: -6px 0 4px; font-weight: 800; color: #b06a00; }

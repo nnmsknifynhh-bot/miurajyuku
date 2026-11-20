@@ -12,6 +12,7 @@ const ganbari = require('./ganbari');
 const fun = require('./fun');
 const startphoto = require('./startphoto');
 const parents = require('./parents');
+const birthday = require('./birthday');
 const referral = require('./referral');
 const myseat = require('./myseat');
 const SchoolMap = require('../public/shared/map.js');
@@ -309,7 +310,15 @@ app.get('/api/parent/home', auth.requireAuth, requireParent, (req, res) => {
       goal: goal && goal.status === 'approved' ? { text: goal.text, achieved: !!goal.achieved } : null, cheered: sent.has(k.id),
     };
   });
-  res.json({ children: kids, stamps: parents.STAMPS, streak: parents.visitStreak(req.user.id), endsAt: parents.visitEndsAt(req.user.id), points: ganbari.points(req.user.id).balance, moms: parents.momsTree() });
+  res.json({ children: kids, stamps: parents.STAMPS, streak: parents.visitStreak(req.user.id), endsAt: parents.visitEndsAt(req.user.id), points: ganbari.points(req.user.id).balance, moms: parents.momsTree(),
+    gifts: birthday.giftsForParent(req.user.id), myBirthday: req.user.birthday || null });
+});
+// 保護者が自分の誕生日を登録（月-日だけ）。誕生日の日に、子どもの画面にカードが出る
+app.post('/api/parent/birthday', auth.requireAuth, requireParent, (req, res) => {
+  const bd = ganbari.normBirthday(req.body.birthday);
+  if (bd === undefined) return bad(res, '誕生日が正しくありません');
+  db.prepare('UPDATE users SET birthday = ?, updated_at = ? WHERE id = ?').run(bd, now(), req.user.id);
+  res.json({ ok: true, birthday: bd });
 });
 app.post('/api/parent/cheer', auth.requireAuth, requireParent, (req, res) => {
   const r = parents.sendCheer(req.user.id, Number(req.body.studentId), String(req.body.stamp || ''));
@@ -345,7 +354,7 @@ app.get('/api/blackboard', auth.requireAuth, (req, res) => res.json({ board: rea
 // 🌅 今日の朝活 成功者（ロビーの掲示板）。体験中の子には名前を出さない
 app.get('/api/morning-board', auth.requireAuth, (req, res) => {
   const mb = fun.morningBoard();
-  if (mb && req.user.trial_until) mb.names = mb.names.map(() => '生徒');
+  if (mb && req.user.trial_until) { mb.names = mb.names.map(() => '生徒'); mb.bdays = []; }
   res.json({ board: mb });
 });
 app.put('/api/blackboard', auth.requireAuth, (req, res) => {
@@ -646,7 +655,7 @@ admin.patch('/users/:id', requireOwner, (req, res) => {
       db.prepare('UPDATE users SET grade = ? WHERE id = ?').run(b.grade, id); changes.push('grade');
     }
     if (b.birthday !== undefined || b.birthdayPublic !== undefined) {
-      if (target.role !== 'student') return '誕生日は生徒だけに設定できます';
+      if (target.role !== 'student' && !(target.role === 'parent' && b.birthdayPublic === undefined)) return '誕生日は生徒と保護者だけに設定できます';
       if (b.birthday !== undefined) {
         const bd = ganbari.normBirthday(b.birthday);
         if (bd === undefined) return '誕生日が正しくありません';

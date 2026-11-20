@@ -71,7 +71,7 @@ function childrenOf(parentId) {
     WHERE pc.parent_id = ? AND u.is_active = 1 ORDER BY u.display_name`).all(parentId);
 }
 function parentsOf(studentId) {
-  return db.prepare(`SELECT u.id, u.display_name AS name, u.login_id AS loginId, u.is_active AS active FROM parent_children pc JOIN users u ON u.id = pc.parent_id
+  return db.prepare(`SELECT u.id, u.display_name AS name, u.login_id AS loginId, u.is_active AS active, u.birthday FROM parent_children pc JOIN users u ON u.id = pc.parent_id
     WHERE pc.student_id = ? ORDER BY u.id`).all(studentId);
 }
 function unlink(parentId, studentId) {

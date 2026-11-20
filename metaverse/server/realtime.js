@@ -17,6 +17,7 @@ const referral = require('./referral');
 const myseat = require('./myseat');
 const kanken = require('./kanken');
 const startphoto = require('./startphoto');
+const birthday = require('./birthday');
 const { can, canEnterRoom } = require('./permissions');
 
 const T = SM.TILE;
@@ -52,6 +53,8 @@ function pub(p) {
     x: p.x, y: p.y, dir: p.dir, moving: p.moving, room: p.room, seat: p.seat, hand: p.hand, handAt: p.handAt,
     inPrivate: inActiveCall(p), away: p.away || null, studyCam: !!p.studyCam, topic: p.topic || null, today: p.today10 ?? null,
     bday: !!(p.bday && p.bday.public), // 誕生日（ほかの生徒にも見せる設定のときだけ。先生だけの設定は staff にだけ別に送る）
+    cakes: p.bday && p.bday.public && p.cakes && p.cakes.n ? p.cakes : null, // 今日もらった🎂 { n, gold }
+    kid: p.user.role === 'student' && /^小[1-6]$/.test(p.user.grade || ''), // 小学生（🎂は先生からだけ）
     hs: !!p.hs, title: p.title || null, plan: p.plan || null, // 高校生：称号・今日やること（🔥は週で数える）
     equip: equipView(p.equip), streak: p.streak || 0, trial: !!p.user.trial_until,
     asa: !!p.asa, // 🌅 今日の朝活に成功
@@ -63,11 +66,11 @@ function pub(p) {
 function pubFor(p, viewer) {
   const d = pub(p);
   if (p.user.role === 'parent' && viewer.user.role === 'student') d.name = '保護者';
-  if (viewer.user.role === 'parent' && p.user.role === 'student' && !(viewer.childIds && viewer.childIds.has(p.id))) { d.name = '生徒'; d.title = null; d.plan = null; d.bday = false; }
+  if (viewer.user.role === 'parent' && p.user.role === 'student' && !(viewer.childIds && viewer.childIds.has(p.id))) { d.name = '生徒'; d.title = null; d.plan = null; d.bday = false; d.cakes = null; }
   if (viewer.user.role === 'parent' && p.user.role === 'student' && viewer.childIds && viewer.childIds.has(p.id)) d.myChild = true;
   // 体験中の子：名札は「体験」。体験中の子からは、招待してくれた子以外の生徒の名前は見えない
   if (p.user.trial_until && viewer.user.role === 'student') d.name = '体験：' + d.name;
-  if (viewer.user.trial_until && p.user.role === 'student' && p.id !== viewer.referrerId) { d.name = '生徒'; d.title = null; d.plan = null; d.bday = false; }
+  if (viewer.user.trial_until && p.user.role === 'student' && p.id !== viewer.referrerId) { d.name = '生徒'; d.title = null; d.plan = null; d.bday = false; d.cakes = null; }
   if (viewer.user.trial_until && p.user.role === 'parent') d.name = '保護者';
   return d;
 }
@@ -345,6 +348,60 @@ function sendWelcome(p, d, reply) {
   return { ok: true };
 }
 
+// ═════ 🎂 誕生日の子にケーキを渡す ═════
+// 中学生・高校生は、誕生日を「みんなに見せる」にしている中学生・高校生に渡せる。先生・オーナーはだれにでも（金色の🎂）
+// 近く（3マス以内・同じ部屋）にいるときだけ。同じ相手には1日1回。ポイントはなし
+const CAKE_RANGE = T * 3;
+function canGiveCake(p) {
+  return isStaff(p) || (p.user.role === 'student' && !p.user.trial_until && birthday.isJHorHS(p.user.grade));
+}
+// その誕生日（🎂の数）を見てよい人か
+function seesBday(o, to) {
+  if (o === to || isStaff(o)) return true;
+  if (!to.bday || !to.bday.public || o.user.trial_until) return false;
+  if (o.user.role === 'parent') return !!(o.childIds && o.childIds.has(to.id));
+  return true;
+}
+function sendCake(p, d) {
+  const to = online.get(Number(d && d.to));
+  if (!canGiveCake(p)) return { ok: false, error: '🎂は中学生・高校生と先生が渡せます' };
+  if (!to || to === p || to.user.role !== 'student' || to.user.trial_until) return { ok: false, error: '相手が見つかりません' };
+  if (!to.bday) return { ok: false, error: '今日が誕生日の子にだけ渡せます' };
+  const staff = isStaff(p);
+  if (!staff && (!to.bday.public || !birthday.isJHorHS(to.user.grade))) return { ok: false, error: 'この子には渡せません' };
+  if (to.room !== p.room || Math.hypot(to.x - p.x, to.y - p.y) > CAKE_RANGE) return { ok: false, error: 'もっと近くに行って渡してね' };
+  if (!birthday.giveCake(p.id, to.id, staff)) return { ok: false, error: 'この子には今日もう渡したよ' };
+  to.cakes = birthday.cakesOf(to.id);
+  for (const o of online.values()) {
+    if (!seesBday(o, to)) continue;
+    o.socket.emit('user-updated', { id: to.id, cakes: to.cakes });
+    o.socket.emit('cake', { from: p.id, to: to.id, gold: staff });
+  }
+  to.socket.emit('cake-got', { name: p.user.display_name, gold: staff, n: to.cakes.n });
+  return { ok: true };
+}
+
+// ═════ おうちの人の誕生日：子どもからメッセージと勉強時間のプレゼント ═════
+let lastGiftDay = null; // 日がかわったら、おうちの人の誕生日カードを出しなおす
+const parentGiftLater = new Set(); // `${day}|${studentId}`：「あとで」を押した子は、その日はカードを自動では出さない（画面のボタンから開ける）
+function offerParentGift(p, open = false) {
+  if (!online.has(p.id) || online.get(p.id) !== p) return;
+  try {
+    const list = birthday.parentsBirthdayToday(p.id).filter(x => !x.sent);
+    if (!list.length) return;
+    const later = !open && parentGiftLater.has(`${ganbari.jst().day}|${p.id}`);
+    p.socket.emit('parent-bday', { parents: list.map(x => ({ id: x.id, name: x.name })), messages: birthday.GIFT_MESSAGES, minutes: birthday.GIFT_MINUTES, quiet: later });
+  } catch (e) { console.error('おうちの人の誕生日カードに失敗:', e.message); }
+}
+function checkParentGifts(p) {
+  let done;
+  try { done = birthday.checkGifts(p.id); } catch (e) { return; }
+  for (const g of done) {
+    p.socket.emit('parent-gift-done', { minutes: g.minutes });
+    const par = online.get(g.parentId); if (par) par.socket.emit('parent-gift-update');
+  }
+}
+
 // 部屋から外へ出す（権限がなくなったときなど）
 function forceOut(p, reason) {
   const exit = SM.EXIT[p.room] || SM.ENTRY.lobby;
@@ -451,6 +508,7 @@ function attach(httpServer) {
     if (user.trial_until) p.referrerId = referral.referrerOf(p.id); // 体験中：招待してくれた子の名前だけ見える
     p.today10 = user.role === 'student' ? shownToday(ganbari.dayAll(p.id, ganbari.jst().day)) : null;
     p.bday = user.role === 'student' ? ganbari.birthdayInfo(p.id) : null;
+    p.cakes = p.bday ? birthday.cakesOf(p.id) : null;
     p.follow = user.role === 'student' && !user.trial_until ? fun.followersOf(p.id) : null;
     p.fx = p.follow ? fun.fxOf(p.id) : null;
     p.asa = user.role === 'student' && !user.trial_until ? fun.morningDone(p.id) : false;
@@ -487,7 +545,7 @@ function attach(httpServer) {
     }
 
     socket.emit('init', {
-      me: { ...pub(p), bday: !!p.bday }, users: [...online.values()].filter(o => o !== p).map(o => pubFor(o, p)).concat(seesGhosts(p) ? [...ghosts.values()].filter(g => g.p.id !== p.id).map(g => pubFor(g.p, p)) : []), rooms: roomCounts(), reactions: user.role === 'parent' ? PARENT_REACTIONS : REACTIONS,
+      me: { ...pub(p), bday: !!p.bday, cakes: p.cakes && p.cakes.n ? p.cakes : null, cakeGiven: canGiveCake(p) ? birthday.givenBy(p.id) : null }, users: [...online.values()].filter(o => o !== p).map(o => pubFor(o, p)).concat(seesGhosts(p) ? [...ghosts.values()].filter(g => g.p.id !== p.id).map(g => pubFor(g.p, p)) : []), rooms: roomCounts(), reactions: user.role === 'parent' ? PARENT_REACTIONS : REACTIONS,
       visit: visit ? { endsAt: visit.endsAt, again: visit.again, meeting: !!visit.meeting, mendan: !!visit.mendan } : null,
       classes: classState(), classCall: livekit.enabled, testQueue: user.role === 'parent' ? null : testState(),
       mySeats: mySeatsFor(p),
@@ -497,8 +555,10 @@ function attach(httpServer) {
     // 保護者からの「見たよ」スタンプ（まだ受け取っていない分）
     if (user.role === 'student') { const st = parents.takeCheers(p.id); if (st.length) socket.emit('cheer', { stamps: st }); }
     // 誕生日を「先生だけ」に見せる生徒：先生・オーナーにだけ🎂を知らせる
-    if (p.bday && !p.bday.public) socket.to('staff').emit('user-updated', { id: p.id, bday: true });
-    if (isStaff(p)) for (const o of online.values()) if (o !== p && o.bday && !o.bday.public) socket.emit('user-updated', { id: o.id, bday: true });
+    if (p.bday && !p.bday.public) socket.to('staff').emit('user-updated', { id: p.id, bday: true, cakes: p.cakes && p.cakes.n ? p.cakes : null });
+    if (isStaff(p)) for (const o of online.values()) if (o !== p && o.bday && !o.bday.public) socket.emit('user-updated', { id: o.id, bday: true, cakes: o.cakes && o.cakes.n ? o.cakes : null });
+    // おうちの人の誕生日：まだプレゼントしていなければカード
+    if (user.role === 'student' && !user.trial_until) setTimeout(() => offerParentGift(p), 2500);
     // 誕生日の日にはじめて入ったら、お祝いカード（とプレゼント）
     if (p.bday) sendBirthdayCard(p);
     broadcastRooms();
@@ -591,6 +651,18 @@ function attach(httpServer) {
     // ── 入室してきた子への「ようこそ」リアクション ──
     socket.on('welcome', (d, ack) => { if (typeof ack !== 'function') ack = () => {}; ack(sendWelcome(p, d, false)); });
     socket.on('welcome-reply', (d, ack) => { if (typeof ack !== 'function') ack = () => {}; ack(sendWelcome(p, d, true)); });
+    socket.on('cake', (d, ack) => { if (typeof ack !== 'function') ack = () => {}; try { ack(sendCake(p, d)); } catch (e) { console.error('🎂に失敗:', e.message); ack({ ok: false, error: '渡せませんでした' }); } });
+    socket.on('parent-gift', (d, ack) => {
+      if (typeof ack !== 'function') ack = () => {};
+      if (p.user.role !== 'student' || p.user.trial_until) return ack({ ok: false, error: '生徒の機能です' });
+      const r = birthday.sendParentGift(p.id, Number(d && d.parentId), String((d && d.message) || ''), d && d.minutes);
+      if (r.error) return ack({ ok: false, error: r.error });
+      const par = online.get(Number(d.parentId)); if (par) par.socket.emit('parent-gift-update');
+      ack({ ok: true });
+      setTimeout(() => offerParentGift(p), 800); // おうちの人がもう1人いれば
+    });
+    socket.on('parent-gift-later', () => { if (parentGiftLater.size > 2000) parentGiftLater.clear(); parentGiftLater.add(`${ganbari.jst().day}|${p.id}`); });
+    socket.on('parent-gift-open', () => offerParentGift(p, true));
 
     // ── リアクション ──
     socket.on('reaction', (kind) => {
@@ -970,8 +1042,9 @@ function attach(httpServer) {
         const a = fun.morningDone(p.id);
         if (a !== !!p.asa) { p.asa = a; io.emit('user-updated', { id: p.id, asa: a }); }
       }
-      { const mb = fun.morningBoard(); const key = mb ? mb.day + mb.names.join(',') + mb.over : ''; if (key !== lastMorningKey) { lastMorningKey = key; for (const o of online.values()) o.socket.emit('morning-board', mb && o.user.trial_until ? { ...mb, names: mb.names.map(() => '生徒') } : mb); } }
+      { const mb = fun.morningBoard(); const key = mb ? mb.day + mb.names.join(',') + mb.over + (mb.bdays || []).join(',') : ''; if (key !== lastMorningKey) { lastMorningKey = key; for (const o of online.values()) o.socket.emit('morning-board', mb && o.user.trial_until ? { ...mb, names: mb.names.map(() => '生徒'), bdays: [] } : mb); } }
       for (const p of online.values()) { updateToday(p); refreshBirthday(p); refreshHS(p); refreshFollow(p); } // 日付が変わったときも 0 にもどる
+      { const day = ganbari.jst().day; if (lastGiftDay && lastGiftDay !== day) for (const p of online.values()) if (p.user.role === 'student' && !p.user.trial_until) offerParentGift(p); lastGiftDay = day; }
       // 決めた曜日・時刻を過ぎても来ていない高校生を、先生に知らせる
       for (const s of ganbari.lateStudents(new Set(online.keys()))) notify.studentLate(s, online).catch(e => console.error('遅れの通知に失敗:', e.message));
     } catch (e) { console.error('自習時間の記録に失敗:', e.message); }
@@ -1074,7 +1147,9 @@ function refreshBirthday(p) {
   const was = p.bday ? (p.bday.public ? 'public' : 'staff') : null, now = b ? (b.public ? 'public' : 'staff') : null;
   if (was === now) return;
   p.bday = b;
-  if (now === 'public' || was === 'public') io.emit('user-updated', { id: p.id, bday: now === 'public' });
+  p.cakes = b ? birthday.cakesOf(p.id) : null;
+  const cakes = p.cakes && p.cakes.n ? p.cakes : null;
+  if (now === 'public' || was === 'public') io.emit('user-updated', { id: p.id, bday: now === 'public', cakes: now === 'public' ? cakes : null });
   if (now === 'staff' || was === 'staff') { io.to('staff').emit('user-updated', { id: p.id, bday: now !== null }); p.socket.emit('user-updated', { id: p.id, bday: now !== null }); }
   if (b) sendBirthdayCard(p);
 }
@@ -1106,6 +1181,7 @@ function shownToday(m) {
 function updateToday(p) {
   if (p.user.role !== 'student') return;
   const all = ganbari.dayAll(p.id, ganbari.jst().day);
+  checkParentGifts(p); // おうちの人へのプレゼントの時間に届いたか
   // 日がかわったら、目標の✅ももどす
   { const g = startphoto.goalOf(p.id), done = !!(g && all >= g); if (done !== !!p.goalDone) { p.goalDone = done; if (io) io.emit('user-updated', { id: p.id, goalDone: done }); } }
   const v = shownToday(all);

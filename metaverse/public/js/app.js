@@ -248,6 +248,7 @@
       state.path = []; state.pathSeat = null; state.ready = true;
       state.testQueue = d.testQueue || null;
       state.mySeats = d.mySeats || [];
+      cakeGiven.clear(); for (const id of (d.me.cakeGiven || [])) cakeGiven.add(id);
       loadBoard(); loadMorning(); refreshGoal();
       if (state.user.role === 'student') setTimeout(goMySeat, 1800);
       { const mine = state.testQueue && state.testQueue.booths.find(b => b.userId === d.me.id); state.testBooth = mine ? mine.seat : null; }
@@ -265,6 +266,17 @@
       else toast(`${d.name}さんから ${d.kind} が届いたよ！`, 4000);
     });
     socket.on('welcome-replied', (d) => toast(`${d.name}さんから ${d.kind} が返ってきたよ！`, 4000));
+    // 🎂 誕生日の子へケーキ
+    socket.on('cake', ({ from, to, gold }) => {
+      const u = to === state.me.id ? state.me : state.others.get(to);
+      if (u) u.reaction = { kind: gold ? '🌟' : '🎂', until: performance.now() + 2500 };
+      if (from === state.me.id) { cakeGiven.add(to); $('#cake-card').hidden = true; }
+    });
+    socket.on('cake-got', ({ name, gold, n }) => { chime(0.2); toast(gold ? `🌟🎂 ${name}先生からお祝いのケーキ！（今日${n}こ目）` : `🎂 ${name}さんから「おめでとう」のケーキ！（今日${n}こ目）`, 5000); });
+    // 🎂 おうちの人の誕生日
+    socket.on('parent-bday', (d) => { pgift = d; $('#pgift-chip').hidden = false; if (!d.quiet) setTimeout(openPgift, 600); });
+    socket.on('parent-gift-done', ({ minutes }) => { chime(0.25); toast(`🎁 おうちの人へのプレゼント「${fmtMin(minutes)}」を達成！ おうちの人の画面に🌸が咲いたよ`, 8000); });
+    socket.on('parent-gift-update', () => { toast('🎂 お子さんからのプレゼントが届いています（🏠 わが子の様子）', 7000); chime(0.2); if ($('#family-dialog').open) openFamily(); });
     socket.on('morning-board', (mb) => { state.morning = mb; if ($('#morning-dialog').open) openMorning(); });
     socket.on('blackboard', ({ board }) => { state.board = board; if (board && !isStaff()) { toast('📝 先生の黒板が新しくなったよ（ロビー）', 5000); markBoardSeen(); } });
     socket.on('myseat-lost', () => { toast('⭐ 🔥がとぎれたので、マイ席はお休みになりました。また続けたら、えらべるよ', 7000); refreshFun(true); });
@@ -619,12 +631,34 @@
     if (!$('#pquiz-dialog').open) $('#pquiz-dialog').showModal();
   }
   $('#btn-pquiz').onclick = () => openPquiz(false);
+  $('#family-bsave').onclick = async () => {
+    const m = $('#family-bm').value, d = $('#family-bd').value;
+    if (!!m !== !!d) return toast('月と日の両方をえらんでください');
+    try { await api('POST', '/api/parent/birthday', { birthday: m ? `${m}-${d}` : null }); toast(m ? `🎂 ${Number(m)}月${Number(d)}日で登録しました` : '誕生日を消しました', 3500); }
+    catch (e) { toast(e.message); }
+  };
   $('#pquiz-close').onclick = () => $('#pquiz-dialog').close();
 
   // わが子の様子と「見たよ」スタンプ
   async function openFamily() {
     let d;
     try { d = await api('GET', '/api/parent/home'); } catch (e) { toast(e.message); return; }
+    const gifts = $('#family-gifts'); gifts.textContent = ''; gifts.hidden = !(d.gifts && d.gifts.length);
+    for (const g of (d.gifts || [])) {
+      const c = el('div', 'family-gift');
+      c.append(el('b', null, `🎂 ${g.child}さんから誕生日のプレゼント${g.today ? '' : `（${Number(g.day.slice(5, 7))}/${Number(g.day.slice(8))}）`}`));
+      c.append(el('p', null, `「${g.message}」`));
+      c.append(el('p', null, g.done ? `🌸 ${fmtMin(g.minutes)}の勉強をプレゼント … 達成しました！（${fmtMin(g.studied)}）` : `💐 ${fmtMin(g.minutes)}の勉強をプレゼント … いま ${fmtMin(g.studied)}${g.today ? '（がんばり中）' : ''}`));
+      gifts.append(c);
+    }
+    { // 🎂 あなたの誕生日
+      const bm = $('#family-bm'), bdd = $('#family-bd');
+      if (!bm.options.length) {
+        bm.append(new Option('-', '')); for (let i = 1; i <= 12; i++) bm.append(new Option(String(i), String(i).padStart(2, '0')));
+        bdd.append(new Option('-', '')); for (let i = 1; i <= 31; i++) bdd.append(new Option(String(i), String(i).padStart(2, '0')));
+      }
+      const [m, dd] = (d.myBirthday || '-').split('-'); bm.value = m || ''; bdd.value = dd || '';
+    }
     const list = $('#family-list'); list.textContent = '';
     if (!d.children.length) list.append(el('p', 'muted', 'まだお子さまがつながっていません。塾の招待コードを下から追加してください。'));
     for (const k of d.children) {
@@ -1587,6 +1621,74 @@
     state.socket.emit(ev, { to, kind }, (r) => { if (!r || !r.ok) toast((r && r.error) || '送れませんでした'); else toast(`${kind} を送ったよ`, 2000); });
   }
 
+  // 🎂 誕生日の子が近くにいたら「おめでとうを渡す」（中学生・高校生どうし。先生・オーナーはだれにでも）
+  const cakeGiven = new Set();
+  const cakeSkip = new Set(); // ×で閉じた相手（いちど離れるまで出さない）
+  let cakeTarget = null;
+  const myGradeJH = () => /^[中高][1-3]$/.test((state.user && state.user.grade) || '');
+  function updateCakeCard() {
+    const me = state.me, card = $('#cake-card');
+    if (!me || !state.ready || !(isStaff() || (state.user.role === 'student' && !state.user.trialUntil && myGradeJH()))) { card.hidden = true; return; }
+    const zoneId = (x, y) => (SM.zoneAtPx(x, y) || {}).id || null, myZone = zoneId(me.x, me.y);
+    let best = null, bestD = Infinity;
+    for (const u of state.others.values()) {
+      if (u.role !== 'student' || !u.bday || u.trial || u.ghost) continue;
+      const d = Math.hypot(u.x - me.x, u.y - me.y);
+      if (d > T * 2.8 || zoneId(u.x, u.y) !== myZone) { cakeSkip.delete(u.id); continue; }
+      if (!isStaff() && u.kid) continue;
+      if (cakeGiven.has(u.id) || cakeSkip.has(u.id)) continue;
+      if (d < bestD) { best = u; bestD = d; }
+    }
+    cakeTarget = best;
+    if (!best) { card.hidden = true; return; }
+    $('#cake-text').textContent = `🎉 ${best.name}さん、今日お誕生日だよ！`;
+    card.hidden = false;
+  }
+  setInterval(updateCakeCard, 700);
+  $('#cake-give').onclick = () => {
+    const u = cakeTarget; if (!u) return;
+    $('#cake-give').disabled = true;
+    state.socket.emit('cake', { to: u.id }, (r) => {
+      $('#cake-give').disabled = false;
+      if (!r || !r.ok) { toast((r && r.error) || '渡せませんでした'); if (r && /もう渡した|見つかりません/.test(r.error || '')) cakeGiven.add(u.id); return; }
+      cakeGiven.add(u.id); $('#cake-card').hidden = true; toast(`🎂 ${u.name}さんに渡したよ！`, 2500);
+    });
+  };
+  $('#cake-close').onclick = () => { if (cakeTarget) cakeSkip.add(cakeTarget.id); $('#cake-card').hidden = true; };
+
+  // 🎂 おうちの人の誕生日：メッセージと勉強時間のプレゼント
+  let pgift = null, pgMsg = null, pgMin = null;
+  function openPgift() {
+    if (!pgift || !pgift.parents.length) { $('#pgift-chip').hidden = true; return; }
+    const par = pgift.parents[0];
+    $('#pgift-title').textContent = '🎉 今日はおうちの人の誕生日！'; $('#pgift-who').textContent = `（${par.name}さん）`;
+    pgMsg = null; pgMin = null; $('#pgift-send').disabled = true;
+    const pick = (box, list, fmt, set) => {
+      box.textContent = '';
+      for (const v of list) {
+        const b = el('button', null, fmt(v)); b.type = 'button';
+        b.onclick = () => { box.querySelectorAll('button').forEach(x => x.classList.remove('on')); b.classList.add('on'); set(v); $('#pgift-send').disabled = !(pgMsg && pgMin); };
+        box.append(b);
+      }
+    };
+    pick($('#pgift-msgs'), pgift.messages, (v) => v, (v) => { pgMsg = v; });
+    pick($('#pgift-mins'), pgift.minutes, (v) => fmtMin(v), (v) => { pgMin = v; });
+    if (!$('#pgift-dialog').open) $('#pgift-dialog').showModal();
+  }
+  $('#pgift-chip').onclick = () => state.socket.emit('parent-gift-open');
+  $('#pgift-later').onclick = () => { $('#pgift-dialog').close(); state.socket.emit('parent-gift-later'); toast('右上の「🎂 おうちの人へ」から、あとでプレゼントできるよ', 4000); };
+  $('#pgift-dialog').addEventListener('cancel', (e) => { e.preventDefault(); $('#pgift-later').click(); });
+  $('#pgift-send').onclick = () => {
+    const par = pgift && pgift.parents[0]; if (!par || !pgMsg || !pgMin) return;
+    $('#pgift-send').disabled = true;
+    state.socket.emit('parent-gift', { parentId: par.id, message: pgMsg, minutes: pgMin }, (r) => {
+      if (!r || !r.ok) { $('#pgift-send').disabled = false; toast((r && r.error) || '送れませんでした'); return; }
+      $('#pgift-dialog').close(); chime(0.25);
+      toast(`🎁 プレゼントしたよ！ 今日 ${fmtMin(pgMin)} 勉強すると、おうちの人の画面に🌸が咲くよ`, 8000);
+      pgift.parents.shift(); if (!pgift.parents.length) $('#pgift-chip').hidden = true;
+    });
+  };
+
   // 🌅 今日の朝活 成功者
   async function loadMorning() { try { state.morning = (await api('GET', '/api/morning-board')).board; } catch (e) { /* 次の機会に */ } }
   setInterval(loadMorning, 10 * 60_000); // 日がかわったときのため
@@ -1597,6 +1699,8 @@
     const list = $('#morning-list'); list.textContent = '';
     if (!mb.names.length) list.append(el('p', 'muted', mb.over ? 'きょうはまだいません。明日も待ってるよ！' : 'まだだれもいません。今日の一番乗りはだれ？'));
     mb.names.forEach((n, i) => list.append(el('div', 'morning-name', `${i + 1}. ${n}`)));
+    const bd = $('#morning-bday'); bd.hidden = !(mb.bdays && mb.bdays.length);
+    if (!bd.hidden) bd.textContent = `🎂 今日のお誕生日：${mb.bdays.join('・')}さん。近くに行って🎂を渡そう！`;
     if (!$('#morning-dialog').open) $('#morning-dialog').showModal();
   }
   $('#morning-close').onclick = () => $('#morning-dialog').close();

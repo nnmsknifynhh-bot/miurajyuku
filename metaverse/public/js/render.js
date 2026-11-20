@@ -453,6 +453,15 @@
       }
       ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
     }
+    // 誕生日の子が席にすわっていたら、席に🎈風船
+    if (u.bday && u.seat && !opts.noTag) {
+      ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const sway = Math.sin(t * 1.6) * 2;
+      ctx.strokeStyle = 'rgba(120,120,120,.7)'; ctx.lineWidth = 0.8;
+      ctx.beginPath(); ctx.moveTo(x + 15, y + 10); ctx.lineTo(x + 19 + sway, y - 6); ctx.moveTo(x + 15, y + 10); ctx.lineTo(x + 28 + sway, y - 1); ctx.stroke();
+      ctx.font = '15px sans-serif'; ctx.fillText('🎈', x + 19 + sway, y - 13); ctx.fillText('🎈', x + 29 + sway, y - 8);
+      ctx.restore();
+    }
     // 帽子・かざりをつけているときは、名札を少し上へ（アイテムがかくれないように）
     const byTag = by - ((u.equip && u.equip.head && !(u.equip.costume)) || (u.equip && u.equip.costume) ? 12 : 0);
     if (opts.noTag) return; // 招待カードなど：アバターだけ
@@ -460,7 +469,7 @@
     const tag = ROLE_TAG[u.role];
     // 高校生：称号を名前の前に、🔥は「週」で数える
     const fire = u.hs ? (u.streak >= 1 ? ` 🔥${u.streak}週` : '') : (u.streak >= 1 ? ` 🔥${u.streak}` : '');
-    const label = (u.myChild ? '💗 ' : '') + (u.bday ? '🎂 ' : '') + (tag ? tag + ' ' : '') + (u.title ? `【${u.title}】` : '') + u.name + fire + (u.asa ? ' 🌅' : '') + (u.goalDone ? ' ✅' : '');
+    const label = (u.myChild ? '💗 ' : '') + (u.bday ? (u.cakes && u.cakes.n ? `🎂×${u.cakes.n}${u.cakes.gold ? '🌟' : ''} ` : '🎂 ') : '') + (tag ? tag + ' ' : '') + (u.title ? `【${u.title}】` : '') + u.name + fire + (u.asa ? ' 🌅' : '') + (u.goalDone ? ' ✅' : '');
     ctx.font = 'bold 12px sans-serif';
     const tw = Math.min(200, ctx.measureText(label).width + 12);
     ctx.fillStyle = opts.isMe ? 'rgba(47,125,225,.95)' : TAG_BG[u.role];
@@ -915,9 +924,20 @@
       const y0 = lines.length === 1 ? b.y + 34 : b.y + 28;
       lines.forEach((ln, i) => ctx.fillText(ln, b.x + b.w / 2, y0 + i * 12));
     }
+    // 🎂 今日のお誕生日（見せる設定の子だけ）：板の下に小さな札
+    if (mb.bdays && mb.bdays.length) {
+      ctx.font = 'bold 8.5px sans-serif';
+      let text = '🎂 今日のお誕生日：' + mb.bdays.join('・');
+      while (ctx.measureText(text).width > b.w + 10 && text.length > 12) text = text.slice(0, -2);
+      if (text !== '🎂 今日のお誕生日：' + mb.bdays.join('・')) text += '…';
+      const w = ctx.measureText(text).width + 12, cx = b.x + b.w / 2, ty = b.y + b.h + 2;
+      ctx.fillStyle = '#ffe9a8'; ctx.strokeStyle = '#d4a017'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.roundRect(cx - w / 2, ty, w, 14, 7); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#6b4a00'; ctx.fillText(text, cx, ty + 7.5);
+    }
     ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
   }
-  const inMorningBoard = (wx, wy) => wx >= MORNING.x && wx <= MORNING.x + MORNING.w && wy >= MORNING.y && wy <= MORNING.y + MORNING.h;
+  const inMorningBoard = (wx, wy) => wx >= MORNING.x && wx <= MORNING.x + MORNING.w && wy >= MORNING.y && wy <= MORNING.y + MORNING.h + 16;
 
   // 🎎 ひな人形：着物の色と、持ち物
   const HINA = {
