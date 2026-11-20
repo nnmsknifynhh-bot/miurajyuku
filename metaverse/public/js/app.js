@@ -1145,11 +1145,11 @@
     if (!state.me) return;
     const z = SM.zoneAtPx(state.me.x, state.me.y);
     const c = z && state.counts[z.id];
-    const key = (z ? z.id : '') + (c ? c.students + '/' + c.capacity : '');
+    const key = (z ? z.id : '') + (c ? c.students + '/' + c.capacity + '/' + (c.left || 0) : '');
     if (!force && key === lastPlaceKey) return;
     lastPlaceKey = key;
     $('#place-name').textContent = z ? z.name : '出入口';
-    $('#place-cap').textContent = c ? `生徒 ${c.students}/${c.capacity}人` : '';
+    $('#place-cap').textContent = c ? `生徒 ${isStaff() ? c.students - (c.left || 0) : c.students}/${c.capacity}人` : '';
   }
 
   // 生徒の「吹き出し」「スタンプ」は、先生・オーナーに話しかけられたとき（近くに来た・個別通話中）だけ出す。
@@ -1320,7 +1320,7 @@
       const box = el('div', 'room-group');
       const h = el('h4', null, g.name);
       const c = g.id && state.counts[g.id];
-      if (c) { const s = el('small', c.students >= c.capacity ? 'full' : '', `生徒 ${c.students}/${c.capacity}人${c.staff ? `・先生 ${c.staff}人` : ''}`); h.append(s); }
+      if (c) { const s = el('small', c.students >= c.capacity ? 'full' : '', `生徒 ${c.students}/${c.capacity}人${c.staff ? `・先生 ${c.staff}人` : ''}${c.left ? `（うち${c.left}人は退室済み）` : ''}`); h.append(s); }
       else h.append(el('small', null, `${members.length}人`));
       box.append(h);
       const ul = el('ul');
@@ -1334,7 +1334,8 @@
         }
         ul.append(li);
       }
-      if (members.length) box.append(ul);
+      if (c && c.left) { const li = el('li', 'left-note', `👋 退室した生徒 ${c.left}人（生徒の画面では、退室後10分は席に表示されます）`); ul.append(li); }
+      if (members.length || (c && c.left)) box.append(ul);
       pb.append(box);
     }
   }

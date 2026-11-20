@@ -114,8 +114,9 @@ function removeGhost(id, announce) {
 }
 function roomCounts() {
   const c = {};
-  for (const r of getRooms()) c[r.id] = { name: r.name, type: r.type, capacity: r.capacity, students: 0, staff: 0 };
-  for (const g of ghosts.values()) if (g.p.room && c[g.p.room]) c[g.p.room].students++;
+  for (const r of getRooms()) c[r.id] = { name: r.name, type: r.type, capacity: r.capacity, students: 0, staff: 0, left: 0 };
+  // 退室して10分のあいだ残して見せている生徒（生徒・保護者の画面だけ）も数える。left はそのうちの人数（先生の画面で「退室済み」と出す）
+  for (const g of ghosts.values()) if (g.p.room && c[g.p.room]) { c[g.p.room].students++; c[g.p.room].left++; }
   for (const p of online.values()) {
     if (!p.room || !c[p.room]) continue;
     if (p.user.role === 'student') c[p.room].students++; else c[p.room].staff++;
