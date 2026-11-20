@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>保護者の方へ ガイド</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap">
+<style>
+  @page { size: A4; margin: 0; }
+  :root { --ink: #2f2a26; --muted: #6f655c; --blue: #4a90c2; --teal: #3fa38a; --green: #4f9d63; --orange: #e98a5c; --red: #d96a8a; --gold: #e0b04a; --navy: #3d6b55; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { font-family: 'Zen Maru Gothic', sans-serif; color: var(--ink); font-weight: 700; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .page { width: 210mm; height: 297mm; padding: 6mm 8mm; position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 1.8mm; background: #fbf6ef; }
+  .page::before { content: ''; position: absolute; inset: 0; background-image: linear-gradient(rgba(79,157,99,.07) 1px, transparent 1px), linear-gradient(90deg, rgba(79,157,99,.07) 1px, transparent 1px); background-size: 6mm 6mm; z-index: 0; }
+  .page > * { position: relative; z-index: 1; flex-shrink: 0; }
+  .top { display: grid; grid-template-columns: 1fr 62mm; gap: 3mm; align-items: stretch; }
+  .title { background: linear-gradient(135deg, #3d6b55, #4f9d63 55%, #e98a9a); color: #fff; border-radius: 5mm; padding: 3.4mm 5mm; box-shadow: 0 1.2mm 0 #2b4d3c; position: relative; overflow: hidden; }
+  .title::after { content: 'FAMILY'; position: absolute; right: 3mm; bottom: 1.5mm; font-size: 9mm; font-weight: 900; color: rgba(255,255,255,.12); letter-spacing: .5mm; }
+  .title small { display: inline-block; background: var(--gold); color: #3a2a00; border-radius: 4mm; padding: .5mm 3mm; font-size: 3.6mm; font-weight: 900; }
+  .title h1 { margin: 1.2mm 0 .6mm; font-size: 10mm; font-weight: 900; line-height: 1.12; }
+  .title p { margin: 0; font-size: 3.7mm; line-height: 1.5; }
+  .shot { border-radius: 3.5mm; overflow: hidden; border: .9mm solid #fff; box-shadow: 0 .8mm 2.2mm rgba(20,40,70,.25); background: #fff; }
+  .shot img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .sec { display: flex; align-items: center; gap: 2mm; font-size: 5mm; font-weight: 900; color: var(--navy); margin-top: .4mm; }
+  .sec .tag { background: var(--navy); color: #fff; font-size: 3mm; border-radius: 2mm; padding: .4mm 2mm; letter-spacing: .3mm; }
+  .sec::after { content: ''; flex: 1; height: .9mm; border-radius: 1mm; background: linear-gradient(90deg, var(--blue), var(--teal), transparent); }
+  .steps { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1.6mm; }
+  .step { background: #fff; border: .7mm solid #cfe3d4; border-radius: 3.5mm; padding: 1.2mm 1.4mm; text-align: center; position: relative; }
+  .step .n { position: absolute; top: -2.2mm; left: -1.4mm; width: 6mm; height: 6mm; border-radius: 50%; background: var(--blue); color: #fff; font-size: 3.4mm; display: grid; place-items: center; font-weight: 900; }
+  .step .ic { font-size: 5.4mm; line-height: 1.1; }
+  .step b { display: block; font-size: 3.7mm; font-weight: 900; }
+  .step span { font-size: 2.9mm; color: var(--muted); line-height: 1.35; display: block; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2.2mm; }
+  .card { background: #fff; border-radius: 4mm; padding: 1.8mm 2.6mm; border-left: 2mm solid; box-shadow: 0 .5mm 1.4mm rgba(20,40,70,.1); display: flex; flex-direction: column; gap: 1mm; }
+  .card h2 { margin: 0; font-size: 4.3mm; font-weight: 900; }
+  .card p { margin: 0; font-size: 3.05mm; line-height: 1.4; }
+  .card .shot { height: 46mm; }
+  .card b.hl { color: var(--red); }
+  table.t { width: 100%; border-collapse: collapse; font-size: 3mm; margin-top: .4mm; }
+  table.t td, table.t th { border-bottom: .3mm solid #e2eaf3; padding: .5mm 1mm; text-align: left; }
+  table.t th { background: #eef6ef; font-weight: 900; }
+  .quests { background: #fff; border-radius: 4mm; overflow: hidden; border: .8mm solid #cfe3d4; }
+  .quests table { width: 100%; border-collapse: collapse; font-size: 3.05mm; }
+  .quests th { background: var(--navy); color: #fff; padding: 1.2mm 2mm; text-align: left; font-weight: 900; }
+  .quests td { padding: .8mm 2mm; border-top: .3mm solid #e2eaf3; line-height: 1.35; vertical-align: top; }
+  .quests td b { color: var(--blue); }
+  .quests tr.s td:first-child { font-weight: 900; white-space: nowrap; }
+  .qnote { margin: 0; font-size: 3mm; color: var(--muted); }
+  .rules { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.6mm; }
+  .rule { background: #fff; border: .7mm dashed #9fc7ab; border-radius: 3.5mm; padding: 1.3mm 2mm; font-size: 2.95mm; line-height: 1.4; }
+  .goal { background: linear-gradient(135deg, #4f9d63, #e98a9a); color: #fff; border-radius: 4mm; padding: 1.8mm 4mm; text-align: center; font-size: 4.4mm; font-weight: 900; box-shadow: 0 1mm 0 #3d6b55; }
+</style>
+</head>
+<body>
+<section class="page">
+  <div class="top">
+    <div class="title">
+      <small>🏠 保護者の方へ</small>
+      <h1>三浦塾オンライン<br>保護者ガイド</h1>
+      <p>「勉強しなさい」と言わなくても、がんばりが見える。<br>見守る・認める・まかせる で、家での自主練を応援しましょう。</p>
+    </div>
+    <div class="shot"><img src="guide2/room_lobby.jpg" alt="" style="object-position:center 40%"></div>
+  </div>
+
+  <div class="sec"><span class="tag">STEP</span>はじめかた</div>
+  <div class="steps">
+    <div class="step"><span class="n">1</span><div class="ic">🔑</div><b>招待コード</b><span>塾からお渡しするコードで登録</span></div>
+    <div class="step"><span class="n">2</span><div class="ic">📱</div><b>ログイン</b><span>ご自分のID・パスワードで</span></div>
+    <div class="step"><span class="n">3</span><div class="ic">🛋</div><b>ロビーのソファ</b><span>すわると塾全体を見わたせる</span></div>
+    <div class="step"><span class="n">4</span><div class="ic">👪</div><b>わが子を見る</b><span>今日・今週の時間と🔥</span></div>
+    <div class="step"><span class="n">5</span><div class="ic">👍</div><b>見たよスタンプ</b><span>1日1回、お子さまへ</span></div>
+  </div>
+
+  <div class="sec"><span class="tag">FEATURE</span>保護者の方ができること</div>
+  <div class="grid3">
+    <div class="card" style="border-color:var(--blue)"><h2>📅 勉強の足あと</h2><p>カレンダーで、<b>いつ・どれだけ</b>勉強したかが1か月ずつわかります。色が濃いほど長く勉強した日。<b>保護者だけ</b>が見られます。</p><div class="shot"><img src="guide2/calendar.jpg" alt="" style="object-position:center 25%"></div></div>
+    <div class="card" style="border-color:var(--red)"><h2>👍 見たよスタンプ</h2><p>「がんばったね」などを1日1回。お子さまが次に入ると<b>「🏠 おうちの人から」</b>と届き、ロビーの<b>家族の木</b>に花が咲きます。</p><div class="shot"><img src="guide2/cheer.jpg" alt="" style="object-position:30% top"></div></div>
+    <div class="card" style="border-color:var(--gold)"><h2>📝 毎日5問クイズ</h2><p>漢字・英単語・数学・理科・社会（中学レベル）を日替わりで。正解でポイント、着せかえも。「今日の問題なんだった？」と<b>親子の会話</b>に。</p><div class="shot"><img src="guide2/parent_quiz.jpg" alt="" style="object-position:center 40%"></div></div>
+  </div>
+  <div class="grid3">
+    <div class="card" style="border-color:var(--teal)"><h2>🛋 ロビーで見守り</h2><p>ふだんは<b>ロビーだけ・1日1回10分</b>。ソファにすわると塾全体を見わたせます。毎日来ると保護者にも🔥がつきます。</p></div>
+    <div class="card" style="border-color:var(--green)"><h2>🏫 保護者会・面談</h2><p>保護者会の日は<b>全部の教室を見学</b>でき、お子さまと同じルールで体験できます。<b>面談ブース</b>では通話と画面共有で個別面談も。</p></div>
+    <div class="card" style="border-color:var(--orange)"><h2>🌷 お友だちの紹介</h2><p>「わが子」画面からお友だちのご家族へ。入塾されると、家族の木に<b>🌷</b>が咲き、<b>50ポイント</b>をプレゼント。</p></div>
+  </div>
+
+  <div class="sec"><span class="tag">SAFETY</span>安心のための約束</div>
+  <div class="rules">
+    <div class="rule">👤 保護者の方のお名前は、子どもには<b>「🏠 保護者」</b>とだけ表示。ほかのお子さまの名前は保護者には出ません。</div>
+    <div class="rule">📷 自習中の見守り写真は<b>先生だけ</b>が見て、<b>保存しません</b>（自習室を出ると消えます）。</div>
+    <div class="rule">📸 入室前の「今日のページ」の写真は<b>塾長だけ</b>が見て、<b>14日で自動で消えます</b>。</div>
+    <div class="rule">🎧 個別通話は、お子さまが<b>教室にいるまま</b>。🎧マークが出て、記録が残ります（録音なし）。</div>
+  </div>
+
+  <div class="sec"><span class="tag">TIPS</span>続けるコツ：見守る・認める・まかせる</div>
+  <div class="rules" style="grid-template-columns:repeat(3,1fr)">
+    <div class="rule">👀 <b>見守る</b>：時間はアプリが自動で記録。「勉強しなさい」の代わりに、カレンダーをのぞいてみてください。</div>
+    <div class="rule">👏 <b>認める</b>：短い日も、まずはスタンプ1つ。「来ただけでえらい」が毎日の習慣をつくります。</div>
+    <div class="rule">🤝 <b>まかせる</b>：🔥やクエスト、目標はお子さま自身のもの。おうちの方は<b>できた日をほめる係</b>です。</div>
+  </div>
+  <div class="goal">🏠 おうちの方の「見たよ」が、いちばんの応援になります。</div>
+</section>
+</body>
+</html>
