@@ -359,3 +359,10 @@ body.is-trial .not-trial { display: none !important; }
 .sp-how li { line-height: 1.45; }
 @media (max-height: 740px) { .sp-view { height: 34vh; } }
 .sp .quiz-card { max-height: calc(100dvh - 24px); overflow: auto; }
+
+/* 入室してきた子への「ようこそ」リアクション */
+.welcome-card { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(112px + env(safe-area-inset-bottom)); z-index: 40; background: #fff; border: 3px solid #ffd27a; border-radius: 18px; padding: 10px 34px 10px 14px; box-shadow: var(--shadow); display: grid; gap: 6px; max-width: calc(100vw - 24px); }
+.wc-text { margin: 0; font-weight: 800; font-size: 15px; }
+.wc-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.wc-btns button { font-size: 24px; min-width: 52px; min-height: 48px; border-radius: 14px; border: 2px solid var(--line); background: #fffaf0; }
+.wc-close { position: absolute; top: 4px; right: 6px; border: 0; background: none; font-size: 20px; color: var(--muted); }

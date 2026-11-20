@@ -246,6 +246,13 @@
     // ── 保護者 ──
     socket.on('visit-over', ({ message }) => showVisitOver(message));
     socket.on('myseats', (list) => { state.mySeats = list || []; });
+    // 入室してきた子への「ようこそ」リアクション（小学生自習室・高校生自習室）
+    socket.on('welcome-chance', (d) => showWelcomeCard(`${d.room === 'es' ? '🎒' : '☕'} ${d.name}さんが来たよ！ あいさつを送ろう`, d.kinds, (kind) => sendWelcomeTo('welcome', d.id, kind)));
+    socket.on('welcome-got', (d) => {
+      if (d.canReply) showWelcomeCard(`${d.name}さんから ${d.kind} が届いたよ！ 返す？`, d.kinds, (kind) => sendWelcomeTo('welcome-reply', d.from, kind));
+      else toast(`${d.name}さんから ${d.kind} が届いたよ！`, 4000);
+    });
+    socket.on('welcome-replied', (d) => toast(`${d.name}さんから ${d.kind} が返ってきたよ！`, 4000));
     socket.on('morning-board', (mb) => { state.morning = mb; if ($('#morning-dialog').open) openMorning(); });
     socket.on('blackboard', ({ board }) => { state.board = board; if (board && !isStaff()) { toast('📝 先生の黒板が新しくなったよ（ロビー）', 5000); markBoardSeen(); } });
     socket.on('myseat-lost', () => { toast('⭐ 🔥がとぎれたので、マイ席はお休みになりました。また続けたら、えらべるよ', 7000); refreshFun(true); });
@@ -1544,6 +1551,20 @@
   $('#menu-invite').onclick = openInvite;
   // ───── 📝 先生の黒板 ─────
   const boardKey = () => 'juku-board-seen-' + (state.user ? state.user.id : '');
+  // 「ようこそ」リアクションのカード（30秒で消える）
+  let wcTimer = null;
+  function showWelcomeCard(text, kinds, onPick) {
+    $('#wc-text').textContent = text;
+    const box = $('#wc-btns'); box.textContent = '';
+    for (const k of kinds) { const b = el('button', null, k); b.type = 'button'; b.onclick = () => { $('#welcome-card').hidden = true; onPick(k); }; box.append(b); }
+    $('#welcome-card').hidden = false;
+    clearTimeout(wcTimer); wcTimer = setTimeout(() => { $('#welcome-card').hidden = true; }, 30_000);
+  }
+  $('#wc-close').onclick = () => { $('#welcome-card').hidden = true; };
+  function sendWelcomeTo(ev, to, kind) {
+    state.socket.emit(ev, { to, kind }, (r) => { if (!r || !r.ok) toast((r && r.error) || '送れませんでした'); else toast(`${kind} を送ったよ`, 2000); });
+  }
+
   // 🌅 今日の朝活 成功者
   async function loadMorning() { try { state.morning = (await api('GET', '/api/morning-board')).board; } catch (e) { /* 次の機会に */ } }
   setInterval(loadMorning, 10 * 60_000); // 日がかわったときのため

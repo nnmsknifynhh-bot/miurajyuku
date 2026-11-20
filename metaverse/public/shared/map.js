@@ -138,7 +138,7 @@
     { id: 'class2', name: '小学生自習室', type: 'study', style: 'kids', lesson: true, x1: 18, y1: 1, x2: 33, y2: 13 }, // lesson: 授業（声・画面共有）もできる
     { id: 'class3', name: '高校生自習室', type: 'study', style: 'cafe', x1: 35, y1: 1, x2: 50, y2: 13 },
     { id: 'hall', name: 'ろうか', type: 'hall', x1: 1, y1: 15, x2: 50, y2: 18 },
-    { id: 'study', name: '自習室', type: 'study', x1: 1, y1: 20, x2: 33, y2: 32 },
+    { id: 'study', name: '中学生自習室', type: 'study', x1: 1, y1: 20, x2: 33, y2: 32 },
     { id: 'mendan', name: '面談ブース', type: 'classroom', private: true, x1: 35, y1: 27, x2: 38, y2: 32 }, // ロビーより先に書く（ロビーの中にあるため）
     { id: 'lobby', name: 'ロビー', type: 'lobby', x1: 35, y1: 20, x2: 50, y2: 32 },
   ];

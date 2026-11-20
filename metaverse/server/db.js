@@ -85,7 +85,7 @@ const ROOM_SEED = [
   { id: 'class1', name: 'スピーキング・ライティング教室', type: 'study', sort: 1 }, // 教室1をテストの教室に
   { id: 'class2', name: '小学生自習室', type: 'study', sort: 2 }, // 教室2を小学生自習室に（授業・保護者会もできる）
   { id: 'class3', name: '高校生自習室', type: 'study', sort: 3 }, // 教室3を高校生自習室（カフェ風）に改装
-  { id: 'study', name: '自習室', type: 'study', sort: 4 },
+  { id: 'study', name: '中学生自習室', type: 'study', sort: 4 },
   { id: 'mendan', name: '面談ブース', type: 'classroom', sort: 5 }, // ロビーの面談ブース（オーナーが許可した人だけ）
 ];
 const insertRoom = db.prepare('INSERT OR IGNORE INTO rooms (id, name, type, capacity, max_capacity, sort_order) VALUES (?, ?, ?, ?, ?, ?)');
@@ -110,6 +110,8 @@ for (const r of ROOM_SEED) {
     db.prepare("UPDATE rooms SET type = 'study', name = '小学生自習室', capacity = ?, max_capacity = ? WHERE id = 'class2'").run(max, max);
   }
 }
+// 「自習室」を「中学生自習室」に（1回だけ）
+db.prepare("UPDATE rooms SET name = '中学生自習室' WHERE id = 'study' AND name = '自習室'").run();
 // すでに「教室3」として保存されているデータを、高校生自習室に切りかえる（1回だけ）
 {
   const r3 = db.prepare("SELECT type FROM rooms WHERE id = 'class3'").get();

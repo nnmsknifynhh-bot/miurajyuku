@@ -387,7 +387,7 @@
   }
 
   // ═════════ 入室状況 ═════════
-  const ROOM_LABEL = { class1: 'スピーキング・ライティング教室', class2: '教室2', class3: '高校生自習室', study: '自習室', hall: 'ろうか', lobby: 'ロビー' };
+  const ROOM_LABEL = { class1: 'スピーキング・ライティング教室', class2: '小学生自習室', class3: '高校生自習室', study: '中学生自習室', hall: 'ろうか', lobby: 'ロビー' };
   async function loadStatus() {
     let data;
     try { data = await api('GET', '/api/admin/presence'); } catch (e) { return toast(e.message); }

@@ -268,6 +268,64 @@ function setRoom(p, roomId) {
   p.room = roomId;
   io.emit('user-updated', { id: p.id, room: roomId });
   broadcastRooms();
+  announceArrival(p);
+}
+
+// ═════ 入室してきた子への「ようこそ」リアクション（小学生自習室・高校生自習室） ═════
+// 小学生：すわって自習中の子が、入ってきた子に送れる。見えるのは2人だけ
+// 高校生：高校生自習室にいる子が、入ってきた子に送れる（すわっていなくてよい）。小学生には見えない（中学生・高校生・先生には見える）
+// どちらも、同じ相手には1日1回だけ。もらった子は、その子に1回だけ返せる
+const WELCOME_KINDS = ['👋', '😊', '💪', '✨'];
+const WELCOME_WINDOW_MS = 3 * 60_000; // 入ってきてから3分のあいだ送れる
+const REPLY_WINDOW_MS = 10 * 60_000;  // もらってから10分のあいだ返せる
+const isES = (u) => u.role === 'student' && /^小[1-6]$/.test(u.grade || '');
+const isHSu = (u) => u.role === 'student' && /^高[123]$/.test(u.grade || '');
+const welcomeRoomOf = (p) => p.room === 'class2' && isES(p.user) ? 'es' : p.room === 'class3' && isHSu(p.user) ? 'hs' : null;
+const welcomeSent = new Map(); // `${day}|${kind}|${from}>${to}` -> 時刻（1日1回）
+const welcomeGot = new Map();  // `${to}<${from}` -> もらった時刻（返せるか）
+function welcomeKey(type, from, to) { return `${ganbari.jst().day}|${type}|${from}>${to}`; }
+function canSendWelcome(sender) { return !!(sender.user.role === 'student' && !sender.user.trial_until && welcomeRoomOf(sender) && (welcomeRoomOf(sender) !== 'es' || sender.seat)); }
+function announceArrival(p) {
+  const kind = welcomeRoomOf(p);
+  if (!kind || p.user.trial_until) return;
+  p.arrivedAt = Date.now();
+  for (const o of online.values()) {
+    if (o === p || o.room !== p.room || !canSendWelcome(o)) continue;
+    if (welcomeSent.has(welcomeKey('w', o.id, p.id))) continue;
+    o.socket.emit('welcome-chance', { id: p.id, name: p.user.display_name, kinds: WELCOME_KINDS, room: kind });
+  }
+}
+// だれに見せるか：小学生は2人だけ、高校生は小学生以外（保護者ものぞく）
+function showWelcome(room, from, to, kind) {
+  const ev = { id: from.id, kind };
+  if (room === 'es') { from.socket.emit('reaction', ev); to.socket.emit('reaction', ev); return; }
+  for (const o of online.values()) if (o.user.role !== 'parent' && !isES(o.user)) o.socket.emit('reaction', ev);
+}
+function sendWelcome(p, d, reply) {
+  const to = online.get(Number(d && d.to)), kind = d && d.kind;
+  if (!WELCOME_KINDS.includes(kind)) return { ok: false, error: 'そのリアクションは送れません' };
+  if (!to || to === p || to.user.role !== 'student') return { ok: false, error: '相手が見つかりません' };
+  const room = welcomeRoomOf(p);
+  if (!room || to.room !== p.room) return { ok: false, error: '同じ部屋にいる子にだけ送れます' };
+  const key = welcomeKey(reply ? 'r' : 'w', p.id, to.id);
+  if (welcomeSent.has(key)) return { ok: false, error: reply ? 'もう返しました' : 'この子には今日はもう送りました' };
+  if (reply) {
+    const got = welcomeGot.get(`${p.id}<${to.id}`);
+    if (!got || Date.now() - got > REPLY_WINDOW_MS) return { ok: false, error: '返せる時間がすぎました' };
+  } else {
+    if (room === 'es' && !p.seat) return { ok: false, error: 'すわって自習しているときに送れます' };
+    if (!to.arrivedAt || Date.now() - to.arrivedAt > WELCOME_WINDOW_MS) return { ok: false, error: '入ってきたばかりの子にだけ送れます' };
+  }
+  welcomeSent.set(key, Date.now());
+  if (welcomeSent.size > 5000) { const day = ganbari.jst().day; for (const k of welcomeSent.keys()) if (!k.startsWith(day)) welcomeSent.delete(k); }
+  showWelcome(room, p, to, kind);
+  if (!reply) {
+    welcomeGot.set(`${to.id}<${p.id}`, Date.now());
+    to.socket.emit('welcome-got', { from: p.id, name: p.user.display_name, kind, kinds: WELCOME_KINDS, canReply: !welcomeSent.has(welcomeKey('r', to.id, p.id)) });
+  } else {
+    to.socket.emit('welcome-replied', { from: p.id, name: p.user.display_name, kind });
+  }
+  return { ok: true };
 }
 
 // 部屋から外へ出す（権限がなくなったときなど）
@@ -510,6 +568,10 @@ function attach(httpServer) {
       lowerHand(target, p.user.display_name);
       ack({ ok: true });
     });
+
+    // ── 入室してきた子への「ようこそ」リアクション ──
+    socket.on('welcome', (d, ack) => { if (typeof ack !== 'function') ack = () => {}; ack(sendWelcome(p, d, false)); });
+    socket.on('welcome-reply', (d, ack) => { if (typeof ack !== 'function') ack = () => {}; ack(sendWelcome(p, d, true)); });
 
     // ── リアクション ──
     socket.on('reaction', (kind) => {
