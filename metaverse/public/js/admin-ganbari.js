@@ -98,7 +98,7 @@
       const winRow = el('div', 'gb-slots'); winRow.append(common.all[0], common.am, common.pm);
       const winField = el('div', 'field'); winField.append(el('span', null, '数える時間帯'), winRow, el('small', null, '朝だけ・夜だけのときは「朝」の欄だけ使ってください'));
       const capField = field('1日に数える上限（分）', capI, '朝と夜の合計');
-      const g = el('div', 'gb-grid'); g.append(winField, capField);
+      const g = el('div', 'gb-rule'); g.append(winField, capField); // 時間帯と上限は縦にならべる（重ならないように）
       const byDay = check('曜日ごとに変える（数える曜日・時間帯・上限）', Array.isArray(src.weekly));
       const wkBox = el('div', 'gb-week');
       const wkRows = WD.map((name, i) => {
