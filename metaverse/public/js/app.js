@@ -15,6 +15,8 @@
   let mapCanvas = null;
   const isStaff = () => !!(state.user && (state.user.role === 'owner' || state.user.role === 'teacher'));
   const isParent = () => !!(state.user && state.user.role === 'parent');
+  // 中学生・高校生には、小学生自習室の外（ろうか・ロビー）にいる小学生は見せない（気が散らないように）
+  const hiddenKid = (u) => !!(u && u.kid && u.room !== 'class2' && state.user && state.user.role === 'student' && /^[中高][1-3]$/.test(state.user.grade || ''));
   const isOwner = () => !!(state.user && state.user.role === 'owner');
   // 生徒と同じルールで動く人（生徒・保護者会の日の保護者）
   const studentLike = () => !!(state.user && (state.user.role === 'student' || (state.user.role === 'parent' && state.meeting)));
@@ -459,15 +461,23 @@
   // ───────── 自習室：立ち歩きが10秒をこえたら、席えらびを出す ─────────
   const STAND_LIMIT_MS = 10_000;
   let standingSince = 0;
+  const WANDER_LIMIT_MS = 20_000; // 小学生：ろうか・ロビーにいられる時間
+  let wanderSince = 0;
+  const isKidGrade = (g) => /^小[1-6]$/.test(g || '');
+  let seatRoom = null; // 席えらびの部屋（小学生がろうか・ロビーにいるときは 'class2'）
+  const pickRoomId = () => seatRoom || ((state.me && SM.isStudyRoom(state.me.room)) ? state.me.room : 'study');
   function studySeats() {
-    const z = SM.ZONES.find(v => v.id === ((state.me && SM.isStudyRoom(state.me.room)) ? state.me.room : 'study')), seats = [];
+    const z = SM.ZONES.find(v => v.id === pickRoomId()), seats = [];
     for (let y = z.y1; y <= z.y2; y++) for (let x = z.x1; x <= z.x2; x++) if (SM.tileAt(x, y) === 'c' && !SM.isBoothSeat(SM.seatId(x, y))) seats.push({ x, y });
     return seats;
   }
-  function openSeatPicker() {
+  function openSeatPicker(room) {
+    seatRoom = room || null;
+    $('#seat-title').textContent = seatRoom === 'class2' ? '🎒 小学生自習室の、どの席にすわる？' : '🪑 どこにすわる？';
+    $('#seat-warn').textContent = seatRoom === 'class2' ? '⚠️ ろうかやロビーに20秒いたよ。小学生自習室にもどって、席にすわろう！' : '⚠️ 立ち歩きが10秒をこえたよ。席にすわって勉強しよう！';
     const map = $('#seat-map'); map.textContent = '';
     const occ = occupiedSeats(), seats = studySeats();
-    const roomId = SM.isStudyRoom(state.me.room) ? state.me.room : 'study';
+    const roomId = pickRoomId();
     const groups = (SM.SEAT_GROUPS[roomId] || [{ label: '席' }]).map(gp => [gp.label, seats.filter(s =>
       (gp.x1 == null || (s.x >= gp.x1 && s.x <= gp.x2)) && (gp.y1 == null || (s.y >= gp.y1 && s.y <= gp.y2)))]);
     for (const [label, side] of groups) {
@@ -981,7 +991,15 @@
   setInterval(() => {
     const me = state.me;
     // 自習室から出された・すわったときは、席えらびを閉じる
-    if ($('#seat-dialog').open && (!me || !SM.isStudyRoom(me.room) || me.seat)) $('#seat-dialog').close();
+    if ($('#seat-dialog').open && (!me || (!SM.isStudyRoom(me.room) && !seatRoom) || me.seat)) $('#seat-dialog').close();
+    if (!$('#seat-dialog').open) seatRoom = null;
+    // 🎒 小学生がろうか・ロビーを20秒ウロウロしていたら、小学生自習室の席えらびを出す
+    const wander = state.ready && me && state.user.role === 'student' && !state.user.trialUntil && isKidGrade(state.user.grade) && !me.room
+      && !state.pathSeat && !(state.path && state.path.length) && document.visibilityState === 'visible' && !document.querySelector('dialog[open]')
+      && $('#start-photo').hidden && $('#quiz').hidden;
+    if (!wander) wanderSince = 0;
+    else if (!wanderSince) wanderSince = Date.now();
+    else if (Date.now() - wanderSince > WANDER_LIMIT_MS) { wanderSince = 0; openSeatPicker('class2'); }
     const watching = state.ready && me && studentLike() && SM.isStudyRoom(me.room) && !me.seat
       && !state.pathSeat && document.visibilityState === 'visible' && !document.querySelector('dialog[open]');
     if (!watching) { standingSince = 0; return; } // すわった・歩いて席へ向かっている・ほかの画面を開いている・アプリを見ていないときは数えない
@@ -1491,6 +1509,7 @@
     // ほかの人のアバター
     let hit = null, hd = Infinity;
     for (const u of state.others.values()) {
+      if (hiddenKid(u)) continue;
       const big = u.bloom || u.role === 'owner' || u.role === 'teacher'; // 1.4倍のアバターは、当たりも大きく
       const d = Math.hypot(u.rx - w.x, u.ry - (big ? 14 : 8) - w.y);
       if (d < (big ? 28 : 20) && d < hd) { hd = d; hit = u; }
@@ -1991,7 +2010,7 @@
       ctx.strokeStyle = 'rgba(47,125,225,.9)'; ctx.lineWidth = 2.5;
       ctx.beginPath(); ctx.arc((last.x + .5) * T, (last.y + .5) * T, 10 + Math.sin(time / 150) * 2, 0, Math.PI * 2); ctx.stroke();
     }
-    const list = [...state.others.values()].map(u => ({ u, x: u.rx, y: u.ry, isMe: false }));
+    const list = [...state.others.values()].filter(u => !hiddenKid(u)).map(u => ({ u, x: u.rx, y: u.ry, isMe: false }));
     list.push({ u: me, x: me.x, y: me.y, isMe: true });
     const forest = state.gb && state.gb.forest;
     SM.FOREST.forEach((f, i) => { const p = treePos(i); list.push({ tree: forest ? forest.trees[i] : null, x: p.x, y: p.y }); });
