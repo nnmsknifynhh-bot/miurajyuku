@@ -353,6 +353,21 @@
       };
       card.append(row);
       box.append(card);
+      // 入室前の写真（今日最初に取り組むページ）
+      let sp = true;
+      try { sp = (await api('GET', '/api/admin/settings')).startPhoto; } catch (e) {}
+      const c2 = el('div', 'room-box');
+      c2.append(el('h3', null, '📸 入室前の写真（今日最初に取り組むページ）'));
+      c2.append(el('div', 'muted', '生徒がその日はじめて入るとき、漢字テストのあとに「今日最初に取り組むページ」を撮ってから入室します。写真はオーナーだけが「🏆 がんばり」の「📸 今日最初のページ」で見られます（14日で自動で消えます）。'));
+      const r2 = el('div', 'cap-row');
+      const b2 = el('button', 'btn small' + (sp ? ' danger' : ''), sp ? 'オフにする' : 'オンにする');
+      r2.append(el('b', null, sp ? '現在：オン' : '現在：オフ'), b2);
+      b2.onclick = async () => {
+        try { await api('PATCH', '/api/admin/settings', { startPhoto: !sp }); toast(!sp ? '入室前の写真をオンにしました' : '入室前の写真をオフにしました'); loadRooms(); }
+        catch (e) { toast(e.message); }
+      };
+      c2.append(r2);
+      box.append(c2);
     }
     for (const r of rooms) {
       const card = el('div', 'room-box');

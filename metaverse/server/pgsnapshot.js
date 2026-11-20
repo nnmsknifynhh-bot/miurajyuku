@@ -122,7 +122,7 @@ function startAutoSave(sqliteDb) {
 }
 
 module.exports = {
-  enabled, restore, save, startAutoSave,
+  enabled, restore, save, startAutoSave, getPool,
   _setPool: (P) => { PoolImpl = P; pool = null; tableReady = false; },
   _flushForTest: async () => { const n = changesNow(); await save(); lastChanges = n; },
 };

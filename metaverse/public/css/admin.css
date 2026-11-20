@@ -124,3 +124,9 @@ tr.kq-auto td { background: #fff8e1; }
 .bday-row select { min-height: 44px; border: 2px solid var(--line); border-radius: 10px; font-size: 16px; padding: 0 8px; width: auto; }
 #bday-field .gb-check { font-weight: 400; color: var(--text); }
 #bday-field .gb-check input { width: 22px; height: 22px; }
+
+/* 📸 今日最初のページ */
+.sp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 8px; }
+.sp-item { display: grid; gap: 2px; text-decoration: none; color: inherit; background: #fff; border: 1px solid #ecdcc6; border-radius: 12px; padding: 6px; }
+.sp-item img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 8px; background: #eee; }
+.sp-item small { color: #7a6a5c; }

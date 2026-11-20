@@ -37,6 +37,7 @@
     // 生徒は、入室の前に漢字の読みテスト（必要なときだけ）
     if (u.role === 'student') {
       try { if ((await api('GET', '/api/quiz/status')).required) await runQuiz(); } catch (e) { /* テストなしで入室 */ }
+      try { if ((await api('GET', '/api/me/start-photo')).required) await runStartPhoto(); } catch (e) { /* 写真なしで入室（サーバーが止めたらもう一度） */ }
     }
     connect();
     requestAnimationFrame(loop);
@@ -70,6 +71,63 @@
         };
         choices.append(b);
       });
+    });
+  }
+
+  // ───────── 入室前の写真：今日最初に取り組むページ（その日はじめて入るとき） ─────────
+  function runStartPhoto() {
+    const box = $('#start-photo'), video = $('#sp-video'), img = $('#sp-preview'), msg = $('#sp-msg');
+    let stream = null, blob = null, url = null;
+    const stop = () => { if (stream) stream.getTracks().forEach(t => t.stop()); stream = null; };
+    const show = (mode) => { // 'live' | 'preview' | 'file'
+      video.hidden = mode !== 'live'; img.hidden = mode !== 'preview';
+      $('#sp-shot').hidden = mode !== 'live'; $('#sp-file-label').hidden = mode !== 'file';
+      $('#sp-retake').hidden = $('#sp-enter').hidden = mode !== 'preview';
+    };
+    // 写真を小さくして（長い辺 720px・JPEG）送る
+    const shrink = (src, w, h) => new Promise((res) => {
+      const k = Math.min(1, 720 / Math.max(w, h)), cv = document.createElement('canvas');
+      cv.width = Math.round(w * k); cv.height = Math.round(h * k);
+      cv.getContext('2d').drawImage(src, 0, 0, cv.width, cv.height);
+      cv.toBlob(b => res(b), 'image/jpeg', 0.65);
+    });
+    const setPreview = (b) => { blob = b; if (url) URL.revokeObjectURL(url); url = URL.createObjectURL(b); img.src = url; show('preview'); msg.textContent = 'ページがはっきり写っているかな？'; };
+    async function startCam() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }, audio: false });
+        video.srcObject = stream; await video.play().catch(() => {});
+        show('live'); msg.textContent = 'ノートや問題集のページを、カメラに向けてね';
+      } catch (e) {
+        show('file'); msg.textContent = 'カメラが使えないときは「カメラで撮る」を押してね';
+      }
+    }
+    return new Promise((resolve) => {
+      box.hidden = false;
+      startCam();
+      $('#sp-shot').onclick = async () => {
+        if (!video.videoWidth) return;
+        const b = await shrink(video, video.videoWidth, video.videoHeight);
+        stop(); setPreview(b);
+      };
+      $('#sp-file').onchange = () => {
+        const f = $('#sp-file').files[0]; if (!f) return;
+        const im = new Image();
+        im.onload = async () => { setPreview(await shrink(im, im.naturalWidth, im.naturalHeight)); URL.revokeObjectURL(im.src); };
+        im.src = URL.createObjectURL(f);
+      };
+      $('#sp-retake').onclick = () => { blob = null; $('#sp-file').value = ''; startCam(); };
+      $('#sp-enter').onclick = async () => {
+        if (!blob) return;
+        $('#sp-enter').disabled = true; msg.textContent = '送っています…';
+        try {
+          const r = await fetch('/api/me/start-photo', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
+          if (!r.ok) { let m = '送れませんでした。もう一度ためしてね'; try { m = (await r.json()).error || m; } catch (e) {} throw new Error(m); }
+          stop(); if (url) URL.revokeObjectURL(url);
+          box.hidden = true; toast('📸 今日のページを撮ったよ。がんばろう！', 3500);
+          resolve();
+        } catch (e) { msg.textContent = e.message; }
+        finally { $('#sp-enter').disabled = false; }
+      };
     });
   }
 
@@ -157,6 +215,11 @@
     // テストに答えていない（サーバーが入室を止めた）とき
     socket.on('quiz-required', async () => {
       await runQuiz();
+      socket.connect();
+    });
+    // 今日の写真を撮っていない（サーバーが入室を止めた）とき
+    socket.on('photo-required', async () => {
+      await runStartPhoto();
       socket.connect();
     });
     socket.on('connect_error', (err) => {

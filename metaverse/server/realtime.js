@@ -16,6 +16,7 @@ const parents = require('./parents');
 const referral = require('./referral');
 const myseat = require('./myseat');
 const kanken = require('./kanken');
+const startphoto = require('./startphoto');
 const { can, canEnterRoom } = require('./permissions');
 
 const T = SM.TILE;
@@ -317,6 +318,12 @@ function attach(httpServer) {
     // 入室前の漢字テスト：まだ答えていない生徒は入れない（すぐの入り直しは除く）
     if (kanken.required(user, { quickRejoin: isQuickRejoin(user.id) })) {
       socket.emit('quiz-required');
+      socket.disconnect(true);
+      return;
+    }
+    // 入室前の写真（今日最初に取り組むページ）：今日まだ撮っていない生徒は入れない
+    if (startphoto.required(user)) {
+      socket.emit('photo-required');
       socket.disconnect(true);
       return;
     }

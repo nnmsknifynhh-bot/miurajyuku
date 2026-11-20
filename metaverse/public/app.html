@@ -39,6 +39,26 @@
     </div>
   </section>
 
+  <!-- 入室前の写真：今日最初に取り組むページ -->
+  <section class="quiz sp" id="start-photo" hidden>
+    <div class="quiz-card">
+      <p class="quiz-top">📸 入室の前に</p>
+      <h2 class="sp-title">今日最初に取り組むページを撮ろう！</h2>
+      <div class="sp-view">
+        <video id="sp-video" playsinline muted autoplay></video>
+        <img id="sp-preview" alt="撮った写真" hidden>
+        <p class="sp-msg" id="sp-msg"></p>
+      </div>
+      <div class="sp-actions">
+        <button class="btn big" id="sp-shot">📸 撮る</button>
+        <label class="btn big secondary" id="sp-file-label" hidden>📷 カメラで撮る<input type="file" id="sp-file" accept="image/*" capture="environment" hidden></label>
+        <button class="btn secondary" id="sp-retake" hidden>撮りなおす</button>
+        <button class="btn big" id="sp-enter" hidden>この写真で入室する</button>
+      </div>
+      <small class="muted">写真はオーナー（塾長）だけが見られます。</small>
+    </div>
+  </section>
+
   <!-- がんばり：ポイントと着せかえ -->
   <dialog id="shop-dialog">
     <div class="dialog-body">

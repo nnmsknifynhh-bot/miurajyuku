@@ -10,6 +10,7 @@ const livekit = require('./livekit');
 const notify = require('./notify');
 const ganbari = require('./ganbari');
 const fun = require('./fun');
+const startphoto = require('./startphoto');
 const parents = require('./parents');
 const referral = require('./referral');
 const myseat = require('./myseat');
@@ -47,7 +48,7 @@ app.use('/api', (req, res, next) => {
     let sameOrigin = true;
     if (origin) { try { sameOrigin = new URL(origin).host === req.headers.host; } catch { sameOrigin = false; } }
     if (!sameOrigin) return res.status(403).json({ error: '不正なリクエストです' });
-    const isPhoto = req.path === '/study/photo' && req.is('image/jpeg');
+    const isPhoto = (req.path === '/study/photo' || req.path === '/me/start-photo') && req.is('image/jpeg');
     if (!req.is('application/json') && !isPhoto) return res.status(415).json({ error: '不正なリクエストです' });
   }
   next();
@@ -420,6 +421,19 @@ app.get('/api/study/photo/:id', auth.requireAuth, (req, res) => {
 app.get('/api/study/photos', auth.requireAuth, (req, res) => {
   if (!realtime.canViewStudyPhotos(req.user)) return bad(res, 'この写真を見る権限がありません', 403);
   res.json({ times: realtime.studyPhotoTimes() });
+});
+
+// ═════ 入室前の「今日最初に取り組むページ」の写真 ═════
+app.get('/api/me/start-photo', auth.requireAuth, async (req, res) => {
+  try { res.json({ required: await startphoto.requiredAsync(req.user) }); } catch (e) { res.json({ required: false }); }
+});
+app.post('/api/me/start-photo', express.raw({ type: 'image/jpeg', limit: '450kb' }), auth.requireAuth, async (req, res) => {
+  if (req.user.role !== 'student') return bad(res, '生徒の機能です', 403);
+  try {
+    const err = await startphoto.save(req.user.id, req.body);
+    if (err) return bad(res, err, 400);
+    res.json({ ok: true });
+  } catch (e) { console.error('写真の保存に失敗:', e.message); bad(res, '写真を保存できませんでした。もう一度ためしてください', 500); }
 });
 
 app.post('/api/me/password', auth.requireAuth, (req, res) => {
@@ -839,7 +853,21 @@ admin.delete('/kanken/questions/:id', requireOwner, (req, res) => {
 
 // 塾全体の設定（オーナーのみ）
 admin.get('/settings', requireOwner, (req, res) => {
-  res.json({ studyPhotos: realtime.studyPhotosEnabled() });
+  res.json({ studyPhotos: realtime.studyPhotosEnabled(), startPhoto: startphoto.enabledNow() });
+});
+// 入室前の写真の一覧（オーナーだけ）。?day=YYYY-MM-DD（なければ今日）
+admin.get('/start-photos', requireOwner, async (req, res) => {
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.day || '')) ? String(req.query.day) : ganbari.jst().day;
+  try { res.json({ day, keepDays: startphoto.KEEP_DAYS, photos: await startphoto.listDay(day) }); } catch (e) { bad(res, '写真の一覧を読めませんでした', 500); }
+});
+admin.get('/start-photos/:userId/:day', requireOwner, async (req, res) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(req.params.day)) return bad(res, '日付が正しくありません');
+  try {
+    const img = await startphoto.getImage(Number(req.params.userId), req.params.day);
+    if (!img) return bad(res, '写真はありません', 404);
+    res.setHeader('Content-Type', 'image/jpeg'); res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.send(img);
+  } catch (e) { bad(res, '写真を読めませんでした', 500); }
 });
 admin.patch('/settings', requireOwner, (req, res) => {
   if (typeof req.body.studyPhotos === 'boolean') {
@@ -847,7 +875,11 @@ admin.patch('/settings', requireOwner, (req, res) => {
     realtime.setStudyPhotosFeature(req.body.studyPhotos);
     audit(req.user.id, 'settings.study_photos', req.body.studyPhotos ? 'on' : 'off', null, req.ip);
   }
-  res.json({ studyPhotos: realtime.studyPhotosEnabled() });
+  if (typeof req.body.startPhoto === 'boolean') {
+    setSetting('start_photo', req.body.startPhoto ? '1' : '0');
+    audit(req.user.id, 'settings.start_photo', req.body.startPhoto ? 'on' : 'off', null, req.ip);
+  }
+  res.json({ studyPhotos: realtime.studyPhotosEnabled(), startPhoto: startphoto.enabledNow() });
 });
 
 admin.get('/logs', requireOwner, (req, res) => {

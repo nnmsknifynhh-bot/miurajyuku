@@ -278,6 +278,31 @@
     saveBd.onclick = () => save({ birthdayMessage: bdMsg.value }, '誕生日カードのひとことを保存しました');
     bdSec.append(field('お祝いカードのひとこと（100文字まで）', bdMsg), saveBd);
 
+    // ═════ 📸 今日最初に取り組むページ（入室前の写真） ═════
+    if (isOwner) {
+      const spSec = section('📸 今日最初のページ', '生徒がその日はじめて入るときに撮った「今日最初に取り組むページ」です。写真をタップすると大きく見られます（14日で自動で消えます）。');
+      const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+      const dayIn = el('input'); dayIn.type = 'date'; dayIn.value = today; dayIn.max = today;
+      const spRow = el('div', 'gb-row'); spRow.append(el('span', null, '日にち'), dayIn);
+      const spGrid = el('div', 'sp-grid');
+      spSec.append(spRow, spGrid);
+      const loadSp = async () => {
+        spGrid.textContent = '読みこみ中…';
+        let d; try { d = await api('GET', '/api/admin/start-photos?day=' + dayIn.value); } catch (e) { spGrid.textContent = e.message; return; }
+        spGrid.textContent = '';
+        if (!d.photos.length) { spGrid.append(el('p', 'muted', 'この日の写真はありません')); return; }
+        for (const p of d.photos) {
+          const a = el('a', 'sp-item'); a.href = `/api/admin/start-photos/${p.userId}/${d.day}`; a.target = '_blank'; a.rel = 'noopener';
+          const im = el('img'); im.src = a.href; im.alt = p.name; im.loading = 'lazy';
+          const t = new Date(p.at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tokyo' });
+          a.append(im, el('b', null, p.name), el('small', null, `${p.grade || ''}・${t}`));
+          spGrid.append(a);
+        }
+      };
+      dayIn.onchange = loadSp; loadSp();
+      root.prepend(spSec); // いちばん上に
+    }
+
     // ═════ 生徒の自習時間 ═════
     const stSec = section('👦 生徒の自習時間', '生徒をタップすると、勉強時間のくわしい内容（今日・今週・今学期・今年度、最近14日、ポイント、🔥）が見られます。表の時間は「ポイントになる時間」です。「修正」で、日ごとの自習時間を直せます（直した値が優先されます）。');
     root.prepend(stSec); // いちばん上に（毎日見るので）
