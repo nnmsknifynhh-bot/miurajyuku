@@ -274,8 +274,9 @@
     if (!z || (z.type !== 'classroom' && z.type !== 'study')) return null;
     if (state.me && state.me.room === z.id) return null;
     const r = roomInfo(z.id);
-    if (z.type === 'classroom' && !(r && r.canEnter)) {
-      return state.user.role === 'teacher' ? `${z.name}には入れません（担当の教室ではありません）` : `${z.name}には入れません`;
+    if (!(r && r.canEnter)) {
+      if (z.type === 'classroom') return state.user.role === 'teacher' ? `${z.name}には入れません（担当の教室ではありません）` : `${z.name}には入れません`;
+      return `${z.name}には入れません`;
     }
     const c = state.counts[z.id];
     if (studentLike() && c && c.students >= c.capacity) return `${z.name}は満員です（定員${c.capacity}人）`;
@@ -789,7 +790,8 @@
   $('#bday-wear').onclick = () => { $('#bday-dialog').close(); wearNow('bday_cake'); };
 
   $('#bday-close').onclick = () => { $('#bday-dialog').close(); if (state.gb && state.gb.refreshForest) state.gb.refreshForest(); };
-  $('#seat-close').onclick = () => { $('#seat-dialog').close(); standingSince = Date.now(); };
+  // 席えらびは「あとで」なし：かならずすわる（Esc でも閉じない）
+  $('#seat-dialog').addEventListener('cancel', (e) => e.preventDefault());
   // 近くの空いている席（テストのブースはのぞく）へ歩いてすわる
   function goNearSeat() {
     const me = state.me, occ = occupiedSeats();
@@ -862,6 +864,8 @@
   };
   setInterval(() => {
     const me = state.me;
+    // 自習室から出された・すわったときは、席えらびを閉じる
+    if ($('#seat-dialog').open && (!me || !SM.isStudyRoom(me.room) || me.seat)) $('#seat-dialog').close();
     const watching = state.ready && me && studentLike() && SM.isStudyRoom(me.room) && !me.seat
       && !state.pathSeat && document.visibilityState === 'visible' && !document.querySelector('dialog[open]');
     if (!watching) { standingSince = 0; return; } // すわった・歩いて席へ向かっている・ほかの画面を開いている・アプリを見ていないときは数えない
@@ -1088,7 +1092,7 @@
     const u = state.user;
     if (!u || u.role === 'student' || !u.permissions.handle_students) return false;
     const r = roomInfo(roomId);
-    return !!(r && r.type === 'classroom' && r.canEnter);
+    return !!(r && SM.isLessonRoom(r.id) && r.canEnter);
   };
   const handList = () => [...state.others.values()].filter(u => u.hand && handleable(u.room)).sort((a, b) => a.handAt - b.handAt);
 
@@ -1284,7 +1288,7 @@
   }
 
   function goToRoom(r, tries = 0) {
-    if (r.type === 'classroom' && !studentLike()) {
+    if (SM.isLessonRoom(r.id) && !studentLike()) {
       const pod = SM.PODIUM[r.id];
       if (walkTo(pod.x, pod.y, false)) toast(`${r.name}の教壇へ向かいます`);
       return;

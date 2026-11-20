@@ -190,7 +190,7 @@ app.get('/api/me/ganbari', auth.requireAuth, (req, res) => {
     pair: u.role === 'student' && !u.trial_until ? referral.pairOf(u.id) : null,
     mySeat: u.role === 'student' ? myseat.statusOf(u.id) : null,
     referralWeek: referral.weekOn() ? referral.getConfig().week : null,
-    rules: { minutesPerPoint: c.minutesPerPoint, streakMin: ganbari.streakMinFor(u.id, c), window: c.window, window2: c.window2, requireSeat: c.requireSeat, today: ganbari.ruleFor(today, c, ganbari.isHS(u.grade) ? 'hs' : null) },
+    rules: { minutesPerPoint: c.minutesPerPoint, streakMin: ganbari.streakMinFor(u.id, c), window: ({ es: c.es, hs: c.hs }[ganbari.groupOf(u.grade)] || c).window, window2: ({ es: c.es, hs: c.hs }[ganbari.groupOf(u.grade)] || c).window2, requireSeat: c.requireSeat, today: ganbari.ruleFor(today, c, ganbari.groupOf(u.grade)) },
   });
 });
 app.post('/api/me/shop/buy', auth.requireAuth, (req, res) => {
@@ -569,7 +569,7 @@ function applyPermissionsAndRooms(userId, role, permissions, rooms) {
     ON CONFLICT(user_id) DO UPDATE SET ${cols.map(c => `${c} = excluded.${c}`).join(', ')}`)
     .run(userId, ...PERMISSIONS.map(d => p[d.key]));
   if (role === 'teacher' && Array.isArray(rooms)) {
-    const valid = new Set(db.prepare("SELECT id FROM rooms WHERE type = 'classroom'").all().map(r => r.id));
+    const valid = new Set(db.prepare('SELECT id FROM rooms').all().map(r => r.id).filter(id => SchoolMap.isLessonRoom(id)));
     db.prepare('DELETE FROM teacher_rooms WHERE user_id = ?').run(userId);
     for (const r of new Set(rooms)) if (valid.has(r)) db.prepare('INSERT INTO teacher_rooms (user_id, room_id) VALUES (?, ?)').run(userId, r);
   }

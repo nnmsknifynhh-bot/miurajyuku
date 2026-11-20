@@ -88,7 +88,7 @@ test('🎂：「みんなに見せる」はほかの生徒にも、「先生だ�
 });
 
 test('学年の木：みんなに見せる誕生日の生徒がいる木にケーキ', () => {
-  G.setConfig({ trees: [{ name: '小5の木', grades: ['小5'] }, { name: '中2の木', grades: ['中2'] }, { name: '中3の木', grades: ['中3'] }, { name: '高校生の木', grades: ['高1', '高2', '高3'] }] });
+  G.setConfig({ trees: [{ name: '小5の木', grades: ['小5'] }, { name: '中2の木', grades: ['中2'] }, { name: '中3の木', grades: ['中3'] }, { name: '高校生の木', grades: ['高1', '高2', '高3'] }, { name: '小学生の木', grades: ['小1', '小2', '小3', '小4', '小5', '小6'] }] });
   const f = G.forest();
   assert.equal(f.trees[0].birthday, true);
   assert.equal(f.trees[1].birthday, false);

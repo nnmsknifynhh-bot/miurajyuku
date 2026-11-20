@@ -153,7 +153,7 @@ test('来る曜日：決めた時刻をすぎても来ていないと、1日1回
 
 test('高校生の木（4本目）と短冊', async () => {
   const f = G.forest();
-  assert.equal(f.trees.length, 4);
+  assert.equal(f.trees.length, 5);
   assert.equal(f.trees[3].name, '高校生の木');
   assert.deepEqual(f.trees[3].grades, ['高1', '高2', '高3']);
   const g = await http('POST', '/api/me/goal', { text: '模試で偏差値60' }, U.hs1.cookie);

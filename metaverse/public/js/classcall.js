@@ -185,7 +185,7 @@
       const u = st.user;
       const mendan = st.me.room === 'mendan';
       const word = mendan ? '面談' : '授業';
-      const mayStart = (u.role === 'owner' || u.role === 'teacher') && u.permissions.start_class_call && roomInfo && roomInfo.type === 'classroom' && roomInfo.canEnter;
+      const mayStart = (u.role === 'owner' || u.role === 'teacher') && u.permissions.start_class_call && roomInfo && window.SchoolMap.isLessonRoom(roomInfo.id) && roomInfo.canEnter;
 
       if (!cls) {
         if (!mayStart) { bar.hidden = true; return; }

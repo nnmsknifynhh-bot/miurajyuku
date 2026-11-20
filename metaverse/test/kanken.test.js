@@ -47,12 +47,13 @@ test('サンプル問題：各級に15問以上あり、4つの選択肢はす�
   for (const q of qs) assert.equal(new Set([q.answer, ...q.wrong]).size, 4, q.word);
 });
 
-test('答えるまで入室できない（先生・対象外の学年は出題なし）', async () => {
+test('答えるまで入室できない（先生は出題なし・小学生は6級5級）', async () => {
   assert.equal((await http('GET', '/api/quiz/status', null, U.c1.cookie)).data.required, true);
   assert.equal((await tryConnect(U.c1.cookie)).entered, false);
   assert.equal((await http('GET', '/api/quiz/status', null, U.tch.cookie)).data.required, false);
   assert.equal((await tryConnect(U.tch.cookie)).entered, true);
-  assert.equal((await http('GET', '/api/quiz/status', null, U.e5.cookie)).data.required, false, '小5は初期設定では出題なし');
+  assert.equal((await http('GET', '/api/quiz/status', null, U.e5.cookie)).data.required, true, '小5は6級・5級から出題');
+  assert.ok(['6級', '5級'].includes((await http('POST', '/api/quiz/question', {}, U.e5.cookie)).data.level));
 });
 
 test('学年に合った級から出る（中1：5〜4級、中2：4〜3級、中3：3〜準2級）', async () => {

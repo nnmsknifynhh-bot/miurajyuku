@@ -1,12 +1,12 @@
 // 入室前の漢字テスト（漢検の読み・4択）
-// - 生徒がオンライン教室に入るとき、学年に合った級から1問出す（中1：5〜4級、中2：4〜3級、中3：3〜準2級）
+// - 生徒がオンライン教室に入るとき、学年に合った級から1問出す（小学生：6〜5級、中1：5〜4級、中2：4〜3級、中3：3〜準2級）
 // - 正解でも不正解でも、正しい読みを見てから入室できる（すぐの入り直しでは出さない）
 // - 問題は最初にサンプルを入れておき、先生が管理画面で追加・修正・削除できる
 //   ※ サンプルの級の分け方は目安です。先生が確認してください
 const crypto = require('crypto');
 const { db, now, getSetting, setSetting, audit } = require('./db');
 
-const LEVELS = ['5級', '4級', '3級', '準2級', '2級'];
+const LEVELS = ['6級', '5級', '4級', '3級', '準2級', '2級'];
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS quiz_questions (
@@ -34,6 +34,18 @@ CREATE INDEX IF NOT EXISTS idx_quiz_results_user ON quiz_results(user_id, answer
 
 // ───────── サンプル問題（最初の1回だけ入れる） ─────────
 const SAMPLE = {
+  // 6級（小学5年生の漢字）
+  '6級': [
+    ['往復', 'おうふく', 'おうぶく', 'じゅうふく', 'おうほく'], ['永久', 'えいきゅう', 'えいく', 'えいきょう', 'ながきゅう'],
+    ['河川', 'かせん', 'かがわ', 'かわせん', 'がせん'], ['快適', 'かいてき', 'けいてき', 'かいせき', 'かいでき'],
+    ['規則', 'きそく', 'きぞく', 'ぎそく', 'きそっく'], ['逆転', 'ぎゃくてん', 'ぎゃくでん', 'さかてん', 'ぎゃてん'],
+    ['経験', 'けいけん', 'きょうけん', 'けいげん', 'けけん'], ['検査', 'けんさ', 'けんさい', 'けんしゃ', 'げんさ'],
+    ['効果', 'こうか', 'こうが', 'こうかい', 'きくか'], ['財産', 'ざいさん', 'さいさん', 'ざいざん', 'たからさん'],
+    ['賛成', 'さんせい', 'さんじょう', 'ざんせい', 'さんせ'], ['準備', 'じゅんび', 'じゅんぶ', 'しゅんび', 'じゅんぴ'],
+    ['職員', 'しょくいん', 'しょくにん', 'しきいん', 'しょっいん'], ['政治', 'せいじ', 'せいち', 'しょうじ', 'まつりじ'],
+    ['増加', 'ぞうか', 'ぞうが', 'そうか', 'ますか'], ['豊富', 'ほうふ', 'ほうとみ', 'ぼうふ', 'ゆたふ'],
+    ['防災', 'ぼうさい', 'ぼうざい', 'ふせさい', 'ほうさい'], ['貿易', 'ぼうえき', 'ぼうい', 'ほうえき', 'ぼうやく'],
+  ],
   '5級': [
     ['宇宙', 'うちゅう', 'うじゅう', 'うちゅ', 'ゆうちゅう'], ['誕生', 'たんじょう', 'たんせい', 'だんじょう', 'たんしょう'],
     ['縦断', 'じゅうだん', 'たてだん', 'しゅうだん', 'じゅうたん'], ['拡大', 'かくだい', 'こうだい', 'かくたい', 'ひろだい'],
@@ -78,16 +90,27 @@ const SAMPLE = {
     ['詐欺', 'さぎ', 'さき', 'さくぎ', 'ざぎ'],
   ],
 };
-if (db.prepare('SELECT COUNT(*) AS n FROM quiz_questions').get().n === 0) {
+{
   const ins = db.prepare('INSERT INTO quiz_questions (level, word, answer, wrong1, wrong2, wrong3, sample, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?)');
-  for (const [level, list] of Object.entries(SAMPLE)) for (const q of list) ins.run(level, ...q, now());
+  if (db.prepare('SELECT COUNT(*) AS n FROM quiz_questions').get().n === 0) {
+    for (const [level, list] of Object.entries(SAMPLE)) for (const q of list) ins.run(level, ...q, now());
+    setSetting('kanken_sample_6', '1');
+  } else if (getSetting('kanken_sample_6', '') !== '1') { // あとから追加した6級のサンプル（1回だけ）
+    for (const q of SAMPLE['6級']) ins.run('6級', ...q, now());
+    setSetting('kanken_sample_6', '1');
+  }
 }
 
 // ───────── 設定 ─────────
-const DEFAULT_LEVELS = { '中1': ['5級', '4級'], '中2': ['4級', '3級'], '中3': ['3級', '準2級'] };
+const ES_LEVELS = ['6級', '5級']; // 小学生は6級・5級
+const DEFAULT_LEVELS = { '小1': ES_LEVELS, '小2': ES_LEVELS, '小3': ES_LEVELS, '小4': ES_LEVELS, '小5': ES_LEVELS, '小6': ES_LEVELS, '中1': ['5級', '4級'], '中2': ['4級', '3級'], '中3': ['3級', '準2級'] };
 function getConfig() {
   let saved = {};
   try { saved = JSON.parse(getSetting('kanken', '{}')); } catch (e) { saved = {}; }
+  if (saved.gradeLevels && !saved.esV1) { // 小学生（6級・5級）を足す（1回だけ）
+    for (const g of ['小1', '小2', '小3', '小4', '小5', '小6']) if (!saved.gradeLevels[g]) saved.gradeLevels[g] = [...ES_LEVELS];
+    saved.esV1 = true; setSetting('kanken', JSON.stringify(saved));
+  }
   return { enabled: true, gradeLevels: DEFAULT_LEVELS, ...saved };
 }
 function setConfig(p, actorId) {

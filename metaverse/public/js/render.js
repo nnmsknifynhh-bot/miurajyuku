@@ -8,6 +8,7 @@
     hall: ['#ebe7df', '#e4dfd5', '#d5cec2'],
     study: ['#f5e4c6', '#efdcba', '#dcc49d'],
     cafe: ['#a47551', '#956a49', '#7d5739'],
+    kids: ['#fff3d6', '#fde7c2', '#f2d6a6'], // 小学生自習室：クリーム色のチェック
     lobby: ['#f1ece4', '#ebe4d9', '#d8cfc1'],
     none: ['#e9e3d9', '#e2dbcf', '#d2c9bb'],
   };
@@ -44,6 +45,12 @@
           g.fillStyle = seam; g.fillRect(px, py + i * 8 + 7, T, 1);
           g.fillRect(px + ox, py + i * 8, 1, 8); g.fillRect(px + ox + 16, py + i * 8, 1, 8);
         }
+      } else if (type === 'kids') {
+        // やわらかいチェックの床＋小さな水玉
+        g.fillStyle = (x + y) % 2 ? a : b; g.fillRect(px, py, T, T);
+        g.fillStyle = seam; g.fillRect(px, py + T - 1, T, 1); g.fillRect(px + T - 1, py, 1, T);
+        g.fillStyle = ['rgba(255,143,163,.25)', 'rgba(110,198,255,.25)', 'rgba(123,211,137,.25)'][(x * 7 + y * 3) % 3];
+        g.beginPath(); g.arc(px + 16, py + 16, 2.2, 0, Math.PI * 2); g.fill();
       } else if (type === 'classroom') {
         g.fillStyle = (x + y) % 2 ? a : b; g.fillRect(px, py, T, T);
         g.fillStyle = seam; g.fillRect(px, py + T - 1, T, 1); g.fillRect(px + ((y % 2) ? 0 : 16), py, 1, T);
@@ -92,7 +99,19 @@
           if (SM.tileAt(x, y + 1) !== 'p' && SM.tileAt(x, y + 1) !== 'T') { g.fillStyle = '#946638'; g.fillRect(px, py + T - 6, T, 6); }
           break;
         }
-        case 'r': case 'Y': {
+        case 'r': case 'Y': if (zt === 'kids') {
+          // にじ色のふちどりラグ
+          const isR = (c) => c === 'r' || c === 'Y';
+          g.fillStyle = '#ffe3ec'; g.fillRect(px, py, T, T);
+          const cols = ['#ff8fa3', '#ffc75f', '#7bd389', '#6ec6ff', '#b79cff'];
+          g.fillStyle = cols[(x + y) % 5];
+          if (!isR(SM.tileAt(x - 1, y))) g.fillRect(px + 2, py, 4, T);
+          if (!isR(SM.tileAt(x + 1, y))) g.fillRect(px + T - 6, py, 4, T);
+          if (!isR(SM.tileAt(x, y - 1))) g.fillRect(px, py + 2, T, 4);
+          if (!isR(SM.tileAt(x, y + 1))) g.fillRect(px, py + T - 6, T, 4);
+          g.fillStyle = 'rgba(255,255,255,.6)'; g.beginPath(); g.arc(px + 16, py + 16, 3, 0, Math.PI * 2); g.fill();
+          break;
+        } else {
           const isR = (c) => c === 'r' || c === 'Y';
           g.fillStyle = '#a9c4a2'; g.fillRect(px, py, T, T);
           g.fillStyle = '#93b18c';
@@ -107,11 +126,21 @@
           g.fillStyle = '#c4935c'; g.fillRect(px, py, T, T);
           rr(px - (SM.tileAt(x - 1, y) === 'T' ? 2 : -2), py + 4, T + 0, T - 8, 3, '#7a4b2a');
           g.fillStyle = '#8f5d37'; g.fillRect(px + 2, py + 7, T - 4, 4); break;
-        case 'D':
+        case 'D': if (zt === 'kids') {
+          // 小学生自習室：まるい角のつくえ（となりとつなげて島に）
+          const l = SM.tileAt(x - 1, y) === 'D', r = SM.tileAt(x + 1, y) === 'D';
+          g.fillStyle = 'rgba(0,0,0,.1)'; g.fillRect(px + (l ? 0 : 4), py + T - 6, T - (l ? 0 : 4) - (r ? 0 : 4), 4);
+          rr(px + (l ? -2 : 3), py + 4, T + (l ? 2 : -3) + (r ? 2 : -3), T - 9, 7, '#f6c98e');
+          rr(px + (l ? -2 : 5), py + 6, T + (l ? 2 : -5) + (r ? 2 : -5), T - 13, 5, '#ffdcaa');
+          g.fillStyle = ['#ff8fa3', '#6ec6ff', '#7bd389', '#ffc75f'][(x + y) % 4]; g.fillRect(px + 9, py + 9, 11, 8); // ノート
+          g.fillStyle = '#fff'; g.fillRect(px + 10, py + 10, 9, 6);
+          break;
+        } else {
           g.fillStyle = 'rgba(0,0,0,.12)'; g.fillRect(px + 4, py + T - 5, T - 6, 4);
           rr(px + 3, py + 4, T - 6, T - 9, 4, '#c08d55');
           rr(px + 5, py + 6, T - 10, T - 13, 3, '#d6a771');
           g.fillStyle = '#fff'; g.fillRect(px + 9, py + 9, 11, 8); g.fillStyle = '#8fb4e8'; g.fillRect(px + 10, py + 10, 9, 1); break;
+        }
         case 'b': if (zt === 'cafe') {
           // 窓ぎわのカウンター（一枚板）＋マグカップ
           rr(px - 1, py + 4, T + 2, T - 12, 2, '#6b4226'); g.fillStyle = '#86562f'; g.fillRect(px - 1, py + 4, T + 2, 4);
@@ -145,7 +174,8 @@
           break;
         } else {
           const facing = SM.seatFacing(x, y);
-          const col = zt === 'study' ? '#7aa38a' : '#5d6e88', dark = zt === 'study' ? '#5c8a6f' : '#46556b';
+          const KC = [['#ff8fa3', '#e86f86'], ['#ffc75f', '#e5a93c'], ['#7bd389', '#58b56c'], ['#6ec6ff', '#4aa6e0'], ['#b79cff', '#967ae6']][(x * 3 + y) % 5];
+          const col = zt === 'kids' ? KC[0] : zt === 'study' ? '#7aa38a' : '#5d6e88', dark = zt === 'kids' ? KC[1] : zt === 'study' ? '#5c8a6f' : '#46556b';
           rr(px + 8, py + 8, T - 16, T - 14, 5, col);
           if (facing === 'up') rr(px + 7, py + T - 10, T - 14, 6, 3, dark);
           else rr(px + 7, py + 3, T - 14, 6, 3, dark);
@@ -196,7 +226,7 @@
     }
     // カフェのカウンターのメニュー
     g.fillStyle = '#f5e6c8'; g.font = 'bold 11px sans-serif'; g.fillText('☕ Study Café', 38 * T, 1.55 * T);
-    for (const z of SM.ZONES.filter(z => z.type === 'classroom' && !z.private)) {
+    for (const z of SM.ZONES.filter(z => (z.type === 'classroom' || z.lesson) && !z.private)) {
       g.fillStyle = 'rgba(255,255,255,.85)'; g.font = 'bold 12px sans-serif';
       g.fillText('きょうも いっしょに がんばろう！', (z.x1 + 6) * T, 0.45 * T);
       g.fillStyle = '#7fa6d9'; g.font = 'bold 10px sans-serif';
@@ -209,6 +239,22 @@
       grd.addColorStop(0, 'rgba(255,200,120,.32)'); grd.addColorStop(1, 'rgba(255,200,120,0)');
       g.fillStyle = grd;
       g.fillRect(cafe.x1 * T, cafe.y1 * T, (cafe.x2 - cafe.x1 + 1) * T, (cafe.y2 - cafe.y1 + 1) * T);
+    }
+    // 小学生自習室：三角の旗（ガーランド）と、やわらかい光
+    {
+      const cols = ['#ff8fa3', '#ffc75f', '#7bd389', '#6ec6ff', '#b79cff'];
+      g.strokeStyle = 'rgba(120,90,60,.6)'; g.lineWidth = 1.5;
+      g.beginPath(); g.moveTo(18 * T, 3.15 * T); g.quadraticCurveTo(26 * T, 3.6 * T, 34 * T, 3.15 * T); g.stroke();
+      for (let i = 0; i < 24; i++) {
+        const fx = 18.4 * T + i * (15.2 * T / 24), t2 = (fx - 18 * T) / (16 * T), fy = 3.15 * T + Math.sin(t2 * Math.PI) * 0.22 * T;
+        g.fillStyle = cols[i % 5]; g.beginPath(); g.moveTo(fx - 7, fy); g.lineTo(fx + 7, fy); g.lineTo(fx, fy + 12); g.closePath(); g.fill();
+      }
+      const kz = SM.ZONES.find(z => z.id === 'class2');
+      for (const [lx, ly] of [[21, 7], [25, 7], [29, 7]]) {
+        const grd = g.createRadialGradient(lx * T, ly * T, 0, lx * T, ly * T, 5 * T);
+        grd.addColorStop(0, 'rgba(255,240,200,.35)'); grd.addColorStop(1, 'rgba(255,240,200,0)');
+        g.fillStyle = grd; g.fillRect(kz.x1 * T, kz.y1 * T, (kz.x2 - kz.x1 + 1) * T, (kz.y2 - kz.y1 + 1) * T);
+      }
     }
     // 自習室のやわらかい照明
     const study = SM.ZONES.find(z => z.id === 'study');
@@ -225,12 +271,13 @@
       rr(cx - w / 2, cy - 12, w, 24, 8, bg);
       g.fillStyle = '#fff'; g.fillText(text, cx, cy + 1);
     };
-    sign('🎤 テスト教室', 14 * T, 15.5 * T, '#2f7de1'); sign('教室2', 32 * T, 15.5 * T, '#2fa36b'); sign('高校生自習室', 49 * T, 15.5 * T, '#6d4c41');
+    sign('🎤 テスト教室', 14 * T, 15.5 * T, '#2f7de1'); sign('🎒 小学生自習室', 32 * T, 15.5 * T, '#ff8a3d'); sign('高校生自習室', 49 * T, 15.5 * T, '#6d4c41');
     sign('自習室', 17 * T, 18.5 * T, '#8b6b4a'); sign('ロビー', 43 * T, 18.5 * T, '#7a6f86');
     sign('🌿 自習室　しずかに集中しよう', 17 * T, 31.3 * T, 'rgba(110,85,60,.75)');
     sign('ようこそ 三浦塾へ', 42 * T, 21.5 * T, 'rgba(120,110,135,.8)');
     sign('🗣 面談ブース', 37 * T, 25.5 * T, 'rgba(47,125,225,.85)');
     sign('☕ 高校生自習室　自分のペースで、しっかり集中', 42 * T, 12.4 * T, 'rgba(93,58,34,.8)');
+    sign('🌈 小学生自習室　たのしく しっかり がんばろう', 26 * T, 12.4 * T, 'rgba(255,138,61,.85)');
     g.textAlign = 'start'; g.textBaseline = 'alphabetic';
     return cv;
   }

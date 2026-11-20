@@ -129,6 +129,7 @@
     };
     const jh = ruleBlock(c, '📚 自習室（中学生など）');
     const hs = ruleBlock(c.hs, '☕ 高校生自習室（高校生）', '高校生（高1〜高3）の数え方です。中学生とは別に決められます。');
+    const es = ruleBlock(c.es, '🎒 小学生自習室（小学生）', '小学生（小1〜小6）の数え方です。最初は 朝6:00〜7:30・夕方15:00〜18:00 です。');
     // 高校生の週のノルマ
     const MD = [['🥉', 'ブロンズ'], ['🥈', 'シルバー'], ['🥇', 'ゴールド']];
     const medalsCfg = c.hs.medals || [{ minutes: 240, points: 10 }, { minutes: 360, points: 20 }, { minutes: 540, points: 30 }];
@@ -144,7 +145,7 @@
     const grid = el('div', 'gb-grid');
     grid.append(field('何分で1ポイント', mpp, '中学生・高校生共通'), field('連続自習🔥の最低時間（分）：下の学年以外', streakMin, '例：小学生'));
     // 連続自習🔥の最低時間（学年別）
-    const SG = ['中1', '中2', '中3'];
+    const SG = ['小1', '小2', '小3', '小4', '小5', '小6', '中1', '中2', '中3'];
     const sgInputs = SG.map(g => [g, numInput((c.streakByGrade || {})[g] || c.streakMin, 1, 600)]);
     const sgBox = el('div', 'field');
     const sgRow = el('div', 'gb-row');
@@ -158,10 +159,11 @@
         streakMin: Number(streakMin.value), minutesPerPoint: Number(mpp.value),
         streakByGrade: { ...(c.streakByGrade || {}), ...Object.fromEntries(sgInputs.map(([g, i]) => [g, Number(i.value)])) },
         requireSeat: seat[1].checked, requireCamera: cam[1].checked,
+        es: es.value(),
         hs: { ...hs.value(), medals: medalInputs.map(([mi, pi]) => ({ minutes: Number(mi.value), points: Number(pi.value) })), lateMinutes: Number(hsLate.value) },
       }, '数え方を保存しました').then(ok => { if (ok) load(root, ctx).then(() => window.scrollTo(0, y)); });
     };
-    rule.append(jh.box, hs.box, grid, sgBox, seat[0], cam[0], saveRule);
+    rule.append(jh.box, es.box, hs.box, grid, sgBox, seat[0], cam[0], saveRule);
 
     // ═════ 学期と年度 ═════
     const termSec = section('📅 学期と年度', `今は ${cfg.current ? cfg.current.name : '学期の期間外'}です。保護者レポートは学期ごとに作れます。`);

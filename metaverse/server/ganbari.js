@@ -111,6 +111,14 @@ const weekdayOf = (day) => new Date(day + 'T00:00:00Z').getUTCDay();
 const HS_GRADES = ['高1', '高2', '高3'];
 const isHS = (grade) => HS_GRADES.includes(grade);
 const HS_TREE = { name: '高校生の木', grades: HS_GRADES };
+const ES_GRADES = ['小1', '小2', '小3', '小4', '小5', '小6'];
+const isES = (grade) => ES_GRADES.includes(grade);
+// 数え方のグループ：'hs'＝高校生、'es'＝小学生、null＝中学生
+const groupOf = (grade) => HS_GRADES.includes(grade) ? 'hs' : ES_GRADES.includes(grade) ? 'es' : null;
+const ES_TREE = { name: '小学生の木', grades: ES_GRADES };
+const ES_STREAK_MIN = 45; // 小学生の🔥・季節のクエストの1日の最低時間
+// 小学生（小学生自習室）のポイントになる時間：朝 6:00〜7:30・夕方 15:00〜18:00
+const ES_RULES = () => ({ window: { start: '06:00', end: '07:30' }, window2: { start: '15:00', end: '18:00' }, dailyCap: 300, weekly: null });
 // 高校生の称号（自習時間の合計・時間）
 const TITLES = [[20, 'がんばり屋'], [50, '努力家'], [100, '鉄人'], [200, '勉強の達人'], [300, '受験の覇者'], [500, '伝説の受験生']];
 const DEFAULT_MEDALS = [{ minutes: 240, points: 10 }, { minutes: 360, points: 20 }, { minutes: 540, points: 30 }]; // 🥉4時間・🥈6時間・🥇9時間
@@ -125,13 +133,14 @@ function defaults(today = jst()) {
     requireSeat: true,     // 席に座っているときだけ数える
     requireCamera: false,  // 見守り写真がオンのとき、カメラがオンのときだけ数える
     streakMin: 90,         // 連続自習に数える1日の最低時間（分）。下の学年別にない学年はこれ
-    streakByGrade: { '中1': 45, '中2': 60, '中3': 90 }, // 学年別の最低時間（分）
+    streakByGrade: { ...Object.fromEntries(ES_GRADES.map(g => [g, ES_STREAK_MIN])), '中1': 45, '中2': 60, '中3': 90 }, // 学年別の最低時間（分）
     minutesPerPoint: 10,   // 何分で1ポイント
     yearStart: `${y}-04-01`,
     pointsFrom: `${y}-04-01`, // ポイントを数え始めた日（新年度になっても変えない＝ポイントは引きつぐ）
     terms: [`${y}-04-01`, `${y}-09-01`, `${y + 1}-01-01`],
-    trees: [{ name: '中1の木', grades: ['中1'] }, { name: '中2の木', grades: ['中2'] }, { name: '中3の木', grades: ['中3'] }, HS_TREE],
+    trees: [{ name: '中1の木', grades: ['中1'] }, { name: '中2の木', grades: ['中2'] }, { name: '中3の木', grades: ['中3'] }, HS_TREE, ES_TREE],
     // 高校生（高校生自習室）の数え方。時間帯・上限・曜日は中学生とは別。週のノルマ：週○回・1回○分以上
+    es: { ...ES_RULES(), esV1: true }, // 小学生の数え方（時間帯・上限・曜日）
     // 高校生：週のメダル（週の勉強時間の合計で🥉🥈🥇。ボーナスはいちばん上のメダルの分だけ）
     hs: { window: { start: '16:00', end: '23:00' }, window2: null, dailyCap: 360, weekly: null, medals: DEFAULT_MEDALS.map(m => ({ ...m })), lateMinutes: 15, medalsV1: true },
     stages: [0, 5, 15, 30, 50, 80], // 木の段階（平均時間・時間単位）
@@ -183,6 +192,12 @@ function getConfig() {
     saved.pointsFrom = saved.yearStart || d.yearStart;
     setSetting('ganbari', JSON.stringify({ ...d, ...saved }));
   }
+  if (!saved.esV1) { // 小学生の数え方と🔥45分を足す（1回だけ）
+    saved.es = { ...ES_RULES(), ...(saved.es || {}), esV1: true };
+    saved.streakByGrade = { ...Object.fromEntries(ES_GRADES.map(g => [g, ES_STREAK_MIN])), ...(saved.streakByGrade || d.streakByGrade) };
+    saved.esV1 = true;
+    setSetting('ganbari', JSON.stringify(saved));
+  }
   let shs = saved.hs || {};
   if (saved.hs && !shs.medalsV1) { // 週のノルマ（回数）→ 週のメダルへ。ポイントの時間帯は16:00〜23:00に
     const tw = (w) => w ? { ...w, start: '16:00', end: '23:00', start2: null, end2: null } : w;
@@ -191,18 +206,20 @@ function getConfig() {
     saved.hs = shs;
     setSetting('ganbari', JSON.stringify(saved));
   }
-  const trees = Array.isArray(saved.trees) ? (saved.trees.length === 3 ? [...saved.trees, HS_TREE] : saved.trees) : d.trees; // 4本目（高校生の木）を足す
+  // 4本目（高校生の木）・5本目（小学生の木）を足す
+  const trees = Array.isArray(saved.trees) ? (saved.trees.length === 3 ? [...saved.trees, HS_TREE, ES_TREE] : saved.trees.length === 4 ? [...saved.trees, ES_TREE] : saved.trees) : d.trees;
   return {
     ...d, ...saved, window: { ...d.window, ...(saved.window || {}) }, trees,
     dressup: { ...d.dressup, ...(saved.dressup || {}) }, events: { ...d.events, ...(saved.events || {}) },
     hs: { ...d.hs, ...shs, window: { ...d.hs.window, ...(shs.window || {}) } },
+    es: { ...d.es, ...(saved.es || {}), window: { ...d.es.window, ...((saved.es || {}).window || {}) } },
     fun: { ...d.fun, ...(saved.fun || {}) },
   };
 }
 // その日の数え方（曜日ごとの設定があればそれ、なければ毎日同じ設定）
-// group：'hs'＝高校生（高校生自習室の数え方）、それ以外＝中学生など
+// group：'hs'＝高校生（高校生自習室の数え方）、'es'＝小学生（小学生自習室の数え方）、それ以外＝中学生
 function ruleFor(day, c = getConfig(), group = null) {
-  const src = group === 'hs' ? c.hs : c;
+  const src = group === 'hs' ? c.hs : group === 'es' ? c.es : c;
   return ruleOf(day, src);
 }
 function ruleOf(day, c) {
@@ -304,6 +321,12 @@ function setConfig(patch, actorId) {
     if (h.lateMinutes !== undefined) { if (!int(h.lateMinutes, 1, 240)) return '高校生：遅れの通知は1〜240分後にしてください'; hs.lateMinutes = h.lateMinutes; }
     c.hs = hs;
   }
+  if (p.es !== undefined) {
+    const es = { ...c.es };
+    err = applyRules(es, p.es || {});
+    if (err) return '小学生：' + err;
+    c.es = es;
+  }
   if (p.streakByGrade !== undefined) {
     const g = p.streakByGrade;
     if (!g || typeof g !== 'object' || Array.isArray(g)) return '学年別の最低時間が正しくありません';
@@ -349,7 +372,7 @@ function setConfig(patch, actorId) {
     c.terms = p.terms;
   }
   if (p.trees !== undefined) {
-    if (!Array.isArray(p.trees) || p.trees.length !== 4) return '木は4本です（中学生3本・高校生1本）';
+    if (!Array.isArray(p.trees) || p.trees.length !== 5) return '木は5本です（中学生3本・高校生1本・小学生1本）';
     const trees = [];
     for (const t of p.trees) {
       const name = String((t && t.name) || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 12);
@@ -463,7 +486,7 @@ function setManual(userId, day, minutes, actorId) {
 function tick(online, opt = {}) {
   const c = getConfig();
   const t = jst(opt.date || new Date());
-  const rules = { jh: ruleFor(t.day, c), hs: ruleFor(t.day, c, 'hs') };
+  const rules = { jh: ruleFor(t.day, c), hs: ruleFor(t.day, c, 'hs'), es: ruleFor(t.day, c, 'es') };
   const open = (r) => r.on && r.windows.some(w => t.hm >= w.start && t.hm < w.end);
   const added = []; // ポイントになる時間に足した生徒
   Object.defineProperty(added, 'counted', { value: [], enumerable: false }); // 勉強時間（全部）に足した生徒（時間帯の外もふくむ）
@@ -474,7 +497,7 @@ function tick(online, opt = {}) {
       if (p.user.role !== 'student' || p.user.trial_until || !SM.isStudyRoom(p.room) || p.away) continue; // 体験中の子は記録しない
       if (c.requireSeat && !p.seat) continue;
       if (c.requireCamera && opt.photosOn && !p.studyCam) continue;
-      const r = rules[isHS(p.user.grade) ? 'hs' : 'jh'];
+      const r = rules[groupOf(p.user.grade) || 'jh'];
       const point = open(r) && dayTotal(p.id, t.day) < r.cap;
       up.run(p.id, t.day, point ? 1 : 0);
       added.counted.push(p.id);
@@ -497,7 +520,7 @@ function creditGap(userId, fromMs, toMs, maxMin = 5) {
   const up = upMinute();
   let added = 0;
   const u = db.prepare('SELECT grade FROM users WHERE id = ?').get(userId);
-  const group = u && isHS(u.grade) ? 'hs' : null;
+  const group = u ? groupOf(u.grade) : null;
   for (let i = 1; i <= n; i++) {
     const t = jst(new Date(fromMs + i * 60_000));
     const r = ruleFor(t.day, c, group);
@@ -980,7 +1003,7 @@ module.exports = {
   normBirthday, birthdayInfo, celebrateBirthday,
   creditGap,
   streakMinFor,
-  ruleFor, WEEKDAYS,
+  ruleFor, WEEKDAYS, groupOf, isES, ES_GRADES,
   SLOTS, EVENTS, currentEvent, dressupOpen, dressupInfo,
   GRADES, STAGE_NAMES, SHOP, jst, addDays, getConfig, setConfig, termOf, allTerms, dayTotal, dayAll, allBetween, minutesBetween, daysBetween, setManual, tick,
   streak, points, owned, getEquip, buy, equip, shopFor, setGoal, goalOf, listGoals, reviewGoal, forest, studentSummary, studyDetail, newYear,

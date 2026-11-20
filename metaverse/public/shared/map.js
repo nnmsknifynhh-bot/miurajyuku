@@ -26,8 +26,8 @@
   fill(0, 19, W - 1, 19, '#');               // 廊下と下の部屋の間
   fill(34, 19, 34, H - 1, '#');              // 自習室とロビーの間
 
-  // ── 授業教室（2部屋・各15席）。3つ目（x=35〜）は高校生自習室（カフェ風）に改装 ──
-  const CLASSROOM_X = [1, 18];
+  // ── 授業教室（教室1・15席）。教室2は小学生自習室、3つ目（x=35〜）は高校生自習室（カフェ風）に改装 ──
+  const CLASSROOM_X = [1];
   const classroomSeats = {};
   CLASSROOM_X.forEach((ox, i) => {
     const id = 'class' + (i + 1);
@@ -49,6 +49,23 @@
   // 教室1はスピーキング・ライティングテストの教室：教壇の前にテスト用のブースを2つ（うしろの席は順番待ちの自習席）
   const BOOTHS = { class1: [{ x: 6, y: 4, name: 'ブース1' }, { x: 11, y: 4, name: 'ブース2' }] };
   for (const b of BOOTHS.class1) { set(b.x, b.y - 1, 'b'); set(b.x, b.y, 'c'); }
+
+  // ── 小学生自習室（教室2を改装・かわいい教室）。黒板・スクリーン・教壇は残す（授業・保護者会もできる） ──
+  {
+    fill(20, 0, 27, 0, 'W');                  // 黒板
+    fill(28, 0, 31, 0, 'V');                  // 大型スクリーン
+    fill(20, 1, 31, 2, 'p');                  // 教壇
+    set(25, 2, 'T'); set(26, 2, 'T');         // 教卓
+    set(18, 1, 'P'); set(33, 1, 'P');
+    // 4人がけの島（向かい合わせ）を3つ×2列＝24席
+    for (const dy of [5, 10]) for (const dx of [19, 23, 27]) {
+      for (const x of [dx, dx + 1]) { set(x, dy, 'D'); set(x, dy - 1, 'c'); set(x, dy + 1, 'c'); }
+    }
+    fill(30, 4, 33, 11, 'r');                 // 小学生の木のまわりのラグ
+    fill(19, 13, 23, 13, 'B');                // 本棚
+    set(18, 13, 'P');
+    set(31, 14, '_'); set(32, 14, '_');       // 出入口
+  }
 
   // ── 高校生自習室（教室3を改装・カフェ風） ──
   {
@@ -79,8 +96,8 @@
   }
   fill(15, 22, 18, 31, 'r');                 // 中央のラグ
   // がんばりの木（学年ごとに3本）。根元の2マスは通れない。左右（x=15, 18）は通路
-  // 4本目は高校生の木（高校生自習室の中）
-  const FOREST = [{ x: 16, y: 23 }, { x: 16, y: 26 }, { x: 16, y: 29 }, { x: 48, y: 8 }];
+  // 4本目は高校生の木（高校生自習室の中）、5本目は小学生の木（小学生自習室の中）
+  const FOREST = [{ x: 16, y: 23 }, { x: 16, y: 26 }, { x: 16, y: 29 }, { x: 48, y: 8 }, { x: 31, y: 7 }];
   for (const f of FOREST) { set(f.x, f.y, 'Y'); set(f.x + 1, f.y, 'Y'); }
   fill(2, 32, 7, 32, 'B');
   fill(26, 32, 31, 32, 'B');
@@ -118,7 +135,7 @@
   // 部屋（ゾーン）。id は DB の rooms.id と一致させる
   const ZONES = [
     { id: 'class1', name: 'スピーキング・ライティング教室', type: 'study', style: 'classroom', test: true, x1: 1, y1: 1, x2: 16, y2: 13 },
-    { id: 'class2', name: '教室2', type: 'classroom', x1: 18, y1: 1, x2: 33, y2: 13 },
+    { id: 'class2', name: '小学生自習室', type: 'study', style: 'kids', lesson: true, x1: 18, y1: 1, x2: 33, y2: 13 }, // lesson: 授業（声・画面共有）もできる
     { id: 'class3', name: '高校生自習室', type: 'study', style: 'cafe', x1: 35, y1: 1, x2: 50, y2: 13 },
     { id: 'hall', name: 'ろうか', type: 'hall', x1: 1, y1: 15, x2: 50, y2: 18 },
     { id: 'study', name: '自習室', type: 'study', x1: 1, y1: 20, x2: 33, y2: 32 },
@@ -136,13 +153,16 @@
   const PODIUM = { class1: { x: 8, y: 1 }, class2: { x: 25, y: 1 }, mendan: { x: 38, y: 27 } };
   // テストのブースの席か
   const isBoothSeat = (seatId) => Object.values(BOOTHS).some(list => list.some(b => `${b.x},${b.y}` === seatId));
-  // 自習室（自習時間を数える部屋）。study＝中学生など、class3＝高校生
+  // 授業（声・画面共有）ができる部屋：classroom の部屋と、lesson のついた自習室（小学生自習室）
+  const isLessonRoom = (id) => { const z = ZONES.find(v => v.id === id); return !!(z && (z.type === 'classroom' || z.lesson)); };
+  // 自習室（自習時間を数える部屋）。study＝中学生、class3＝高校生、class2＝小学生
   const isStudyRoom = (id) => { const z = ZONES.find(v => v.id === id); return !!(z && z.type === 'study'); };
   // 席えらびの画面での席の分け方
   const SEAT_GROUPS = {
     study: [{ label: '左がわ', x1: 1, x2: 15 }, { label: '右がわ', x1: 16, x2: 33 }],
     class3: [{ label: '窓ぎわのカウンター', y1: 1, y2: 3 }, { label: 'テーブル席', y1: 4, y2: 13 }],
     class1: [{ label: '順番待ちの席', y1: 5, y2: 13 }],
+    class2: [{ label: '前の列', y1: 3, y2: 7 }, { label: 'うしろの列', y1: 8, y2: 12 }],
   };
 
   const WALKABLE = new Set(['.', '_', 'p', 'r', 'm', 'c', 'S', 'O']);
@@ -202,7 +222,7 @@
   for (let y = 28; y <= 31; y++) for (let x = 40; x <= 45; x++) SPAWN.push({ x, y });
 
   return {
-    W, H, TILE, grid, ZONES, ENTRY, EXIT, PODIUM, SPAWN, classroomSeats, FOREST, isStudyRoom, SEAT_GROUPS, BOOTHS, isBoothSeat, SOFAS, MOM_TREE,
+    W, H, TILE, grid, ZONES, ENTRY, EXIT, PODIUM, SPAWN, classroomSeats, FOREST, isStudyRoom, isLessonRoom, SEAT_GROUPS, BOOTHS, isBoothSeat, SOFAS, MOM_TREE,
     tileAt, isWalkable, isSeat, zoneAt, zoneAtPx, seatId, tileCenter, seatFacing, findPath, seatCount,
   };
 });

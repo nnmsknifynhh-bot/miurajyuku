@@ -125,6 +125,8 @@ function entryError(p, roomId) {
   const room = getRoom(roomId);
   if (!room) return null;
   if (!canEnterRoom(p.user, room)) {
+    if (p.user.role === 'student' && /^小[1-6]$/.test(p.user.grade || '')) return '小学生は「小学生自習室」で自習してね（入れるのはロビーと小学生自習室です）';
+    if (p.user.role === 'student' && room.id === 'class2') return '小学生自習室は小学生の部屋です';
     if (p.user.role === 'student' && room.type === 'study') return room.id === 'class3' ? '高校生自習室は高校生の部屋です' : '高校生は「高校生自習室」で自習してね';
     return p.user.role === 'teacher' ? `${room.name}には入れません（担当の教室ではありません）` : `${room.name}には入れません`;
   }
@@ -480,7 +482,7 @@ function attach(httpServer) {
       if (!raised) { lowerHand(p); return ack({ ok: true }); }
       if (p.user.role !== 'student') return ack({ ok: false, error: '挙手は生徒の機能です' });
       const room = p.room && getRoom(p.room);
-      if (!room || room.type !== 'classroom') return ack({ ok: false, error: '授業の教室に入ってから手をあげてね' });
+      if (!room || !SM.isLessonRoom(room.id)) return ack({ ok: false, error: '授業の教室に入ってから手をあげてね' });
       if (p.hand) return ack({ ok: true });
       // 手のあげさげを連打して先生に通知が大量に届かないように
       if (Date.now() - (p.lastHandAt || 0) < 3000) return ack({ ok: false, error: 'すこし待ってから、もう一度手をあげてね' });
@@ -516,7 +518,7 @@ function attach(httpServer) {
     // ── 授業（第3段階） ──
     const classRoomOf = () => {
       const room = p.room && getRoom(p.room);
-      return room && room.type === 'classroom' ? room : null;
+      return room && SM.isLessonRoom(room.id) ? room : null; // 授業の教室と、小学生自習室（授業・保護者会もできる）
     };
     socket.on('class-start', (_d, ack) => {
       if (typeof ack !== 'function') return;
