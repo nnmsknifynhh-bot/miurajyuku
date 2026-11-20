@@ -490,6 +490,37 @@ admin.get('/users', requireOwner, (req, res) => {
   const sessionCounts = new Map(db.prepare('SELECT user_id, COUNT(*) AS n FROM sessions WHERE expires_at > ? GROUP BY user_id').all(now()).map(r => [r.user_id, r.n]));
   res.json({ users: ids.map(({ id }) => { const u = auth.loadUser(id); const ref = referral.referrerOf(id), rn = ref && db.prepare('SELECT display_name AS n, role FROM users WHERE id = ?').get(ref); return { ...publicUser(u), activeSessions: sessionCounts.get(id) || 0, locked: !!auth.isLocked('id:' + u.login_id), referrer: rn ? { id: ref, name: rn.n, role: rn.role } : null }; }) });
 });
+// ユーザーの削除（もとに戻せない）。オーナーだけ。自分とオーナーは消せない
+// その人の記録（自習時間・ポイント・アイテム・写真・保護者とのつながりなど）もいっしょに消す。先生がした確認の記録などは、先生の名前だけ外して残す
+const USER_COLS = ['user_id', 'parent_id', 'student_id', 'to_id', 'from_id', 'new_id', 'referrer_id'];
+const KEEP_COLS = ['reviewed_by', 'created_by', 'used_by']; // ほかの人の記録：消さずに空にする
+function deleteUserData(id) {
+  const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT IN ('users', 'sqlite_sequence', 'audit_logs')").all().map(r => r.name);
+  for (const t of tables) {
+    const cols = db.prepare(`PRAGMA table_info(${t})`).all();
+    for (const c of cols) {
+      if (USER_COLS.includes(c.name)) db.prepare(`DELETE FROM ${t} WHERE ${c.name} = ?`).run(id);
+      else if (KEEP_COLS.includes(c.name)) {
+        if (c.notnull) db.prepare(`DELETE FROM ${t} WHERE ${c.name} = ?`).run(id);
+        else db.prepare(`UPDATE ${t} SET ${c.name} = NULL WHERE ${c.name} = ?`).run(id);
+      }
+    }
+  }
+  db.prepare('DELETE FROM users WHERE id = ?').run(id);
+}
+admin.delete('/users/:id', requireOwner, async (req, res) => {
+  const id = Number(req.params.id);
+  const target = auth.loadUser(id);
+  if (!target) return bad(res, 'ユーザーが見つかりません', 404);
+  if (id === req.user.id) return bad(res, '自分のアカウントは削除できません', 403);
+  if (target.role === 'owner') return bad(res, 'オーナーは削除できません', 403);
+  if (String((req.body || {}).confirm || '') !== target.display_name) return bad(res, '確認のため、名前を正しく入れてください');
+  realtime.forgetUser(id);
+  try { transaction(() => deleteUserData(id)); } catch (e) { console.error('ユーザーの削除に失敗:', e.message); return bad(res, '削除できませんでした', 500); }
+  try { await startphoto.deleteUser(id); } catch (e) { console.error('写真の削除に失敗:', e.message); }
+  audit(req.user.id, 'user.deleted', target.login_id, { role: target.role, name: target.display_name }, req.ip);
+  res.json({ ok: true });
+});
 // 保護者の招待コード（生徒ごと）
 admin.post('/users/:id/parent-invite', requireOwner, (req, res) => {
   const r = parents.createInvite(Number(req.params.id), req.user.id);

@@ -51,9 +51,24 @@
     list.textContent = '';
     const shown = users.filter(u => (!roleFilter || u.role === roleFilter) &&
       (!q || u.displayName.toLowerCase().includes(q) || u.loginId.toLowerCase().includes(q)));
+    // 並び順：学年順（オーナー→先生→小1〜高3→卒業→学年なし→保護者）・名前順・新しい順
+    const sortBy = $('#user-sort').value;
+    const ROLE_ORDER = { owner: 0, teacher: 1, student: 2, parent: 3 };
+    const G = ['小1', '小2', '小3', '小4', '小5', '小6', '中1', '中2', '中3', '高1', '高2', '高3', '卒業'];
+    const gi = (u) => { const i = G.indexOf(u.grade); return i < 0 ? 99 : i; };
+    const byName = (a, b) => a.displayName.localeCompare(b.displayName, 'ja');
+    if (sortBy === 'name') shown.sort(byName);
+    else if (sortBy === 'new') shown.sort((a, b) => b.id - a.id);
+    else shown.sort((a, b) => ROLE_ORDER[a.role] - ROLE_ORDER[b.role] || gi(a) - gi(b) || byName(a, b));
+    const groupOf = (u) => u.role === 'student' ? (u.grade || '学年なし') : ROLE_LABEL[u.role];
+    let lastGroup = null;
     if (!shown.length) { list.append(el('p', 'empty', 'ユーザーがいません')); return; }
     const roomName = (id) => (meta.rooms.find(r => r.id === id) || {}).name || id;
     for (const u of shown) {
+      if (sortBy === 'grade') { // 学年ごとの見出し
+        const gname = groupOf(u);
+        if (gname !== lastGroup) { lastGroup = gname; const n = shown.filter(x => groupOf(x) === gname).length; list.append(el('h3', 'user-group', `${gname}（${n}人）`)); }
+      }
       const row = el('div', 'user-row' + (u.isActive ? '' : ' inactive'));
       const av = el('div', 'avatar'); av.style.background = u.avatarColor;
       const info = el('div');
@@ -78,11 +93,22 @@
         btn(u.isActive ? '無効にする' : '有効にする', u.isActive ? 'danger' : '', () => toggleActive(u));
       }
       if (!isSelf && u.activeSessions > 0) btn('強制ログアウト', 'secondary', () => revoke(u));
+      if (!isSelf && u.role !== 'owner' && me.role === 'owner') btn('🗑 削除', 'danger', () => removeUser(u));
       row.append(av, info, actions);
       list.append(row);
     }
   }
   $('#search').addEventListener('input', renderUsers);
+  try { $('#user-sort').value = localStorage.getItem('juku-user-sort') || 'grade'; } catch (e) {}
+  $('#user-sort').addEventListener('change', () => { try { localStorage.setItem('juku-user-sort', $('#user-sort').value); } catch (e) {} renderUsers(); });
+  async function removeUser(u) {
+    const what = u.role === 'student' ? '自習時間・ポイント・アイテム・写真・保護者とのつながり' : u.role === 'parent' ? 'ポイント・クイズの記録・お子さんとのつながり' : '担当教室・権限';
+    const typed = prompt(`⚠️ ${u.displayName} さん（ID: ${u.loginId}）を削除します。\n${what}などの記録もすべて消え、もとに戻せません。\n\n（やめたあとも記録を残したいときは「無効にする」を使ってください）\n\n削除するときは、名前「${u.displayName}」を入れてください。`);
+    if (typed === null) return;
+    if (typed.trim() !== u.displayName) return toast('名前がちがうので、削除しませんでした');
+    try { await api('DELETE', `/api/admin/users/${u.id}`, { confirm: u.displayName }); toast(`${u.displayName} さんを削除しました`); loadUsers(); }
+    catch (e) { toast(e.message); }
+  }
   document.querySelectorAll('#role-filter .chip').forEach(c => c.onclick = () => {
     roleFilter = c.dataset.role;
     document.querySelectorAll('#role-filter .chip').forEach(x => x.classList.toggle('active', x === c));

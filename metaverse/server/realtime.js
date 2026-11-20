@@ -1085,6 +1085,14 @@ function kick(userId, reason) {
   return true;
 }
 
+// ユーザーを削除したとき：接続を切り、退室後に残している姿も消す
+function forgetUser(userId) {
+  const id = Number(userId);
+  kick(id, 'このアカウントは削除されました');
+  removeGhost(id, true);
+  studyGaps.delete(id); lastPos.delete(id); lastOffline.delete(id);
+}
+
 // 権限・担当教室・名前などが変わったとき
 function refreshUser(userId) {
   const p = online.get(Number(userId));
@@ -1352,6 +1360,6 @@ function refreshMoms() { if (io) io.emit('moms-updated', parents.momsTree()); }
 
 module.exports = {
   shownToday, refreshMoms, parentMeetingChanged, mendanChanged, referralRewarded, broadcastMySeats, blackboardChanged,
-  isQuickRejoin, refreshGanbari, refreshBirthday, refreshAllGanbari, _online: online,
+  isQuickRejoin, forgetUser, refreshGanbari, refreshBirthday, refreshAllGanbari, _online: online,
   storeStudyPhoto, getStudyPhoto, studyPhotoTimes, canViewStudyPhotos, setStudyPhotosFeature, studyPhotosEnabled,
   attach, kick, refreshUser, refreshRooms, presence, roomCounts, classState, endClass, endCallOf, REACTIONS, _reset };

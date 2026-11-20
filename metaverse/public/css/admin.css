@@ -137,3 +137,5 @@ tr.kq-auto td { background: #fff8e1; }
 .gb-rule input[type=number] { max-width: 160px; }
 .gb-slots .gb-row { flex-wrap: wrap; }
 .gb-rule .gb-slots input[type=time] { width: 128px; max-width: 128px; flex: 0 1 128px; }
+.user-group { margin: 14px 0 4px; font-size: 15px; color: var(--muted); border-bottom: 2px solid var(--line); padding-bottom: 2px; }
+.user-sort { min-height: 40px; border: 2px solid var(--line); border-radius: 10px; padding: 0 8px; font-size: 15px; background: #fff; flex: 0 0 auto; }

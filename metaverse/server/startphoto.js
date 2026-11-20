@@ -112,4 +112,11 @@ async function getImage(userId, day) {
   return r ? Buffer.from(r.image) : null;
 }
 
-module.exports = { GOAL_CHOICES, setGoal, goalOf, lastGoal, enabledNow, required, requiredAsync, save, listDay, getImage, KEEP_DAYS, MAX_BYTES, _loadToday: loadToday };
+/** ユーザーを削除したとき、その人の写真も消す */
+async function deleteUser(userId) {
+  if (usePg()) await (await pg()).query('DELETE FROM start_photos WHERE user_id = $1', [userId]);
+  else db.prepare('DELETE FROM start_photos WHERE user_id = ?').run(userId);
+  if (todaySet.ids) todaySet.ids.delete(userId);
+}
+
+module.exports = { deleteUser, GOAL_CHOICES, setGoal, goalOf, lastGoal, enabledNow, required, requiredAsync, save, listDay, getImage, KEEP_DAYS, MAX_BYTES, _loadToday: loadToday };
