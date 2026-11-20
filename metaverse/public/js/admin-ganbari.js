@@ -70,8 +70,8 @@
       const s1 = timeInput(w1.start), e1 = timeInput(w1.end);
       const s2 = timeInput(w2 ? w2.start : '18:00'), e2 = timeInput(w2 ? w2.end : '22:00');
       const all = check('いつでも', w1.start === '00:00' && w1.end === '24:00' && !w2);
-      const night = check('夜も', !!w2);
-      const am = el('span', 'gb-row'); am.append(el('b', 'gb-slot', '朝'), s1, el('span', null, '〜'), e1);
+      const night = check('2つめ', !!w2);
+      const am = el('span', 'gb-row'); am.append(el('b', 'gb-slot', '1つめ'), s1, el('span', null, '〜'), e1);
       const pm = el('span', 'gb-row'); pm.append(night[0], s2, el('span', null, '〜'), e2);
       const sync = (off) => {
         s1.disabled = e1.disabled = off || all[1].checked;
@@ -96,8 +96,8 @@
       common.all[1].onchange = common.night[1].onchange = syncC; syncC();
       const capI = numInput(src.dailyCap, 10, 1440);
       const winRow = el('div', 'gb-slots'); winRow.append(common.all[0], common.am, common.pm);
-      const winField = el('div', 'field'); winField.append(el('span', null, '数える時間帯'), winRow, el('small', null, '朝だけ・夜だけのときは「朝」の欄だけ使ってください'));
-      const capField = field('1日に数える上限（分）', capI, '朝と夜の合計');
+      const winField = el('div', 'field'); winField.append(el('span', null, '数える時間帯'), winRow, el('small', null, 'ふつうは「1つめ」だけでOK。朝と夕方のように2回に分けたいときだけ「2つめ」にチェック'));
+      const capField = field('1日に数える上限（分）', capI, '1日の合計（2つめもふくむ）。これをこえた分はポイントにならない（時間の記録には入る）');
       const g = el('div', 'gb-rule'); g.append(winField, capField); // 時間帯と上限は縦にならべる（重ならないように）
       const byDay = check('曜日ごとに変える（数える曜日・時間帯・上限）', Array.isArray(src.weekly));
       const wkBox = el('div', 'gb-week');
