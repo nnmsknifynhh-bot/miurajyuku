@@ -13,11 +13,12 @@
     $('#tab-kanken-btn').hidden = !meta.canManageUsers;
     $('#who').textContent = `${me.displayName}（${ROLE_LABEL[me.role]}）`;
     $('#tab-users-btn').hidden = !meta.canManageUsers;
+    $('#promote-grades').hidden = me.role !== 'owner';
     $('#tab-logs-btn').hidden = !meta.canManageUsers;
     $('#tab-rooms-btn').hidden = !meta.canManageRooms;
     $('#tab-status-btn').hidden = !meta.canManageRooms;
     document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => showTab(b.dataset.tab));
-    showTab(meta.canManageUsers ? 'users' : meta.canManageRooms ? 'rooms' : 'ganbari');
+    showTab((meta.canManageUsers || meta.canReviewGoals) ? 'ganbari' : 'rooms'); // 毎日見る「がんばり」を最初に
   })();
 
   function denied() {
@@ -49,7 +50,8 @@
     const q = $('#search').value.trim().toLowerCase();
     const list = $('#user-list');
     list.textContent = '';
-    const shown = users.filter(u => (!roleFilter || u.role === roleFilter) &&
+    const gf = $('#grade-filter').value;
+    const shown = users.filter(u => (!gf || (u.role === 'student' && (gf === '-' ? !u.grade : u.grade === gf))) && (!roleFilter || u.role === roleFilter) &&
       (!q || u.displayName.toLowerCase().includes(q) || u.loginId.toLowerCase().includes(q)));
     // 並び順：学年順（オーナー→先生→小1〜高3→卒業→学年なし→保護者）・名前順・新しい順
     const sortBy = $('#user-sort').value;
@@ -99,6 +101,18 @@
     }
   }
   $('#search').addEventListener('input', renderUsers);
+  $('#grade-filter').addEventListener('change', renderUsers);
+  // 🎓 4月：生徒全員の学年を1つ上げる（小6→中1、中3→高1、高3→卒業）。まちがえたときは「元に戻す」
+  $('#promote-grades').onclick = async () => {
+    let st; try { st = await api('GET', '/api/admin/grades/promote'); } catch (e) { return toast(e.message); }
+    const undo = st.undo ? `\n\n（${new Date(st.undo.at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })} に上げた分を元に戻すこともできます）` : '';
+    if (st.undo && confirm(`前回の「学年を1つ上げる」（${st.undo.count}人）を元に戻しますか？\n\n「キャンセル」を押すと、元に戻さずに次へ進みます。`)) {
+      try { const r = await api('POST', '/api/admin/grades/promote-undo'); toast(`${r.count}人の学年を元に戻しました`); loadUsers(); } catch (e) { toast(e.message); }
+      return;
+    }
+    if (!confirm(`生徒 ${st.count}人の学年を1つ上げます。\n小6→中1、中3→高1、高3→卒業 になります（体験中の子はそのまま）。\n\n新しい年度（4月）になったときに1回だけ押してください。${undo}`)) return;
+    try { const r = await api('POST', '/api/admin/grades/promote'); toast(`🎓 ${r.count}人の学年を1つ上げました`, 5000); loadUsers(); } catch (e) { toast(e.message); }
+  };
   try { $('#user-sort').value = localStorage.getItem('juku-user-sort') || 'grade'; } catch (e) {}
   $('#user-sort').addEventListener('change', () => { try { localStorage.setItem('juku-user-sort', $('#user-sort').value); } catch (e) {} renderUsers(); });
   async function removeUser(u) {

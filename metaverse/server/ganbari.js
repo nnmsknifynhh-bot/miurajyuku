@@ -843,7 +843,7 @@ function studentSummary(date = new Date()) {
   return db.prepare("SELECT id, display_name AS name, grade FROM users WHERE role = 'student' AND is_active = 1 AND trial_until IS NULL ORDER BY grade, display_name").all().map(s => {
     const pt = points(s.id, date);
     return {
-      ...s, today: dayTotal(s.id, today), term: term ? minutesBetween(s.id, term.start, term.end) : 0,
+      ...s, today: dayTotal(s.id, today), todayAll: dayAll(s.id, today), term: term ? minutesBetween(s.id, term.start, term.end) : 0,
       year: pt.yearMinutes, points: pt.balance, streak: streak(s.id, date), hs: isHS(s.grade),
     };
   });
@@ -1049,7 +1049,7 @@ module.exports = {
   streakMinFor,
   ruleFor, WEEKDAYS, groupOf, isES, ES_GRADES, esBoughtThisMonth, esPrice,
   SLOTS, EVENTS, currentEvent, dressupOpen, dressupInfo,
-  GRADES, STAGE_NAMES, SHOP, jst, addDays, getConfig, setConfig, termOf, allTerms, dayTotal, dayAll, allBetween, minutesBetween, daysBetween, setManual, tick,
+  GRADES, NEXT_GRADE, STAGE_NAMES, SHOP, jst, addDays, getConfig, setConfig, termOf, allTerms, dayTotal, dayAll, allBetween, minutesBetween, daysBetween, setManual, tick,
   streak, points, owned, getEquip, buy, equip, shopFor, setGoal, goalOf, listGoals, reviewGoal, forest, studentSummary, studyDetail, newYear,
   createReport, reportData,
 };

@@ -47,3 +47,21 @@ test('オーナーは生徒を削除できる。記録も消え、ほかの生�
   // 先生も消せる
   assert.equal((await http('DELETE', `/api/admin/users/${tch}`, { confirm: '山田' }, owner)).status, 200);
 });
+
+test('🎓 学年を1つ上げる（小6→中1・中3→高1・高3→卒業。体験中・卒業はそのまま）と、元に戻す', async () => {
+  const owner = (await http('POST', '/api/login', { loginId: 'owner', password: 'ownerpass1' })).cookie;
+  const ids = {};
+  for (const [k, g] of [['p6', '小6'], ['p9', '中3'], ['p12', '高3'], ['pg', '卒業']]) ids[k] = (await http('POST', '/api/admin/users', { role: 'student', loginId: 'u' + k, displayName: k, grade: g, password: 'password123' }, owner)).data.user.id;
+  db.prepare("UPDATE users SET grade = '卒業' WHERE id = ?").run(ids.pg);
+  const gradeOf = (id) => db.prepare('SELECT grade FROM users WHERE id = ?').get(id).grade;
+  const before = Object.fromEntries(db.prepare("SELECT id, grade FROM users WHERE role = 'student'").all().map(r => [r.id, r.grade]));
+  const st = await http('GET', '/api/admin/grades/promote', null, owner);
+  assert.equal(st.data.undo, null);
+  const r = await http('POST', '/api/admin/grades/promote', {}, owner);
+  assert.equal(r.status, 200);
+  assert.equal(gradeOf(ids.p6), '中1'); assert.equal(gradeOf(ids.p9), '高1'); assert.equal(gradeOf(ids.p12), '卒業'); assert.equal(gradeOf(ids.pg), '卒業');
+  assert.equal((await http('GET', '/api/admin/grades/promote', null, owner)).data.undo.count, r.data.count);
+  assert.equal((await http('POST', '/api/admin/grades/promote-undo', {}, owner)).status, 200);
+  for (const [id, g] of Object.entries(before)) assert.equal(gradeOf(Number(id)), g);
+  assert.equal((await http('POST', '/api/admin/grades/promote-undo', {}, owner)).status, 400, '2回は戻せない');
+});

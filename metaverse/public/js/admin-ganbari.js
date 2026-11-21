@@ -317,29 +317,52 @@
     }
 
     // ═════ 生徒の自習時間 ═════
-    const stSec = section('👦 生徒の自習時間', '生徒をタップすると、勉強時間のくわしい内容（今日・今週・今学期・今年度、最近14日、ポイント、🔥）が見られます。表の時間は「ポイントになる時間」です。「修正」で、日ごとの自習時間を直せます（直した値が優先されます）。');
+    const stSec = section('👦 生徒の自習時間', '「今日の自習時間」は今日勉強した時間ぜんぶ、「ポイントになる時間」はそのうち決めた時間帯の分です。見出しを押すと並べかえられます。生徒をタップすると、くわしい内容（今週・今学期・今年度・最近14日）が見られます。「修正」で、日ごとの自習時間を直せます。');
     root.prepend(stSec); // いちばん上に（毎日見るので）
     const stBox = el('div', 'table-wrap'); stSec.append(stBox);
-    async function loadStudents() {
-      let data;
-      try { data = await api('GET', '/api/admin/ganbari/students'); } catch (e) { return toast(e.message); }
+    const GORDER = ['小1', '小2', '小3', '小4', '小5', '小6', '中1', '中2', '中3', '高1', '高2', '高3', '卒業'];
+    const gIdx = (g) => { const i = GORDER.indexOf(g); return i < 0 ? 99 : i; };
+    let stSort = { key: 'grade', desc: false }, stData = [];
+    try { const v = JSON.parse(localStorage.getItem('juku-gb-sort') || 'null'); if (v && v.key) stSort = v; } catch (e) {}
+    const COLS = [
+      ['name', '名前', (a, b) => a.name.localeCompare(b.name, 'ja')],
+      ['grade', '学年', (a, b) => gIdx(a.grade) - gIdx(b.grade) || a.name.localeCompare(b.name, 'ja')],
+      ['todayAll', '今日の自習時間', (a, b) => a.todayAll - b.todayAll],
+      ['today', 'ポイントになる時間', (a, b) => a.today - b.today],
+      ['points', '今のポイント', (a, b) => a.points - b.points],
+      ['streak', '🔥', (a, b) => a.streak - b.streak],
+    ];
+    function drawStudents() {
       stBox.textContent = '';
-      const table = el('table', 'logs');
+      const table = el('table', 'logs gb-students');
       const head = el('tr');
-      ['名前', '学年', '今日', '今学期', '今年度', 'ポイント', '🔥', ''].forEach(h => head.append(el('th', null, h)));
+      for (const [key, label] of COLS) {
+        const th = el('th', 'sortable', label + (stSort.key === key ? (stSort.desc ? ' ▼' : ' ▲') : ''));
+        th.title = '押すと並べかえ';
+        th.onclick = () => { stSort = { key, desc: stSort.key === key ? !stSort.desc : ['todayAll', 'today', 'points', 'streak'].includes(key) }; try { localStorage.setItem('juku-gb-sort', JSON.stringify(stSort)); } catch (e) {} drawStudents(); };
+        head.append(th);
+      }
+      head.append(el('th', null, ''));
       table.append(el('thead')); table.firstChild.append(head);
+      const cmp = (COLS.find(c => c[0] === stSort.key) || COLS[1])[2];
+      const list = [...stData].sort((a, b) => (stSort.desc ? -cmp(a, b) : cmp(a, b)) || a.name.localeCompare(b.name, 'ja'));
       const tb = el('tbody');
-      for (const s of data.students) {
+      for (const s of list) {
         const tr = el('tr');
         tr.style.cursor = 'pointer'; tr.title = 'タップすると勉強時間のくわしい内容';
         tr.onclick = () => window.StudyDetail.open(api, s.id);
         const nameTd = el('td'); const nl = el('a', null, s.name); nl.href = '#'; nl.onclick = (e) => e.preventDefault(); nameTd.append(nl); tr.append(nameTd);
-        [s.grade || '未設定', hm(s.today), hm(s.term), hm(s.year), s.points, s.streak ? `${s.streak}${s.hs ? '週' : '日'}` : ''].forEach(v => tr.append(el('td', null, String(v))));
+        [s.grade || '未設定', hm(s.todayAll), hm(s.today), `${s.points}pt`, s.streak ? `🔥${s.streak}${s.hs ? '週' : '日'}` : ''].forEach(v => tr.append(el('td', null, String(v))));
         const td = el('td'); const b = el('button', 'btn small secondary', '修正'); b.onclick = (e) => { e.stopPropagation(); openDays(s); }; td.append(b); tr.append(td);
         tb.append(tr);
       }
-      if (!data.students.length) { const tr = el('tr'); const td = el('td', 'empty', '生徒がいません'); td.colSpan = 8; tr.append(td); tb.append(tr); }
+      if (!list.length) { const tr = el('tr'); const td = el('td', 'empty', '生徒がいません'); td.colSpan = 7; tr.append(td); tb.append(tr); }
       table.append(tb); stBox.append(table);
+    }
+    async function loadStudents() {
+      let data;
+      try { data = await api('GET', '/api/admin/ganbari/students'); } catch (e) { return toast(e.message); }
+      stData = data.students; drawStudents();
     }
     loadStudents();
 

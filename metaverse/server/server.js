@@ -521,6 +521,34 @@ admin.delete('/users/:id', requireOwner, async (req, res) => {
   audit(req.user.id, 'user.deleted', target.login_id, { role: target.role, name: target.display_name }, req.ip);
   res.json({ ok: true });
 });
+// 🎓 生徒全員の学年を1つ上げる（4月）。前の学年をとっておき、元に戻せる
+const promoteTargets = () => db.prepare("SELECT id, grade FROM users WHERE role = 'student' AND grade IS NOT NULL AND grade != '卒業' AND trial_until IS NULL").all();
+admin.get('/grades/promote', requireOwner, (req, res) => {
+  let undo = null; try { undo = JSON.parse(getSetting('grade_promote_undo', 'null')); } catch (e) {}
+  res.json({ count: promoteTargets().length, undo: undo ? { at: undo.at, count: Object.keys(undo.grades).length } : null });
+});
+admin.post('/grades/promote', requireOwner, (req, res) => {
+  const list = promoteTargets(), grades = {};
+  transaction(() => {
+    for (const u of list) { grades[u.id] = u.grade; db.prepare('UPDATE users SET grade = ?, updated_at = ? WHERE id = ?').run(ganbari.NEXT_GRADE[u.grade] || '卒業', now(), u.id); }
+    setSetting('grade_promote_undo', JSON.stringify({ at: new Date().toISOString(), grades }));
+  });
+  for (const u of list) realtime.refreshUser(u.id);
+  audit(req.user.id, 'grades.promoted', null, { count: list.length }, req.ip);
+  res.json({ ok: true, count: list.length });
+});
+admin.post('/grades/promote-undo', requireOwner, (req, res) => {
+  let undo = null; try { undo = JSON.parse(getSetting('grade_promote_undo', 'null')); } catch (e) {}
+  if (!undo) return bad(res, '元に戻せる記録がありません');
+  let count = 0;
+  transaction(() => {
+    for (const [id, g] of Object.entries(undo.grades)) count += db.prepare("UPDATE users SET grade = ?, updated_at = ? WHERE id = ? AND role = 'student'").run(g, now(), Number(id)).changes;
+    setSetting('grade_promote_undo', 'null');
+  });
+  for (const id of Object.keys(undo.grades)) realtime.refreshUser(Number(id));
+  audit(req.user.id, 'grades.promote_undone', null, { count }, req.ip);
+  res.json({ ok: true, count });
+});
 // 保護者の招待コード（生徒ごと）
 admin.post('/users/:id/parent-invite', requireOwner, (req, res) => {
   const r = parents.createInvite(Number(req.params.id), req.user.id);

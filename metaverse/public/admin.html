@@ -18,10 +18,10 @@
   </header>
 
   <nav class="tabs" id="tabs">
+    <button data-tab="ganbari" id="tab-ganbari-btn">🏆 がんばり</button>
     <button data-tab="users" id="tab-users-btn">👥 ユーザー</button>
     <button data-tab="rooms" id="tab-rooms-btn">🏫 教室の設定</button>
     <button data-tab="status" id="tab-status-btn">📊 入室状況</button>
-    <button data-tab="ganbari" id="tab-ganbari-btn">🏆 がんばり</button>
     <button data-tab="kanken" id="tab-kanken-btn">✏️ 漢字テスト</button>
     <button data-tab="logs" id="tab-logs-btn">📝 操作ログ</button>
   </nav>
@@ -37,8 +37,10 @@
           <button data-role="parent" class="chip">保護者</button>
         </div>
         <input id="search" class="search" placeholder="名前・IDで検索" type="search">
+        <select id="grade-filter" class="user-sort" aria-label="学年でしぼる"><option value="">学年：すべて</option><option>小1</option><option>小2</option><option>小3</option><option>小4</option><option>小5</option><option>小6</option><option>中1</option><option>中2</option><option>中3</option><option>高1</option><option>高2</option><option>高3</option><option>卒業</option><option value="-">学年なし</option></select>
         <select id="user-sort" class="user-sort" aria-label="並び順"><option value="grade">学年順</option><option value="name">名前順</option><option value="new">新しい順</option></select>
         <button class="btn" id="add-user">＋ ユーザーを追加</button>
+        <button class="btn secondary" id="promote-grades" title="4月に、生徒全員の学年を1つ上げます">🎓 学年を1つ上げる</button>
         <button class="btn secondary" id="unlock-all" title="ログインのまちがいで入れなくなった人をまとめて解除">🔓 ロックをすべて解除</button>
       </div>
       <div id="user-list" class="user-list"></div>
