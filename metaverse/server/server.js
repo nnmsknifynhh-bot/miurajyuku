@@ -844,8 +844,10 @@ admin.get('/ganbari/students/:id/days', requireOwner, (req, res) => {
 admin.put('/ganbari/students/:id/days/:day', requireOwner, (req, res) => {
   const target = auth.loadUser(Number(req.params.id));
   if (!target || target.role !== 'student') return bad(res, '生徒が見つかりません', 404);
-  const m = req.body.minutes === null ? null : Number(req.body.minutes);
-  const err = ganbari.setManual(target.id, req.params.day, m, req.user.id);
+  // adjust：足す分（＋/－）。minutes：上書き（null でやめる。前からある直し方）
+  const err = req.body.adjust !== undefined
+    ? ganbari.setAdjust(target.id, req.params.day, Number(req.body.adjust), req.user.id)
+    : ganbari.setManual(target.id, req.params.day, req.body.minutes === null ? null : Number(req.body.minutes), req.user.id);
   if (err) return bad(res, err);
   realtime.refreshGanbari(target.id);
   res.json({ ok: true });

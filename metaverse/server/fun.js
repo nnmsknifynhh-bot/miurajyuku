@@ -51,7 +51,7 @@ const EVENTS = {
 };
 function chapterDays(userId, year, ch, today) {
   const from = `${year}-${ch.from}`, to = `${year}-${ch.to}`;
-  const rows = db.prepare('SELECT day, MAX(all_min, COALESCE(manual_min, auto_min)) AS m FROM study_days WHERE user_id = ? AND day >= ? AND day <= ?').all(userId, from, to);
+  const rows = db.prepare('SELECT day, MAX(0, MAX(all_min, COALESCE(manual_min, auto_min)) + adj_min) AS m FROM study_days WHERE user_id = ? AND day >= ? AND day <= ?').all(userId, from, to);
   const min = G.streakMinFor(userId);
   const ok = new Set(rows.filter(r => r.m >= min && r.day <= today).map(r => r.day));
   for (const d of G.meetingDays()) if (d >= from && d <= to && d <= today) ok.add(d);

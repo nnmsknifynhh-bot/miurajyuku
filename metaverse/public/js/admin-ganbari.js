@@ -340,7 +340,7 @@
     }
 
     // ═════ 生徒の自習時間 ═════
-    const stSec = section('👦 生徒の自習時間', '「今日の自習時間」は今日勉強した時間ぜんぶ、「ポイントになる時間」はそのうち決めた時間帯の分です。見出しを押すと並べかえられます。生徒をタップすると、くわしい内容（今週・今学期・今年度・最近14日）が見られます。「修正」で、日ごとの自習時間を直せます。');
+    const stSec = section('👦 生徒の自習時間', '「今日の自習時間」は今日勉強した時間ぜんぶ、「ポイントになる時間」はそのうち決めた時間帯の分です。見出しを押すと並べかえられます。生徒をタップすると、くわしい内容（今週・今学期・今年度・最近14日）が見られます。「修正」で、日ごとに時間を足したり減らしたりできます（例：今日に＋120分）。');
     root.prepend(stSec); // いちばん上に（毎日見るので）
     const stBox = el('div', 'table-wrap'); stSec.append(stBox);
     const GORDER = ['小1', '小2', '小3', '小4', '小5', '小6', '中1', '中2', '中3', '高1', '高2', '高3', '卒業'];
@@ -407,12 +407,13 @@
       const sel = el('select');
       for (const t of terms) { const o = el('option', null, `${t.name}（${mmdd(t.start)}〜${mmdd(t.end)}）`); o.value = t.key; sel.append(o); }
       if (cfg.current) sel.value = cfg.current.key;
-      const addDay = dateInput(new Date().toISOString().slice(0, 10));
-      const addMin = numInput(0, 0, 1440);
-      const addBtn = el('button', 'btn small', 'この日の時間を入れる');
+      const addDay = dateInput(new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10)); // 日本の今日
+      const addMin = numInput(0, -1440, 1440);
+      const addBtn = el('button', 'btn small', '足す');
       range.append(field('学期', sel));
-      const addRow = el('div', 'gb-row'); addRow.append(addDay, addMin, el('span', null, '分'), addBtn);
-      range.append(el('small', 'muted', '記録がない日に時間を入れるとき：'), addRow);
+      const addRow = el('div', 'gb-row'); addRow.append(addDay, el('b', null, '＋'), addMin, el('span', null, '分'), addBtn);
+      range.append(el('small', 'muted', '日をえらんで時間を足す（例：今日に＋120分。マイナスで減らせます）：'), addRow);
+      range.append(el('small', 'muted', '足した分は「ポイントになる時間」にも入ります。自動で数える時間は、足したあともふえ続けます。'));
       const list = body.querySelector('.gb-days');
       async function refresh() {
         const t = terms.find(x => x.key === sel.value);
@@ -422,19 +423,24 @@
         if (!days.length) list.append(el('p', 'muted', 'この学期の記録はまだありません'));
         for (const d of days) {
           const row = el('div', 'gb-day');
-          const inp = numInput(d.total, 0, 1440);
+          const inp = numInput(d.adj || 0, -1440, 1440);
           const ok = el('button', 'btn small', '保存');
-          ok.onclick = async () => { try { await api('PUT', `/api/admin/ganbari/students/${s.id}/days/${d.day}`, { minutes: Number(inp.value) }); toast('修正しました'); refresh(); loadStudents(); } catch (e) { toast(e.message); } };
-          row.append(el('span', null, d.day.replace(/-/g, '/')), el('small', 'muted', `自動：${d.auto}分${d.manual !== null ? '（修正済み）' : ''}`), inp, el('span', null, '分'), ok);
-          if (d.manual !== null) {
-            const back = el('button', 'btn small secondary', '自動の値にもどす');
+          ok.onclick = async () => { try { await api('PUT', `/api/admin/ganbari/students/${s.id}/days/${d.day}`, { adjust: Number(inp.value) || 0 }); toast('保存しました'); refresh(); loadStudents(); } catch (e) { toast(e.message); } };
+          row.append(el('span', null, d.day.replace(/-/g, '/')), el('small', 'muted', `自動：${d.auto}分`), el('b', null, '＋'), inp, el('span', null, '分'), el('b', 'gb-sum', `＝ ${d.total}分`), ok);
+          if (d.manual !== null) { // 前の直し方（上書き）が残っている日
+            const back = el('button', 'btn small secondary', '上書きをやめる');
             back.onclick = async () => { try { await api('PUT', `/api/admin/ganbari/students/${s.id}/days/${d.day}`, { minutes: null }); refresh(); loadStudents(); } catch (e) { toast(e.message); } };
-            row.append(back);
+            row.append(el('small', 'muted', `（前に「${d.manual}分」で上書きしてあります。このままだと自動の時間はふえません）`), back);
           }
           list.append(row);
         }
       }
-      addBtn.onclick = async () => { try { await api('PUT', `/api/admin/ganbari/students/${s.id}/days/${addDay.value}`, { minutes: Number(addMin.value) }); toast('入れました'); refresh(); loadStudents(); } catch (e) { toast(e.message); } };
+      addBtn.onclick = async () => {
+        const n = Number(addMin.value) || 0; if (!n) return toast('足す時間を入れてください');
+        let cur = 0;
+        try { const r = await api('GET', `/api/admin/ganbari/students/${s.id}/days?from=${addDay.value}&to=${addDay.value}`); cur = (r.days[0] && r.days[0].adj) || 0; } catch (e) {}
+        try { await api('PUT', `/api/admin/ganbari/students/${s.id}/days/${addDay.value}`, { adjust: cur + n }); toast(`${addDay.value.replace(/-/g, '/')} に ${n > 0 ? '＋' : ''}${n}分 足しました`); addMin.value = 0; refresh(); loadStudents(); } catch (e) { toast(e.message); }
+      };
       sel.onchange = refresh;
       const actions = body.querySelector('.dialog-actions'); actions.textContent = '';
       const close = el('button', 'btn secondary', 'とじる'); close.onclick = () => dlg.close(); actions.append(close);

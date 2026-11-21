@@ -379,3 +379,20 @@ test('髪型：お店で買ってつけられる（hair の場所）。小学生
   for (const id of ['h_spiky', 'h_regent', 'h_pony']) assert.ok(hairs.includes(id), id);
   assert.ok(G2.getConfig().esItems.includes('h_pony') && !G2.getConfig().esItems.includes('h_regent'));
 });
+
+test('足す分：＋120分しても、そのあとの自習はふえ続ける（マイナスもできる・上限は自動の分だけで判断）', () => {
+  const day = G.addDays(C().terms[2], 70);
+  assert.equal(G.setConfig({ window: { start: '00:00', end: '24:00' }, window2: null, weekly: null, dailyCap: 300 }), null);
+  const o = new Map([[1, fake(U.a2)]]);
+  for (let m = 0; m < 5; m++) G.tick(o, { date: at(day, `10:0${m}`) });
+  assert.equal(G.dayTotal(U.a2.id, day), 5);
+  assert.equal(G.setAdjust(U.a2.id, day, 120, null), null);
+  assert.equal(G.dayTotal(U.a2.id, day), 125);
+  assert.equal(G.dayAll(U.a2.id, day), 125);
+  G.tick(o, { date: at(day, '10:10') });
+  assert.equal(G.dayTotal(U.a2.id, day), 126, '足したあとも自動でふえる');
+  assert.equal(G.setAdjust(U.a2.id, day, -200, null), null);
+  assert.equal(G.dayTotal(U.a2.id, day), 0, 'マイナスでも0より下にはならない');
+  assert.match(G.setAdjust(U.a2.id, day, 2000, null), /1440/);
+  assert.equal(G.setAdjust(U.a2.id, day, 0, null), null);
+});

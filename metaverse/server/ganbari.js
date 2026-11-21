@@ -474,9 +474,12 @@ function allTerms(c = getConfig()) {
 
 // ───────── 自習時間 ─────────
 // ポイントになる時間（時間帯の中・1日の上限まで）
-const totalExpr = 'COALESCE(manual_min, auto_min)';
+// 足す分（adj_min）：オーナーが「＋120分」のように足した分（マイナスもできる）。自動の時間はそのあともふえ続ける
+if (!db.prepare('PRAGMA table_info(study_days)').all().some(c => c.name === 'adj_min')) db.exec('ALTER TABLE study_days ADD COLUMN adj_min INTEGER NOT NULL DEFAULT 0');
+const totalExpr = 'MAX(0, COALESCE(manual_min, auto_min) + adj_min)';
+const countedExpr = 'COALESCE(manual_min, auto_min)'; // 1日の上限をたしかめるとき（足した分は入れない）
 // 勉強時間（全部）：時間帯の外・上限をこえた分もふくむ。🔥・がんばりサンタ・表示・保護者の画面に使う
-const allExpr = 'MAX(all_min, COALESCE(manual_min, auto_min))';
+const allExpr = 'MAX(0, MAX(all_min, COALESCE(manual_min, auto_min)) + adj_min)';
 { // 「勉強時間（全部）」の列を足す（1回だけ）
   const cols = db.prepare('PRAGMA table_info(study_days)').all().map(c => c.name);
   if (!cols.includes('all_min')) db.exec('ALTER TABLE study_days ADD COLUMN all_min INTEGER NOT NULL DEFAULT 0');
@@ -499,7 +502,7 @@ function minutesBetween(userId, from, to) {
   return db.prepare(`SELECT COALESCE(SUM(${totalExpr}), 0) AS m FROM study_days WHERE user_id = ? AND day BETWEEN ? AND ?`).get(userId, from, to).m;
 }
 function daysBetween(userId, from, to) {
-  return db.prepare(`SELECT day, auto_min AS auto, manual_min AS manual, ${totalExpr} AS total, ${allExpr} AS "all" FROM study_days WHERE user_id = ? AND day BETWEEN ? AND ? ORDER BY day`).all(userId, from, to);
+  return db.prepare(`SELECT day, auto_min AS auto, manual_min AS manual, adj_min AS adj, ${totalExpr} AS total, ${allExpr} AS "all" FROM study_days WHERE user_id = ? AND day BETWEEN ? AND ? ORDER BY day`).all(userId, from, to);
 }
 function setManual(userId, day, minutes, actorId) {
   if (!RE_DAY.test(day)) return '日付が正しくありません';
@@ -509,6 +512,16 @@ function setManual(userId, day, minutes, actorId) {
   audit(actorId, 'ganbari.time_edited', String(userId), { day, minutes });
   return null;
 }
+// 足す分を決める（＋で足す・－で減らす。0 でなし）
+function setAdjust(userId, day, minutes, actorId) {
+  if (!RE_DAY.test(day)) return '日付が正しくありません';
+  if (!(Number.isInteger(minutes) && minutes >= -1440 && minutes <= 1440)) return '足す時間は -1440〜1440分で入れてください';
+  db.prepare(`INSERT INTO study_days (user_id, day, auto_min, adj_min) VALUES (?, ?, 0, ?)
+    ON CONFLICT(user_id, day) DO UPDATE SET adj_min = excluded.adj_min`).run(userId, day, minutes);
+  audit(actorId, 'ganbari.time_adjusted', String(userId), { day, minutes });
+  return null;
+}
+function dayCounted(userId, day) { const r = db.prepare(`SELECT ${countedExpr} AS m FROM study_days WHERE user_id = ? AND day = ?`).get(userId, day); return r ? r.m : 0; }
 
 /**
  * 1分ごとに呼ぶ：条件を満たす生徒に1分を足す
@@ -531,7 +544,7 @@ function tick(online, opt = {}) {
       if (c.requireSeat && !p.seat) continue;
       if (c.requireCamera && opt.photosOn && !p.studyCam) continue;
       const r = rules[groupOf(p.user.grade) || 'jh'];
-      const point = open(r) && dayTotal(p.id, t.day) < r.cap;
+      const point = open(r) && dayCounted(p.id, t.day) < r.cap;
       up.run(p.id, t.day, point ? 1 : 0);
       added.counted.push(p.id);
       if (point) added.push(p.id);
@@ -557,7 +570,7 @@ function creditGap(userId, fromMs, toMs, maxMin = 5) {
   for (let i = 1; i <= n; i++) {
     const t = jst(new Date(fromMs + i * 60_000));
     const r = ruleFor(t.day, c, group);
-    const point = r.on && r.windows.some(w => t.hm >= w.start && t.hm < w.end) && dayTotal(userId, t.day) < r.cap;
+    const point = r.on && r.windows.some(w => t.hm >= w.start && t.hm < w.end) && dayCounted(userId, t.day) < r.cap;
     up.run(userId, t.day, point ? 1 : 0); // 勉強時間（全部）はいつも足す
     if (point) added++;
   }
@@ -1072,7 +1085,7 @@ module.exports = {
   streakMinFor,
   ruleFor, WEEKDAYS, groupOf, isES, ES_GRADES, esBoughtThisMonth, esPrice,
   SLOTS, EVENTS, currentEvent, dressupOpen, dressupInfo,
-  GRADES, NEXT_GRADE, STAGE_NAMES, SHOP, jst, addDays, getConfig, setConfig, termOf, allTerms, dayTotal, dayAll, allBetween, minutesBetween, daysBetween, setManual, tick,
+  GRADES, NEXT_GRADE, STAGE_NAMES, SHOP, jst, addDays, getConfig, setConfig, termOf, allTerms, dayTotal, dayAll, allBetween, minutesBetween, daysBetween, setManual, setAdjust, tick,
   streak, points, owned, getEquip, buy, equip, shopFor, setGoal, goalOf, listGoals, reviewGoal, forest, studentSummary, studyDetail, newYear,
   createReport, reportData,
 };
