@@ -392,3 +392,13 @@ body.is-trial .not-trial { display: none !important; }
 .pgift-who { margin: -6px 0 4px; font-weight: 800; color: #b06a00; }
 .hair-prev { width: 60px; height: 60px; display: block; margin: 0 auto; }
 .left-note { color: var(--muted); font-size: 12px; }
+
+/* 左上のポイント表示 */
+.pts-chip { border: 0; cursor: pointer; color: var(--ink, #1f2a37); }
+.pts-chip b { font-size: 20px; color: #f08c00; }
+.pts-chip .pts-unit { font-size: 13px; color: var(--muted); margin-left: -3px; }
+.pts-state { font-size: 15px; opacity: .55; }
+.pts-state.up { opacity: 1; color: #2fae74; animation: ptsUp 1.4s ease-in-out infinite; }
+@keyframes ptsUp { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+.pts-chip.sparkle { animation: ptsSparkle .9s ease-out; }
+@keyframes ptsSparkle { 0% { box-shadow: 0 0 0 0 rgba(255,200,60,.9), var(--shadow); transform: scale(1); } 40% { box-shadow: 0 0 0 10px rgba(255,200,60,0), var(--shadow); transform: scale(1.12); } 100% { transform: scale(1); } }

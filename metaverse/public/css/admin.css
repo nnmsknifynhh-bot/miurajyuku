@@ -141,3 +141,5 @@ tr.kq-auto td { background: #fff8e1; }
 .user-sort { min-height: 40px; border: 2px solid var(--line); border-radius: 10px; padding: 0 8px; font-size: 15px; background: #fff; flex: 0 0 auto; }
 .gb-students th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
 .gb-students th.sortable:hover { text-decoration: underline; }
+.gb-hol { display: grid; gap: 4px; margin: 6px 0 10px; padding: 8px 10px; background: #fff8e6; border-radius: 10px; }
+.gb-vacs { display: grid; gap: 6px; margin-bottom: 8px; }

@@ -78,6 +78,7 @@
     }
     document.querySelectorAll('#shop-tabs button').forEach(b => b.onclick = () => { g.shopSlot = b.dataset.slot; renderShop(); });
     $('#shop-close').onclick = () => $('#shop-dialog').close();
+    $('#shop-dialog').addEventListener('close', () => { if (window.__world && window.__world.refreshPts) window.__world.refreshPts(); });
 
     // ── 今学期の目標 ──
     async function openGoal() {

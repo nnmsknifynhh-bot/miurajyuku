@@ -251,6 +251,7 @@
       state.testQueue = d.testQueue || null;
       state.mySeats = d.mySeats || [];
       cakeGiven.clear(); for (const id of (d.me.cakeGiven || [])) cakeGiven.add(id);
+      state.pts = d.me.pts || null;
       loadBoard(); loadMorning(); refreshGoal();
       if (state.user.role === 'student') setTimeout(goMySeat, 1800);
       { const mine = state.testQueue && state.testQueue.booths.find(b => b.userId === d.me.id); state.testBooth = mine ? mine.seat : null; }
@@ -279,6 +280,7 @@
     socket.on('parent-bday', (d) => { pgift = d; $('#pgift-chip').hidden = false; if (!d.quiet) setTimeout(openPgift, 600); });
     socket.on('parent-gift-done', ({ minutes }) => { chime(0.25); toast(`🎁 おうちの人へのプレゼント「${fmtMin(minutes)}」を達成！ おうちの人の画面に🌸が咲いたよ`, 8000); });
     socket.on('parent-gift-update', () => { toast('🎂 お子さんからのプレゼントが届いています（🏠 わが子の様子）', 7000); chime(0.2); if ($('#family-dialog').open) openFamily(); });
+    socket.on('my-points', (d) => { state.pts = { balance: d.balance, medal: d.medal }; if (d.earning === true) earningUntil = Date.now() + 75_000; else if (d.earning === false) earningUntil = 0; renderPts(); });
     socket.on('morning-board', (mb) => { state.morning = mb; if ($('#morning-dialog').open) openMorning(); });
     socket.on('blackboard', ({ board }) => { state.board = board; if (board && !isStaff()) { toast('📝 先生の黒板が新しくなったよ（ロビー）', 5000); markBoardSeen(); } });
     socket.on('myseat-lost', () => { toast('⭐ 🔥がとぎれたので、マイ席はお休みになりました。また続けたら、えらべるよ', 7000); refreshFun(true); });
@@ -647,7 +649,7 @@
     try { await api('POST', '/api/parent/birthday', { birthday: m ? `${m}-${d}` : null }); toast(m ? `🎂 ${Number(m)}月${Number(d)}日で登録しました` : '誕生日を消しました', 3500); }
     catch (e) { toast(e.message); }
   };
-  $('#pquiz-close').onclick = () => $('#pquiz-dialog').close();
+  $('#pquiz-close').onclick = () => { $('#pquiz-dialog').close(); refreshPts(); };
 
   // わが子の様子と「見たよ」スタンプ
   async function openFamily() {
@@ -1140,9 +1142,39 @@
     return true;
   }
 
+  // ── 左上：生徒・保護者は今のポイント（🎁 120pt ⬆/⏸）。先生・オーナーは自習室ぜんぶの生徒数 ──
+  const ptsMode = () => !!(state.user && (state.user.role === 'student' || state.user.role === 'parent') && !state.user.trialUntil);
+  let earningUntil = 0;
+  function renderPts() {
+    const chip = $('#pts-chip'), on = ptsMode() && state.pts;
+    chip.hidden = !on; $('#place').hidden = !!on;
+    if (!on) return;
+    const prev = Number($('#pts-num').dataset.v);
+    $('#pts-num').textContent = state.pts.balance; $('#pts-num').dataset.v = state.pts.balance;
+    $('#pts-medal').textContent = state.pts.medal || '';
+    const up = state.user.role === 'student' && Date.now() < earningUntil;
+    $('#pts-state').textContent = state.user.role === 'student' ? (up ? '⬆' : '⏸') : '';
+    $('#pts-state').classList.toggle('up', up);
+    chip.title = up ? 'いまポイントがふえています' : state.user.role === 'student' ? 'いまはポイントがふえていません（時間帯の外・自習室の外など）' : '';
+    if (Number.isFinite(prev) && state.pts.balance > prev) { chip.classList.remove('sparkle'); void chip.offsetWidth; chip.classList.add('sparkle'); }
+  }
+  setInterval(() => { if (ptsMode() && state.pts) renderPts(); }, 5000); // ⬆ → ⏸ にもどす
+  $('#pts-chip').onclick = () => { if (state.gb) state.gb.openShop(); };
+  async function refreshPts() {
+    if (!ptsMode()) return;
+    try { const g = await api('GET', '/api/me/ganbari'); state.pts = { ...(state.pts || {}), balance: g.points.balance }; renderPts(); } catch (e) { /* 次の機会に */ }
+  }
+
   let lastPlaceKey = '';
   function updatePlace(force) {
     if (!state.me) return;
+    if (ptsMode()) { renderPts(); return; }
+    if (isStaff()) { // 先生・オーナー：自習室（小・中・高）ぜんぶの生徒数
+      let n = 0, cap = 0;
+      for (const id of ['class2', 'study', 'class3']) { const c = (state.counts || {})[id]; if (c) { n += c.students - (c.left || 0); cap += c.capacity; } } // 小・中・高の自習室（テスト教室はのぞく）
+      $('#place-name').textContent = '自習室'; $('#place-cap').textContent = `生徒 ${n}/${cap}人`;
+      return;
+    }
     const z = SM.zoneAtPx(state.me.x, state.me.y);
     const c = z && state.counts[z.id];
     const key = (z ? z.id : '') + (c ? c.students + '/' + c.capacity + '/' + (c.left || 0) : '');
@@ -2172,5 +2204,5 @@
     }).catch(() => {});
   }
 
-  window.__world = { state, walkTo, goToRoom, showLetter };
+  window.__world = { state, walkTo, goToRoom, showLetter, refreshPts };
 })();

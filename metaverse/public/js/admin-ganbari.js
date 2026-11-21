@@ -116,14 +116,18 @@
         return () => ({ on: on[1].checked, ...sl.value(), cap: Number(cp.value) });
       });
       const wkNote = el('p', 'muted', 'チェックをはずした曜日は自習時間を数えません。');
-      const syncWeek = () => { const w = byDay[1].checked; wkBox.hidden = wkNote.hidden = !w; winField.hidden = capField.hidden = w; };
+      // 🎌 祝日・🏖 長い休みは土曜日と同じ（曜日ごとに変えるときだけ）
+      const hol = check('🎌 祝日（振替休日もふくむ）は土曜日と同じ数え方にする', src.holidaySat !== false);
+      const vac = check('🏖 長い休み（下の「長い休み」で決めた期間）は土曜日と同じ数え方にする', src.vacationSat !== false);
+      const offBox = el('div', 'gb-hol'); offBox.append(hol[0], vac[0], el('small', 'muted', '平日だけが土曜日の数え方になります（日曜日はそのまま）。祝日はアプリが自動でわかります。'));
+      const syncWeek = () => { const w = byDay[1].checked; wkBox.hidden = wkNote.hidden = offBox.hidden = !w; winField.hidden = capField.hidden = w; };
       byDay[1].onchange = syncWeek; syncWeek();
-      box.append(byDay[0], wkBox, wkNote, g);
+      box.append(byDay[0], wkBox, wkNote, offBox, g);
       return {
         box,
         value: () => {
           const v = common.value();
-          return { window: { start: v.start, end: v.end }, window2: v.start2 ? { start: v.start2, end: v.end2 } : null, dailyCap: Number(capI.value), weekly: byDay[1].checked ? wkRows.map(f => f()) : null };
+          return { window: { start: v.start, end: v.end }, window2: v.start2 ? { start: v.start2, end: v.end2 } : null, dailyCap: Number(capI.value), weekly: byDay[1].checked ? wkRows.map(f => f()) : null, holidaySat: hol[1].checked, vacationSat: vac[1].checked };
         },
       };
     };
@@ -151,6 +155,24 @@
     const sgRow = el('div', 'gb-row');
     sgInputs.forEach(([g, i]) => { i.style.width = '72px'; const one = el('span', 'gb-row'); one.style.flexWrap = 'nowrap'; one.append(el('span', null, g), i, el('span', 'muted', '分')); sgRow.append(one); });
     sgBox.append(el('span', null, '連続自習🔥の1日の最低時間（学年別）'), sgRow, el('small', null, 'この時間より多く自習した日が続くと🔥がふえます'));
+    // 🏖 長い休み（中・高・小で共通。「土曜日と同じ」にチェックした学年だけに使う）
+    const vacBox = el('div', 'gb-box');
+    vacBox.append(el('b', null, '🏖 長い休み（夏休み・冬休み・春休み）'), el('p', 'muted', 'この期間の平日は、上で「🏖 長い休みは土曜日と同じ」にチェックした学年だけ、土曜日の数え方になります。学校ごとにちがうので、だいたいの期間で入れてください。'));
+    const vacList = el('div', 'gb-vacs');
+    const vacRows = [];
+    const addVac = (v) => {
+      const row = el('div', 'gb-row');
+      const nm = el('input'); nm.value = v.name || ''; nm.placeholder = '名前（例：夏休み）'; nm.maxLength = 20; nm.style.width = '9em';
+      const st = dateInput(v.start || ''), en = dateInput(v.end || '');
+      const del = el('button', 'btn small secondary', '消す'); del.type = 'button';
+      const item = { nm, st, en };
+      del.onclick = () => { row.remove(); vacRows.splice(vacRows.indexOf(item), 1); };
+      row.append(nm, st, el('span', null, '〜'), en, del); vacList.append(row); vacRows.push(item);
+    };
+    (c.vacations || []).forEach(addVac);
+    const addVacBtn = el('button', 'btn small secondary', '＋ 休みを足す'); addVacBtn.type = 'button';
+    addVacBtn.onclick = () => addVac({ name: ['夏休み', '冬休み', '春休み'][vacRows.length % 3] });
+    vacBox.append(vacList, addVacBtn);
     const saveRule = el('button', 'btn', '保存する');
     saveRule.onclick = () => {
       const y = window.scrollY;
@@ -160,10 +182,11 @@
         streakByGrade: { ...(c.streakByGrade || {}), ...Object.fromEntries(sgInputs.map(([g, i]) => [g, Number(i.value)])) },
         requireSeat: seat[1].checked, requireCamera: cam[1].checked,
         es: es.value(),
+        vacations: vacRows.filter(r => r.st.value && r.en.value).map(r => ({ name: r.nm.value.trim() || '休み', start: r.st.value, end: r.en.value })),
         hs: { ...hs.value(), medals: medalInputs.map(([mi, pi]) => ({ minutes: Number(mi.value), points: Number(pi.value) })), lateMinutes: Number(hsLate.value) },
       }, '数え方を保存しました').then(ok => { if (ok) load(root, ctx).then(() => window.scrollTo(0, y)); });
     };
-    rule.append(jh.box, es.box, hs.box, grid, sgBox, seat[0], cam[0], saveRule);
+    rule.append(jh.box, es.box, hs.box, vacBox, grid, sgBox, seat[0], cam[0], saveRule);
 
     // ═════ 🎒 小学生ショップ ═════
     {

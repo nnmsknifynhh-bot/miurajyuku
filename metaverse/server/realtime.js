@@ -546,7 +546,7 @@ function attach(httpServer) {
     }
 
     socket.emit('init', {
-      me: { ...pub(p), bday: !!p.bday, cakes: p.cakes && p.cakes.n ? p.cakes : null, cakeGiven: canGiveCake(p) ? birthday.givenBy(p.id) : null }, users: [...online.values()].filter(o => o !== p).map(o => pubFor(o, p)).concat(seesGhosts(p) ? [...ghosts.values()].filter(g => g.p.id !== p.id).map(g => pubFor(g.p, p)) : []), rooms: roomCounts(), reactions: user.role === 'parent' ? PARENT_REACTIONS : REACTIONS,
+      me: { ...pub(p), pts: (() => { try { return ptsOf(p); } catch (e) { return null; } })(), bday: !!p.bday, cakes: p.cakes && p.cakes.n ? p.cakes : null, cakeGiven: canGiveCake(p) ? birthday.givenBy(p.id) : null }, users: [...online.values()].filter(o => o !== p).map(o => pubFor(o, p)).concat(seesGhosts(p) ? [...ghosts.values()].filter(g => g.p.id !== p.id).map(g => pubFor(g.p, p)) : []), rooms: roomCounts(), reactions: user.role === 'parent' ? PARENT_REACTIONS : REACTIONS,
       visit: visit ? { endsAt: visit.endsAt, again: visit.again, meeting: !!visit.meeting, mendan: !!visit.mendan } : null,
       classes: classState(), classCall: livekit.enabled, testQueue: user.role === 'parent' ? null : testState(),
       mySeats: mySeatsFor(p),
@@ -1021,6 +1021,7 @@ function attach(httpServer) {
         // 🎯 小学生：今日の目標時間に届いたら、名札に✅（時間はほかの子には見せない）
         if (!p.goalDone) { const g = startphoto.goalOf(id); if (g && ganbari.dayAll(id, ganbari.jst().day) >= g) { p.goalDone = true; io.emit('user-updated', { id, goalDone: true }); p.socket.emit('goal-done', { minutes: g }); } }
         p.socket.emit('study-minute');
+        sendPts(p, added.includes(id)); // ⬆ ポイントがふえている / ⏸ 時間帯の外・上限
       }
       // ⭐ マイ席：🔥がとぎれたら返す（日がかわったとき）
       let seatsChanged = false;
@@ -1083,6 +1084,18 @@ function kick(userId, reason) {
   if (!p) return false;
   kickPresence(p, reason || '管理者によって接続が切断されました', 'kicked');
   return true;
+}
+
+// 左上のポイント表示（生徒・保護者）：今のポイントと、高校生は今週のメダル。earning＝いまポイントがふえている
+function ptsOf(p) {
+  if (p.user.role !== 'student' && p.user.role !== 'parent') return null;
+  if (p.user.trial_until) return null;
+  const o = { balance: ganbari.points(p.id).balance, medal: null };
+  if (p.user.role === 'student' && ganbari.isHS(p.user.grade)) { const w = ganbari.hsWeeks(p.id).week; o.medal = w && w.medal ? w.medal.icon : null; }
+  return o;
+}
+function sendPts(p, earning = null) {
+  try { const o = ptsOf(p); if (o) p.socket.emit('my-points', { ...o, earning }); } catch (e) { console.error('ポイントの表示に失敗:', e.message); }
 }
 
 // ユーザーを削除したとき：接続を切り、退室後に残している姿も消す
@@ -1215,6 +1228,7 @@ function refreshGanbari(userId) {
   io.emit('user-updated', { id: p.id, equip: equipView(p.equip), streak: p.streak });
   updateToday(p);
   refreshHS(p);
+  sendPts(p);
 }
 function refreshAllGanbari() { for (const id of online.keys()) refreshGanbari(id); }
 

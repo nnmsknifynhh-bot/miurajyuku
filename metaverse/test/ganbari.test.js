@@ -207,7 +207,7 @@ test('曜日ごとの数え方：数える曜日・時間帯・上限を曜日�
   const weekly = Array.from({ length: 7 }, () => ({ on: true, start: '00:00', end: '24:00', cap: 300 }));
   weekly[wd(day)] = { on: true, start: '18:00', end: '21:00', cap: 10 };
   weekly[wd(offDay)] = { on: false, start: '00:00', end: '24:00', cap: 300 };
-  assert.equal(G.setConfig({ weekly }), null);
+  assert.equal(G.setConfig({ weekly, holidaySat: false, vacationSat: false }), null); // この日付が祝日でも曜日どおりに
   assert.equal(G.ruleFor(offDay).on, false);
   const o = new Map([[1, fake(U.b1)]]);
   assert.deepEqual(G.tick(o, { date: at(day, '17:00') }), [], 'その曜日の時間帯の外');

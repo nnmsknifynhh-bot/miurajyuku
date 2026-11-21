@@ -10,6 +10,7 @@
 const crypto = require('crypto');
 const { db, now, getSetting, setSetting, audit } = require('./db');
 const SM = require('../public/shared/map.js');
+const { isHoliday } = require('./holidays');
 
 const TZ = 'Asia/Tokyo';
 const GRADES = ['小1', '小2', '小3', '小4', '小5', '小6', '中1', '中2', '中3', '高1', '高2', '高3'];
@@ -129,6 +130,8 @@ function defaults(today = jst()) {
     window: { start: '00:00', end: '24:00' }, // 数える時間帯（朝）
     window2: null,         // 2つ目の時間帯（夜）。使わないときは null
     dailyCap: 300,         // 1日に数える上限（分）
+    holidaySat: true, vacationSat: true, // 祝日・長い休みは土曜日と同じ数え方（曜日ごとの設定のときだけ意味がある）
+    vacations: [],         // 長い休み：[{ name: '夏休み', start: 'YYYY-MM-DD', end: 'YYYY-MM-DD' }]（中・高・小で共通）
     weekly: null,          // 曜日ごとの数え方（null＝毎日同じ）。[日,月,…,土] の7つ：{ on, start, end, start2, end2, cap }（夜を使わないときは start2/end2 が null）
     requireSeat: true,     // 席に座っているときだけ数える
     requireCamera: false,  // 見守り写真がオンのとき、カメラがオンのときだけ数える
@@ -226,14 +229,22 @@ function getConfig() {
 // group：'hs'＝高校生（高校生自習室の数え方）、'es'＝小学生（小学生自習室の数え方）、それ以外＝中学生
 function ruleFor(day, c = getConfig(), group = null) {
   const src = group === 'hs' ? c.hs : group === 'es' ? c.es : c;
-  return ruleOf(day, src);
+  return ruleOf(day, src, c);
 }
-function ruleOf(day, c) {
+// 祝日・長い休み（夏休みなど）は、土曜日と同じ数え方にできる（中・高・小それぞれオン/オフ）
+function vacationOf(day, root) { return (root.vacations || []).find(v => day >= v.start && day <= v.end) || null; }
+function ruleOf(day, c, root = c) {
   if (Array.isArray(c.weekly) && c.weekly.length === 7) {
-    const w = c.weekly[weekdayOf(day)];
+    let wd = weekdayOf(day), label = WEEKDAYS[wd];
+    if (wd !== 0 && wd !== 6) { // 平日だけ（土日はそのまま）
+      const vac = c.vacationSat !== false ? vacationOf(day, root) : null;
+      if (c.holidaySat !== false && isHoliday(day)) { wd = 6; label += '・祝日'; }
+      else if (vac) { wd = 6; label += '・' + vac.name; }
+    }
+    const w = c.weekly[wd];
     const windows = [{ start: w.start, end: w.end }];
     if (w.start2 && w.end2) windows.push({ start: w.start2, end: w.end2 });
-    return { weekday: WEEKDAYS[weekdayOf(day)], on: !!w.on, windows, cap: w.cap };
+    return { weekday: label, on: !!w.on, windows, cap: w.cap, asSat: wd !== weekdayOf(day) };
   }
   const windows = [{ ...c.window }];
   if (c.window2) windows.push({ ...c.window2 });
@@ -277,6 +288,8 @@ function applyRules(c, p) {
     c.window2 = w2 ? { start: w2.start, end: w2.end } : null;
   }
   if (p.dailyCap !== undefined) { if (!int(p.dailyCap, 10, 1440)) return '1日の上限は10〜1440分にしてください'; c.dailyCap = p.dailyCap; }
+  if (p.holidaySat !== undefined) c.holidaySat = !!p.holidaySat;   // 祝日は土曜日と同じ
+  if (p.vacationSat !== undefined) c.vacationSat = !!p.vacationSat; // 長い休みは土曜日と同じ
   if (p.weekly !== undefined) {
     if (p.weekly === null) c.weekly = null;
     else {
@@ -309,6 +322,16 @@ function setConfig(patch, actorId) {
   const int = (v, min, max) => Number.isInteger(v) && v >= min && v <= max;
   let err = applyRules(c, p);
   if (err) return err;
+  if (p.vacations !== undefined) { // 長い休み：[{ name, start, end }]
+    if (!Array.isArray(p.vacations) || p.vacations.length > 20) return '長い休みが正しくありません';
+    const vs = [];
+    for (const v of p.vacations) {
+      const name = cleanText(v && v.name, 20) || '休み';
+      if (!v || !RE_DAY.test(v.start || '') || !RE_DAY.test(v.end || '') || v.start > v.end) return `長い休み「${name}」の期間が正しくありません`;
+      vs.push({ name, start: v.start, end: v.end });
+    }
+    c.vacations = vs.sort((a, b) => a.start.localeCompare(b.start));
+  }
   if (p.hs !== undefined) {
     const h = p.hs || {};
     const hs = { ...c.hs };
