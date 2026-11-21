@@ -86,3 +86,6 @@ dialog::backdrop { background: rgba(30, 25, 40, .45); }
 .sd-bar.today { font-weight: 700; }
 .sd-legend { font-size: 11px; color: #7a6a5c; margin-bottom: 8px; }
 .sd-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; vertical-align: -1px; margin: 0 3px 0 8px; }
+/* 古い Safari（dialog がない）用：js/compat.js が html に dlg-poly をつける */
+.dlg-poly dialog { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); margin: 0; max-height: 90vh; max-width: 94vw; overflow: auto; z-index: 1000; border: 0; border-radius: 16px; background: #fff; box-shadow: 0 0 0 100vmax rgba(0,0,0,.45); }
+.dlg-poly dialog:not([open]) { display: none; }
