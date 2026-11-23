@@ -78,6 +78,7 @@ function publicUser(u) {
     visitDays: u.visit_days ? u.visit_days.split(',').map(Number) : [], visitTime: u.visit_time || null,
     classDays: u.class_days ? u.class_days.split(',').map(Number) : [],
     trialUntil: u.trial_until || null,
+    hair: u.staff_hair || null, // 先生・オーナーの髪型
   };
 }
 function listRooms(user) {
@@ -193,7 +194,7 @@ app.get('/api/me/ganbari', auth.requireAuth, (req, res) => {
     pair: u.role === 'student' && !u.trial_until ? referral.pairOf(u.id) : null,
     mySeat: u.role === 'student' ? myseat.statusOf(u.id) : null,
     referralWeek: referral.weekOn() ? referral.getConfig().week : null,
-    rules: { minutesPerPoint: c.minutesPerPoint, streakMin: ganbari.streakMinFor(u.id, c), window: ({ es: c.es, hs: c.hs }[ganbari.groupOf(u.grade)] || c).window, window2: ({ es: c.es, hs: c.hs }[ganbari.groupOf(u.grade)] || c).window2, requireSeat: c.requireSeat, today: ganbari.ruleFor(today, c, ganbari.groupOf(u.grade)) },
+    rules: { minutesPerPoint: c.minutesPerPoint, streakMin: ganbari.streakMinFor(u.id, c), window: ganbari.rulesSrc(c, ganbari.groupOf(u.grade)).window, window2: ganbari.rulesSrc(c, ganbari.groupOf(u.grade)).window2, requireSeat: c.requireSeat, today: ganbari.ruleFor(today, c, ganbari.groupOf(u.grade)) },
   });
 });
 app.post('/api/me/shop/buy', auth.requireAuth, (req, res) => {
@@ -703,6 +704,12 @@ admin.patch('/users/:id', requireOwner, (req, res) => {
   if (target.role === 'owner' && !isSelf) return bad(res, 'ほかのオーナーは編集できません', 403);
 
   const result = transaction(() => {
+    if (b.hair !== undefined) { // 先生・オーナーの髪型
+      if (target.role !== 'teacher' && target.role !== 'owner') return '髪型は先生・オーナーだけに設定できます';
+      const styles = ganbari.SHOP.filter(i => i.slot === 'hair').map(i => i.style);
+      if (b.hair !== null && !styles.includes(b.hair)) return '髪型が正しくありません';
+      db.prepare('UPDATE users SET staff_hair = ? WHERE id = ?').run(b.hair, id); changes.push('hair');
+    }
     if (b.displayName !== undefined) {
       const name = cleanName(b.displayName);
       const e = validateName(name); if (e) return e;
@@ -835,6 +842,7 @@ admin.patch('/ganbari/config', requireOwner, (req, res) => {
   realtime.refreshAllGanbari();
   res.json({ config: ganbari.getConfig() });
 });
+admin.get('/parents/cheers', requireOwner, (req, res) => res.json({ cheers: parents.cheersList(Math.min(365, Math.max(1, Number(req.query.days) || 60))), moms: parents.momsTree() }));
 admin.get('/ganbari/students', requireOwner, (req, res) => res.json({ students: ganbari.studentSummary() }));
 admin.get('/ganbari/students/:id/days', requireOwner, (req, res) => {
   const from = String(req.query.from || ''), to = String(req.query.to || '');
@@ -928,7 +936,7 @@ admin.delete('/kanken/questions/:id', requireOwner, (req, res) => {
 
 // 塾全体の設定（オーナーのみ）
 admin.get('/settings', requireOwner, (req, res) => {
-  res.json({ studyPhotos: realtime.studyPhotosEnabled(), startPhoto: startphoto.enabledNow() });
+  res.json({ studyPhotos: realtime.studyPhotosEnabled(), startPhoto: startphoto.enabledNow(), ownerPatrol: realtime.patrolOn() });
 });
 // 入室前の写真の一覧（オーナーだけ）。?day=YYYY-MM-DD（なければ今日）
 admin.get('/start-photos', requireOwner, async (req, res) => {
@@ -950,11 +958,15 @@ admin.patch('/settings', requireOwner, (req, res) => {
     realtime.setStudyPhotosFeature(req.body.studyPhotos);
     audit(req.user.id, 'settings.study_photos', req.body.studyPhotos ? 'on' : 'off', null, req.ip);
   }
+  if (typeof req.body.ownerPatrol === 'boolean') {
+    setSetting('owner_patrol', req.body.ownerPatrol ? '1' : '0');
+    audit(req.user.id, 'settings.owner_patrol', req.body.ownerPatrol ? 'on' : 'off', null, req.ip);
+  }
   if (typeof req.body.startPhoto === 'boolean') {
     setSetting('start_photo', req.body.startPhoto ? '1' : '0');
     audit(req.user.id, 'settings.start_photo', req.body.startPhoto ? 'on' : 'off', null, req.ip);
   }
-  res.json({ studyPhotos: realtime.studyPhotosEnabled(), startPhoto: startphoto.enabledNow() });
+  res.json({ studyPhotos: realtime.studyPhotosEnabled(), startPhoto: startphoto.enabledNow(), ownerPatrol: realtime.patrolOn() });
 });
 
 admin.get('/logs', requireOwner, (req, res) => {

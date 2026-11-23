@@ -269,6 +269,13 @@ function takeCheers(studentId) {
   if (rows.length) db.prepare(`UPDATE parent_cheers SET delivered = 1 WHERE id IN (${rows.map(() => '?').join(',')})`).run(...rows.map(r => r.id));
   return rows.map(r => r.stamp);
 }
+// 家族の木の🌸（見たよスタンプ）をだれが押したか（オーナー用）：新しい順
+function cheersList(days = 60, date = new Date()) {
+  const from = G.addDays(G.jst(date).day, -(days - 1));
+  return db.prepare(`SELECT c.day, c.stamp, c.created_at AS at, c.delivered, p.display_name AS parent, s.display_name AS child, s.grade
+    FROM parent_cheers c LEFT JOIN users p ON p.id = c.parent_id LEFT JOIN users s ON s.id = c.student_id
+    WHERE c.day >= ? ORDER BY c.created_at DESC LIMIT 500`).all(from).map(r => ({ ...r, parent: r.parent || '（削除された保護者）', child: r.child || '（削除された生徒）', delivered: !!r.delivered }));
+}
 const MOM_STAGES = [0, 5, 15, 30, 60, 100]; // 花の数で育つ（年度ごと）
 function momsTree(date = new Date()) {
   const c = G.getConfig(), t = G.jst(date);
@@ -283,5 +290,5 @@ function momsTree(date = new Date()) {
 module.exports = {
   VISIT_MS, SUBJECTS, STAMPS, createInvite, inviteStudent, useInvite, childrenOf, parentsOf, unlink, childIds, normCode,
   startVisit, visitEndsAt, meetingOn, meetingPhase, getMeeting, setMeeting, endMeetingNow, mendanAllowed, allowMendan, mendanList, recordVisit, visitsOn, visitStreak, subjectOf, todayQuiz, answerQuiz, quizPoints, addQuestions, listQuestions, deleteQuestion,
-  sendCheer, cheersSentToday, takeCheers, momsTree,
+  sendCheer, cheersSentToday, takeCheers, momsTree, cheersList,
 };

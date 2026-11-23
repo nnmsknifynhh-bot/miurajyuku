@@ -174,6 +174,7 @@
     const gsel = $('#f-grade'); gsel.textContent = '';
     for (const gname of ['', ...meta.grades, '卒業']) { const o = el('option', null, gname || '（未設定）'); o.value = gname; gsel.append(o); }
     gsel.value = u && u.grade ? u.grade : '';
+    $('#f-hair').value = u && u.hair ? u.hair : '';
     // 誕生日（月・日）
     const [bm, bd] = u && u.birthday ? u.birthday.split('-') : ['', ''];
     const msel = $('#f-bmonth'), dsel = $('#f-bday'); msel.textContent = ''; dsel.textContent = '';
@@ -204,6 +205,7 @@
 
   function renderPermFields(role, u) {
     $('#grade-field').hidden = role !== 'student';
+    $('#hair-field').hidden = !(editing && (role === 'teacher' || role === 'owner')); // 髪型は、登録したあとの編集で
     $('#perms-field').hidden = role === 'parent';
     $('#bday-field').hidden = role !== 'student';
     $('#class-field').hidden = role !== 'student';
@@ -245,6 +247,7 @@
     document.querySelectorAll('#f-perms input').forEach(cb => { permissions[cb.value] = cb.checked; });
     const rooms = [...document.querySelectorAll('#f-rooms input:checked')].map(cb => cb.value);
     const body = { displayName: $('#f-name').value, avatarColor: $('#f-color').value };
+    if (editing && (role === 'teacher' || role === 'owner')) body.hair = $('#f-hair').value || null;
     if (role === 'student') {
       body.grade = $('#f-grade').value || null;
       const m = $('#f-bmonth').value, d = $('#f-bday').value;
@@ -416,6 +419,21 @@
       };
       c2.append(r2);
       box.append(c2);
+      // 👔 オーナーの見回り（生徒・保護者の画面だけ）
+      let op = true;
+      try { op = (await api('GET', '/api/admin/settings')).ownerPatrol; } catch (e) {}
+      const c3 = el('div', 'room-box');
+      c3.append(el('h3', null, '👔 オーナーの見回り（生徒・保護者の画面）'));
+      c3.append(el('div', 'muted', 'オーナーが入室していないとき、生徒・保護者の画面では、オーナーが面談ブースにいて、30分おき（毎時0分・30分）に ろうかの端まで1往復しているように見えます。先生・オーナーの画面には出ません。オーナーが入室すると、本当の位置が見えます。'));
+      const r3 = el('div', 'cap-row');
+      const b3 = el('button', 'btn small' + (op ? ' danger' : ''), op ? 'オフにする' : 'オンにする');
+      r3.append(el('b', null, op ? '現在：オン' : '現在：オフ'), b3);
+      b3.onclick = async () => {
+        try { await api('PATCH', '/api/admin/settings', { ownerPatrol: !op }); toast(!op ? '見回りをオンにしました' : '見回りをオフにしました'); loadRooms(); }
+        catch (e) { toast(e.message); }
+      };
+      c3.append(r3);
+      box.append(c3);
     }
     for (const r of rooms) {
       const card = el('div', 'room-box');

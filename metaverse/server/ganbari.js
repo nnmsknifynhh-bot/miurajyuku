@@ -88,6 +88,8 @@ db.exec(`CREATE TABLE IF NOT EXISTS birthday_cards (user_id INTEGER NOT NULL, ye
 for (const col of ['clothes', 'hand', 'costume', 'hair']) { // 髪型（hair）もあとから足した
   if (!db.prepare('PRAGMA table_info(avatar_equip)').all().some(c => c.name === col)) db.exec(`ALTER TABLE avatar_equip ADD COLUMN ${col} TEXT`);
 }
+// 先生・オーナーの髪型（管理画面のユーザー編集で決める。お店では買わない）
+if (!db.prepare('PRAGMA table_info(users)').all().some(c => c.name === 'staff_hair')) db.exec('ALTER TABLE users ADD COLUMN staff_hair TEXT');
 const SLOTS = ['head', 'clothes', 'face', 'hand', 'pet', 'costume', 'hair'];
 
 // ───────── 日付（日本時間） ─────────
@@ -115,7 +117,10 @@ const HS_TREE = { name: '高校生の木', grades: HS_GRADES };
 const ES_GRADES = ['小1', '小2', '小3', '小4', '小5', '小6'];
 const isES = (grade) => ES_GRADES.includes(grade);
 // 数え方のグループ：'hs'＝高校生、'es'＝小学生、null＝中学生
-const groupOf = (grade) => HS_GRADES.includes(grade) ? 'hs' : ES_GRADES.includes(grade) ? 'es' : null;
+// 数え方のグループ：'hs3'＝高3（「高3は別」にしたときだけ別の数え方）、'hs'＝高1・高2（と高3）、'es'＝小学生、null＝中学生
+const groupOf = (grade) => grade === '高3' ? 'hs3' : HS_GRADES.includes(grade) ? 'hs' : ES_GRADES.includes(grade) ? 'es' : null;
+// そのグループの数え方の設定（高3は「別にする」がオフなら高校生と同じ）
+const rulesSrc = (c, group) => group === 'hs3' ? (c.hs3 && c.hs3.separate ? c.hs3 : c.hs) : group === 'hs' ? c.hs : group === 'es' ? c.es : c;
 const ES_TREE = { name: '小学生の木', grades: ES_GRADES };
 const ES_STREAK_MIN = 45; // 小学生の🔥・季節のクエストの1日の最低時間
 // 小学生（小学生自習室）のポイントになる時間：朝 6:00〜7:30・夕方 15:00〜18:00
@@ -147,6 +152,8 @@ function defaults(today = jst()) {
     esItems: [...ES_ITEMS_DEFAULT], // 小学生ショップで買えるアイテム
     // 高校生：週のメダル（週の勉強時間の合計で🥉🥈🥇。ボーナスはいちばん上のメダルの分だけ）
     hs: { window: { start: '16:00', end: '23:00' }, window2: null, dailyCap: 360, weekly: null, medals: DEFAULT_MEDALS.map(m => ({ ...m })), lateMinutes: 15, medalsV1: true },
+    // 高3（受験生）：separate をオンにすると、高1・高2とは別の数え方（学校がないので日中もポイントなど）
+    hs3: { separate: false, window: { start: '08:00', end: '23:00' }, window2: null, dailyCap: 600, weekly: null },
     stages: [0, 5, 15, 30, 50, 80], // 木の段階（平均時間・時間単位）
     dressup: { mode: 'always', periods: [] }, // 着せかえ期間：always＝いつでも / periods＝決めた期間だけ
     events: Object.fromEntries(EVENTS.map(e => [e.id, true])), // 季節の飾り（オン/オフ）
@@ -202,9 +209,10 @@ function getConfig() {
     saved.esV1 = true;
     setSetting('ganbari', JSON.stringify(saved));
   }
+  if (Array.isArray(saved.esItems) && saved.hairV1 && !saved.hairV2) { saved.esItems = [...new Set([...saved.esItems, 'h_bob'])]; saved.hairV2 = true; setSetting('ganbari', JSON.stringify(saved)); }
   if (Array.isArray(saved.esItems) && !saved.hairV1) { // 髪型を足したとき、小学生ショップにも足す（1回だけ）
     saved.esItems = [...new Set([...saved.esItems, ...ES_HAIR])];
-    saved.hairV1 = true;
+    saved.hairV1 = true; saved.hairV2 = true;
     setSetting('ganbari', JSON.stringify(saved));
   }
   let shs = saved.hs || {};
@@ -221,6 +229,7 @@ function getConfig() {
     ...d, ...saved, window: { ...d.window, ...(saved.window || {}) }, trees,
     dressup: { ...d.dressup, ...(saved.dressup || {}) }, events: { ...d.events, ...(saved.events || {}) },
     hs: { ...d.hs, ...shs, window: { ...d.hs.window, ...(shs.window || {}) } },
+    hs3: { ...d.hs3, ...(saved.hs3 || {}) },
     es: { ...d.es, ...(saved.es || {}), window: { ...d.es.window, ...((saved.es || {}).window || {}) } },
     fun: { ...d.fun, ...(saved.fun || {}) },
   };
@@ -228,8 +237,7 @@ function getConfig() {
 // その日の数え方（曜日ごとの設定があればそれ、なければ毎日同じ設定）
 // group：'hs'＝高校生（高校生自習室の数え方）、'es'＝小学生（小学生自習室の数え方）、それ以外＝中学生
 function ruleFor(day, c = getConfig(), group = null) {
-  const src = group === 'hs' ? c.hs : group === 'es' ? c.es : c;
-  return ruleOf(day, src, c);
+  return ruleOf(day, rulesSrc(c, group), c);
 }
 // 祝日・長い休み（夏休みなど）は、土曜日と同じ数え方にできる（中・高・小それぞれオン/オフ）
 function vacationOf(day, root) { return (root.vacations || []).find(v => day >= v.start && day <= v.end) || null; }
@@ -353,6 +361,13 @@ function setConfig(patch, actorId) {
   if (p.esItems !== undefined) {
     if (!Array.isArray(p.esItems)) return '小学生ショップのアイテムが正しくありません';
     c.esItems = [...new Set(p.esItems.filter(id => { const it = itemById(id); return it && !it.special; }))];
+  }
+  if (p.hs3 !== undefined) {
+    const h3 = { ...c.hs3 };
+    err = applyRules(h3, p.hs3 || {});
+    if (err) return '高3：' + err;
+    if (p.hs3 && p.hs3.separate !== undefined) h3.separate = !!p.hs3.separate;
+    c.hs3 = h3;
   }
   if (p.es !== undefined) {
     const es = { ...c.es };
@@ -532,7 +547,7 @@ function dayCounted(userId, day) { const r = db.prepare(`SELECT ${countedExpr} A
 function tick(online, opt = {}) {
   const c = getConfig();
   const t = jst(opt.date || new Date());
-  const rules = { jh: ruleFor(t.day, c), hs: ruleFor(t.day, c, 'hs'), es: ruleFor(t.day, c, 'es') };
+  const rules = { jh: ruleFor(t.day, c), hs: ruleFor(t.day, c, 'hs'), hs3: ruleFor(t.day, c, 'hs3'), es: ruleFor(t.day, c, 'es') };
   const open = (r) => r.on && r.windows.some(w => t.hm >= w.start && t.hm < w.end);
   const added = []; // ポイントになる時間に足した生徒
   Object.defineProperty(added, 'counted', { value: [], enumerable: false }); // 勉強時間（全部）に足した生徒（時間帯の外もふくむ）
@@ -678,6 +693,7 @@ const SHOP = [
   // 髪型（形と色で表示。着ぐるみのときは見えない）
   { id: 'h_mash', slot: 'hair', style: 'mash', emoji: '💇', name: 'マッシュヘア', price: 30 },
   { id: 'h_long', slot: 'hair', style: 'long', emoji: '💇', name: 'ロングヘア', price: 30 },
+  { id: 'h_bob', slot: 'hair', style: 'bob', emoji: '💇', name: 'ボブヘア', price: 30 },
   { id: 'h_spiky', slot: 'hair', style: 'spiky', emoji: '💇', name: 'ツンツンヘア', price: 40 },
   { id: 'h_pony', slot: 'hair', style: 'ponytail', emoji: '💇', name: 'ポニーテール', price: 40 },
   { id: 'h_twin', slot: 'hair', style: 'twintail', emoji: '💇', name: 'ツインテール', price: 50 },
@@ -698,7 +714,7 @@ const SHOP = [
 ];
 const itemById = (id) => SHOP.find(i => i.id === id);
 // 🎒 小学生ショップ：かわいい・シンプルなもの（男の子が多いので、かっこいい系も少し）を安めに。ほかは🔒「中学生になったら」
-const ES_HAIR = ['h_mash', 'h_long', 'h_spiky', 'h_pony', 'h_twin', 'h_bun']; // 小学生ショップの髪型
+const ES_HAIR = ['h_mash', 'h_long', 'h_bob', 'h_spiky', 'h_pony', 'h_twin', 'h_bun']; // 小学生ショップの髪型
 const ES_ITEMS_DEFAULT = ['cap', 'ribbon', 'strawhat', 'helmet', 'gradcap', 'uniform', 'parka', 'jersey', 'glasses', 'sunglasses', 'goggles',
   'wand', 'sword', 'shield', 'chick', 'cat', 'dog', 'rabbit', 'panda', 'k_bear', 'k_cat', 'k_penguin', 'k_dino', ...ES_HAIR];
 const esPrice = (price) => Math.max(10, Math.round(price / 2 / 10) * 10); // 中学生の半分くらい
@@ -1083,7 +1099,7 @@ module.exports = {
   normBirthday, birthdayInfo, celebrateBirthday,
   creditGap,
   streakMinFor,
-  ruleFor, WEEKDAYS, groupOf, isES, ES_GRADES, esBoughtThisMonth, esPrice,
+  ruleFor, WEEKDAYS, groupOf, rulesSrc, isES, ES_GRADES, esBoughtThisMonth, esPrice,
   SLOTS, EVENTS, currentEvent, dressupOpen, dressupInfo,
   GRADES, NEXT_GRADE, STAGE_NAMES, SHOP, jst, addDays, getConfig, setConfig, termOf, allTerms, dayTotal, dayAll, allBetween, minutesBetween, daysBetween, setManual, setAdjust, tick,
   streak, points, owned, getEquip, buy, equip, shopFor, setGoal, goalOf, listGoals, reviewGoal, forest, studentSummary, studyDetail, newYear,

@@ -49,3 +49,16 @@ test('左上のポイント表示：入室したとき今のポイントが届�
   const o = await connect(owner);
   assert.equal(o.me.pts, null);
 });
+
+test('高3は高1・高2とは別の数え方にできる（オフなら高校生と同じ）', async () => {
+  const owner = (await http('POST', '/api/login', { loginId: 'owner', password: 'ownerpass1' })).cookie;
+  await http('PATCH', '/api/admin/ganbari/config', { hs: { weekly: null, window: { start: '16:00', end: '23:00' }, window2: null, dailyCap: 360 } }, owner);
+  const day = '2026-11-25';
+  assert.equal(G.groupOf('高3'), 'hs3');
+  assert.deepEqual(G.ruleFor(day, G.getConfig(), 'hs3').windows, [{ start: '16:00', end: '23:00' }], 'オフのときは高校生と同じ');
+  const r = await http('PATCH', '/api/admin/ganbari/config', { hs3: { separate: true, window: { start: '08:00', end: '23:00' }, window2: null, dailyCap: 600 } }, owner);
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.deepEqual(G.ruleFor(day, G.getConfig(), 'hs3').windows, [{ start: '08:00', end: '23:00' }]);
+  assert.equal(G.ruleFor(day, G.getConfig(), 'hs3').cap, 600);
+  assert.deepEqual(G.ruleFor(day, G.getConfig(), 'hs').windows, [{ start: '16:00', end: '23:00' }], '高1・高2はそのまま');
+});

@@ -1071,6 +1071,7 @@
     const zoneId = (x, y) => (SM.zoneAtPx(x, y) || {}).id || null; // 部屋は位置から求める（ほかの人の room は移動中に古いことがある）
     const myZone = zoneId(me.x, me.y);
     for (const u of state.others.values()) {
+      if (u.bot) continue; // 見回りの姿（本当はいない）
       if ((u.role === 'owner' || u.role === 'teacher') && Math.hypot(u.x - me.x, u.y - me.y) <= T * 3.5 && zoneId(u.x, u.y) === myZone) return true;
     }
     return false;

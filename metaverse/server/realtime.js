@@ -47,6 +47,11 @@ const DIRS = new Set(['up', 'down', 'left', 'right']);
 // 見た目に必要な分だけ（期間外は全部 null）
 const equipView = (e) => (e ? Object.fromEntries(ganbari.SLOTS.map(sl => [sl, e[sl] || null])) : null);
 
+// 先生・オーナーの髪型（ユーザー編集で決めたもの）を見た目に入れる
+function staffEquip(user, e) {
+  if (user.role !== 'owner' && user.role !== 'teacher') return e;
+  return { ...(e || {}), hair: user.staff_hair || null };
+}
 function pub(p) {
   return {
     id: p.id, name: p.user.display_name, role: p.user.role, color: p.user.avatar_color,
@@ -503,7 +508,7 @@ function attach(httpServer) {
       lastMoveAt: 0, lastReactionAt: 0,
     };
     Object.assign(p, spawnPos(p));
-    p.equip = ganbari.getEquip(p.id);
+    p.equip = staffEquip(user, ganbari.getEquip(p.id));
     p.streak = user.role === 'student' ? ganbari.streak(p.id) : user.role === 'parent' ? parents.visitStreak(p.id) : 0;
     if (visit) { p.visitEndsAt = visit.endsAt; p.childIds = parents.childIds(p.id); }
     if (user.trial_until) p.referrerId = referral.referrerOf(p.id); // 体験中：招待してくれた子の名前だけ見える
@@ -546,7 +551,7 @@ function attach(httpServer) {
     }
 
     socket.emit('init', {
-      me: { ...pub(p), pts: (() => { try { return ptsOf(p); } catch (e) { return null; } })(), bday: !!p.bday, cakes: p.cakes && p.cakes.n ? p.cakes : null, cakeGiven: canGiveCake(p) ? birthday.givenBy(p.id) : null }, users: [...online.values()].filter(o => o !== p).map(o => pubFor(o, p)).concat(seesGhosts(p) ? [...ghosts.values()].filter(g => g.p.id !== p.id).map(g => pubFor(g.p, p)) : []), rooms: roomCounts(), reactions: user.role === 'parent' ? PARENT_REACTIONS : REACTIONS,
+      me: { ...pub(p), pts: (() => { try { return ptsOf(p); } catch (e) { return null; } })(), bday: !!p.bday, cakes: p.cakes && p.cakes.n ? p.cakes : null, cakeGiven: canGiveCake(p) ? birthday.givenBy(p.id) : null }, users: [...online.values()].filter(o => o !== p).map(o => pubFor(o, p)).concat(patrolViewer(p) && patrolActive() ? [patrolPub()].filter(Boolean) : []).concat(seesGhosts(p) ? [...ghosts.values()].filter(g => g.p.id !== p.id).map(g => pubFor(g.p, p)) : []), rooms: roomCounts(), reactions: user.role === 'parent' ? PARENT_REACTIONS : REACTIONS,
       visit: visit ? { endsAt: visit.endsAt, again: visit.again, meeting: !!visit.meeting, mendan: !!visit.mendan } : null,
       classes: classState(), classCall: livekit.enabled, testQueue: user.role === 'parent' ? null : testState(),
       mySeats: mySeatsFor(p),
@@ -1098,6 +1103,71 @@ function sendPts(p, earning = null) {
   try { const o = ptsOf(p); if (o) p.socket.emit('my-points', { ...o, earning }); } catch (e) { console.error('ポイントの表示に失敗:', e.message); }
 }
 
+// ═════ オーナーの見回り（生徒・保護者の画面だけ） ═════
+// オーナーが入室していないとき、生徒・保護者には「オーナーが面談ブースにいる」ように見せ、
+// 30分おき（毎時0分・30分）に、面談ブース → ろうかの端 → 面談ブース と1往復して見せる。先生・オーナーの画面には出さない
+const patrolOn = () => getSetting('owner_patrol', process.env.NODE_TEST_CONTEXT ? '0' : '1') === '1'; // 自動テストの中だけは最初オフ
+const PATROL_TILES_PER_SEC = 2.4;
+let patrolRoute = null; // { home, path: [{x,y}], ownerId }
+function patrolSetup() {
+  const owner = db.prepare("SELECT id FROM users WHERE role = 'owner' AND is_active = 1 ORDER BY id LIMIT 1").get();
+  if (!owner) return null;
+  if (patrolRoute && patrolRoute.ownerId === owner.id) return patrolRoute;
+  const zone = (id) => SM.ZONES.find(z => z.id === id);
+  const mz = zone('mendan'), hz = zone('hall');
+  const cx = (mz.x1 + mz.x2) / 2, cy = (mz.y1 + mz.y2) / 2;
+  let home = null, hd = Infinity;
+  for (let y = mz.y1; y <= mz.y2; y++) for (let x = mz.x1; x <= mz.x2; x++) if (SM.isWalkable(x, y) && !SM.isSeat(x, y)) { const d = Math.hypot(x - cx, y - cy); if (d < hd) { hd = d; home = { x, y }; } }
+  let end = null;
+  for (let x = hz.x1; x <= hz.x2 && !end; x++) for (const y of [16, 17, 15, 18]) if (SM.isWalkable(x, y) && !SM.isSeat(x, y) && SM.findPath(home.x, home.y, x, y)) { end = { x, y }; break; }
+  if (!home || !end) return null;
+  const go = SM.findPath(home.x, home.y, end.x, end.y) || [], back = SM.findPath(end.x, end.y, home.x, home.y) || [];
+  patrolRoute = { ownerId: owner.id, home, path: [home, ...go, ...back] };
+  return patrolRoute;
+}
+// 今の位置（時刻から決める）
+function patrolPos(now = Date.now()) {
+  const r = patrolSetup(); if (!r) return null;
+  const t = ganbari.jst(new Date(now));
+  const secInHalf = ((Number(t.hm.slice(3)) % 30) * 60) + new Date(now).getUTCSeconds() + (now % 1000) / 1000;
+  const steps = r.path.length - 1, dur = steps / PATROL_TILES_PER_SEC;
+  if (secInHalf >= dur) { const c = SM.tileCenter(r.home.x, r.home.y); return { x: c.x, y: c.y, dir: 'down', moving: false }; }
+  const f = secInHalf * PATROL_TILES_PER_SEC, i = Math.min(steps - 1, Math.floor(f)), k = f - i;
+  const a = SM.tileCenter(r.path[i].x, r.path[i].y), b = SM.tileCenter(r.path[i + 1].x, r.path[i + 1].y);
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
+  return { x: a.x + dx * k, y: a.y + dy * k, dir, moving: true };
+}
+const patrolViewer = (o) => (o.user.role === 'student' || o.user.role === 'parent');
+function patrolActive() {
+  if (!patrolOn()) return false;
+  const r = patrolSetup();
+  return !!(r && !online.has(r.ownerId));
+}
+function patrolPub() {
+  const r = patrolSetup(), pos = patrolPos();
+  const u = auth.loadUser(r.ownerId);
+  if (!u || !pos) return null;
+  return { id: u.id, name: u.display_name, role: 'owner', color: u.avatar_color, x: pos.x, y: pos.y, dir: pos.dir, moving: pos.moving, room: roomIdAt(pos.x, pos.y),
+    seat: null, hand: false, handAt: 0, inPrivate: false, away: null, studyCam: false, topic: null, today: null, bday: false, cakes: null, kid: false, hs: false, title: null, plan: null,
+    equip: equipView(staffEquip(u, {})), streak: 0, trial: false, asa: false, goalDone: false, follow: null, fx: null, bloom: false, bot: true };
+}
+let patrolShown = false, patrolLast = '';
+function patrolTick() {
+  if (!io) return;
+  const active = patrolActive();
+  const viewers = [...online.values()].filter(patrolViewer);
+  if (!active) { if (patrolShown && !online.has((patrolRoute || {}).ownerId)) for (const o of viewers) o.socket.emit('user-left', { id: patrolRoute.ownerId }); patrolShown = false; return; }
+  if (!viewers.length) return;
+  const pb = patrolPub(); if (!pb) return;
+  if (!patrolShown) { patrolShown = true; patrolLast = ''; for (const o of viewers) o.socket.emit('user-joined', pb); return; }
+  const key = `${Math.round(pb.x)},${Math.round(pb.y)},${pb.dir},${pb.moving}`;
+  if (key === patrolLast) return;
+  patrolLast = key;
+  for (const o of viewers) o.socket.volatile.emit('moves', [[pb.id, r1(pb.x), r1(pb.y), DIR_CODE[pb.dir] || 'd', pb.moving ? 1 : 0]]);
+}
+setInterval(() => { try { patrolTick(); } catch (e) { console.error('見回りに失敗:', e.message); } }, 250).unref();
+
 // ユーザーを削除したとき：接続を切り、退室後に残している姿も消す
 function forgetUser(userId) {
   const id = Number(userId);
@@ -1126,7 +1196,8 @@ function refreshUser(userId) {
   if (call && call.teacherId === p.id && (!can(p.user, 'start_private_call') || (hadScreen && !can(p.user, 'share_screen')))) {
     endCall(call, '先生の権限が変更されたため、個別通話を終了しました');
   }
-  io.emit('user-updated', { id: p.id, name: u.display_name, color: u.avatar_color });
+  p.equip = staffEquip(u, p.equip);
+  io.emit('user-updated', { id: p.id, name: u.display_name, color: u.avatar_color, equip: equipView(p.equip) });
   p.socket.emit('me-updated');
   if (p.room) {
     const room = getRoom(p.room);
@@ -1223,7 +1294,7 @@ function isQuickRejoin(userId) {
 function refreshGanbari(userId) {
   const p = online.get(Number(userId));
   if (!p) return;
-  p.equip = ganbari.getEquip(p.id);
+  p.equip = staffEquip(p.user, ganbari.getEquip(p.id));
   p.streak = p.user.role === 'student' ? ganbari.streak(p.id) : p.user.role === 'parent' ? parents.visitStreak(p.id) : 0;
   io.emit('user-updated', { id: p.id, equip: equipView(p.equip), streak: p.streak });
   updateToday(p);
@@ -1374,6 +1445,6 @@ function refreshMoms() { if (io) io.emit('moms-updated', parents.momsTree()); }
 
 module.exports = {
   shownToday, refreshMoms, parentMeetingChanged, mendanChanged, referralRewarded, broadcastMySeats, blackboardChanged,
-  isQuickRejoin, forgetUser, refreshGanbari, refreshBirthday, refreshAllGanbari, _online: online,
+  isQuickRejoin, forgetUser, patrolOn, _patrolPos: (t) => patrolPos(t), refreshGanbari, refreshBirthday, refreshAllGanbari, _online: online,
   storeStudyPhoto, getStudyPhoto, studyPhotoTimes, canViewStudyPhotos, setStudyPhotosFeature, studyPhotosEnabled,
   attach, kick, refreshUser, refreshRooms, presence, roomCounts, classState, endClass, endCallOf, REACTIONS, _reset };

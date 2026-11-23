@@ -432,6 +432,12 @@
       else if (dir === 'right') ctx.roundRect(x - 11, by - 18, 15, 20, 5);
       else ctx.roundRect(x - 11.5, by - 18, 23, dir === 'up' ? 22 : 19, 6);
       ctx.fill();
+    } else if (style === 'bob') { // ボブ：あごのあたりまで、丸く
+      ctx.beginPath();
+      if (dir === 'left') ctx.roundRect(x - 5, by - 23, 17, 19, 7);
+      else if (dir === 'right') ctx.roundRect(x - 12, by - 23, 17, 19, 7);
+      else ctx.roundRect(x - 12.5, by - 23, 25, dir === 'up' ? 20 : 18, 8);
+      ctx.fill();
     } else if (style === 'afro') {
       ctx.beginPath(); ctx.arc(x, by - 17, 14.5, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = 'rgba(255,255,255,.08)';
@@ -447,6 +453,15 @@
       ctx.fill();
       if (dir === 'left') { ctx.fillStyle = '#fbdcc0'; ell(ctx, x - 6, by - 10, 4, 3); }
       if (dir === 'right') { ctx.fillStyle = '#fbdcc0'; ell(ctx, x + 6, by - 10, 4, 3); }
+      return;
+    }
+    if (style === 'bob') { // ボブ：まゆの上で前髪をそろえ、横はほおの横まで
+      ctx.fillStyle = c; ctx.beginPath();
+      if (dir === 'up') { ctx.arc(x, by - 13, 11.5, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.roundRect(x - 12, by - 14, 24, 11, 5); ctx.fill(); return; }
+      if (dir === 'left') { ctx.arc(x + 1, by - 14, 11, Math.PI * 0.85, Math.PI * 2.05); ctx.fill(); ctx.beginPath(); ctx.roundRect(x + 3, by - 16, 9, 13, 4); ctx.fill(); return; }
+      if (dir === 'right') { ctx.arc(x - 1, by - 14, 11, Math.PI * 0.95, Math.PI * 2.15); ctx.fill(); ctx.beginPath(); ctx.roundRect(x - 12, by - 16, 9, 13, 4); ctx.fill(); return; }
+      ctx.arc(x, by - 14, 11.5, Math.PI, Math.PI * 2); ctx.lineTo(x + 11.5, by - 13); ctx.lineTo(x - 11.5, by - 13); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.roundRect(x - 12.5, by - 15, 4, 12, 2); ctx.roundRect(x + 8.5, by - 15, 4, 12, 2); ctx.fill();
       return;
     }
     if (style === 'spiky' || style === 'gold') { spikes(ctx, x, by, dir, c, style === 'gold'); hairCap(ctx, x, by, dir, c); if (style === 'gold') { ctx.fillStyle = 'rgba(255,255,255,.45)'; ell(ctx, x - 4, by - 21, 2.5, 1.2, -0.4); } return; }
@@ -512,7 +527,7 @@
     if (clothes === 'king' && u.dir !== 'down') { ctx.fillStyle = '#b71c1c'; ctx.beginPath(); ctx.moveTo(x - 10, by - 5); ctx.lineTo(x + 10, by - 5); ctx.lineTo(x + 14, by + 14); ctx.lineTo(x - 14, by + 14); ctx.fill(); ctx.fillStyle = '#fff'; for (let i = -12; i <= 12; i += 4) { ctx.beginPath(); ctx.arc(x + i, by + 14, 1.6, 0, Math.PI * 2); ctx.fill(); } }
     if (clothes === 'hero' && u.dir !== 'down') { ctx.fillStyle = '#c62828'; ctx.beginPath(); ctx.moveTo(x - 9, by - 4); ctx.lineTo(x + 9, by - 4); ctx.lineTo(x + 12, by + 13); ctx.lineTo(x - 12, by + 13); ctx.fill(); }
     // 髪型（頭のうしろに来る部分：ポニーテール・ツインテール・ロング・アフロ）
-    const hair = !costume && !staff && eq.hair ? eq.hair : null;
+    const hair = !costume && eq.hair ? eq.hair : null; // 先生・オーナーも、管理画面で決めた髪型
     if (hair) drawHairBack(ctx, x, by, u.dir, hair, t);
     // 体（洋服・着ぐるみ）
     drawBody(ctx, x, by, bodyH, u, clothes, costume);

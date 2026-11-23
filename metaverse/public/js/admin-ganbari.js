@@ -133,6 +133,12 @@
     };
     const jh = ruleBlock(c, '📚 自習室（中学生など）');
     const hs = ruleBlock(c.hs, '☕ 高校生自習室（高校生）', '高校生（高1〜高3）の数え方です。中学生とは別に決められます。');
+    // 🎓 高3（受験生）：オンにすると高1・高2とは別の数え方
+    const h3src = c.hs3 || { separate: false, window: { start: '08:00', end: '23:00' }, window2: null, dailyCap: 600, weekly: null };
+    const hs3 = ruleBlock(h3src, '🎓 高3（受験生）', '受験で学校がない時期など、高3だけ日中もポイントがつくようにできます。');
+    const h3sep = check('高3は高1・高2とは別の数え方にする', !!h3src.separate);
+    { const inner = [...hs3.box.children].slice(2); hs3.box.insertBefore(h3sep[0], hs3.box.children[2] || null);
+      const sync = () => { inner.forEach(n => { n.style.display = h3sep[1].checked ? '' : 'none'; }); }; h3sep[1].onchange = sync; sync(); }
     const es = ruleBlock(c.es, '🎒 小学生自習室（小学生）', '小学生（小1〜小6）の数え方です。最初は 朝6:00〜7:30・夕方15:00〜18:00 です。');
     // 高校生の週のノルマ
     const MD = [['🥉', 'ブロンズ'], ['🥈', 'シルバー'], ['🥇', 'ゴールド']];
@@ -182,11 +188,12 @@
         streakByGrade: { ...(c.streakByGrade || {}), ...Object.fromEntries(sgInputs.map(([g, i]) => [g, Number(i.value)])) },
         requireSeat: seat[1].checked, requireCamera: cam[1].checked,
         es: es.value(),
+        hs3: { ...hs3.value(), separate: h3sep[1].checked },
         vacations: vacRows.filter(r => r.st.value && r.en.value).map(r => ({ name: r.nm.value.trim() || '休み', start: r.st.value, end: r.en.value })),
         hs: { ...hs.value(), medals: medalInputs.map(([mi, pi]) => ({ minutes: Number(mi.value), points: Number(pi.value) })), lateMinutes: Number(hsLate.value) },
       }, '数え方を保存しました').then(ok => { if (ok) load(root, ctx).then(() => window.scrollTo(0, y)); });
     };
-    rule.append(jh.box, es.box, hs.box, vacBox, grid, sgBox, seat[0], cam[0], saveRule);
+    rule.append(jh.box, es.box, hs.box, hs3.box, vacBox, grid, sgBox, seat[0], cam[0], saveRule);
 
     // ═════ 🎒 小学生ショップ ═════
     {
@@ -446,6 +453,29 @@
       const close = el('button', 'btn secondary', 'とじる'); close.onclick = () => dlg.close(); actions.append(close);
       await refresh();
       dlg.showModal();
+    }
+
+    // ═════ 🌸 家族の木：だれが押したか ═════
+    if (isOwner) {
+      const chSec = section('🌸 家族の木の花（見たよスタンプ）', '保護者が「見たよ」スタンプを送ると、ロビーの家族の木に🌸が1つ咲きます。だれがだれに送ったかの一覧です（最近60日・新しい順）。');
+      const chBox = el('div', 'table-wrap'); chSec.append(chBox);
+      (async () => {
+        let d; try { d = await api('GET', '/api/admin/parents/cheers?days=60'); } catch (e) { chBox.textContent = e.message; return; }
+        const m = d.moms;
+        chSec.insertBefore(el('p', 'muted', `今年度の🌸：${m.flowers}こ（${m.stageName}）・今月${m.families}家族が来ています`), chBox);
+        const t = el('table', 'logs'); const h = el('tr');
+        ['日にち', '保護者', 'お子さん', 'スタンプ', 'お子さんが見た'].forEach(x => h.append(el('th', null, x)));
+        t.append(el('thead')); t.firstChild.append(h);
+        const tb = el('tbody');
+        for (const c of d.cheers) {
+          const tr = el('tr');
+          const at = new Date(c.at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+          [at, c.parent, `${c.child}${c.grade ? `（${c.grade}）` : ''}`, c.stamp, c.delivered ? '✅' : 'まだ'].forEach(v => tr.append(el('td', null, v)));
+          tb.append(tr);
+        }
+        if (!d.cheers.length) { const tr = el('tr'); const td = el('td', 'empty', 'まだありません'); td.colSpan = 5; tr.append(td); tb.append(tr); }
+        t.append(tb); chBox.append(t);
+      })();
     }
 
     // ═════ 保護者レポート ═════
