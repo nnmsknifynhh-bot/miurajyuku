@@ -8,7 +8,7 @@ const SM = require('../public/shared/map.js');
 db.exec('CREATE TABLE IF NOT EXISTS my_seats (user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, seat TEXT NOT NULL UNIQUE, room TEXT NOT NULL, chosen_at TEXT NOT NULL)');
 
 const NEED_DAYS = 30, NEED_WEEKS = 4;
-function roomFor(grade) { return G.isHS(grade) ? 'class3' : 'study'; }
+function roomFor(grade) { return G.isHS(grade) ? 'class3' : G.isES(grade) ? 'class2' : 'study'; } // 高校生は高校生自習室・小学生は小学生自習室・中学生は中学生自習室
 // その部屋の、ふつうの自習席（テストのブースはのぞく）
 function seatsOf(room) {
   const z = SM.ZONES.find(v => v.id === room), out = [];

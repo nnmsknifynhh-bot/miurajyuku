@@ -66,3 +66,13 @@ test('🔥がとぎれたら返す', () => {
   assert.equal(M.statusOf(U.aaa.id).seat, null);
   assert.equal(M.checkKeep(U.bbb.id), false, 'マイ席がない子は何もしない');
 });
+
+test('小学生のマイ席は小学生自習室、高校生は高校生自習室', async () => {
+  const owner = (await http('POST', '/api/login', { loginId: 'owner', password: 'ownerpass1' })).cookie;
+  const es = await http('POST', '/api/admin/users', { role: 'student', loginId: 'esk', displayName: 'しょう', grade: '小4', password: 'password123' }, owner);
+  const hs = await http('POST', '/api/admin/users', { role: 'student', loginId: 'hsk', displayName: 'こう', grade: '高3', password: 'password123' }, owner);
+  assert.equal(M.statusOf(es.data.user.id).room, 'class2');
+  assert.equal(M.statusOf(hs.data.user.id).room, 'class3');
+  assert.equal(M.statusOf(hs.data.user.id).need, 4);
+  assert.equal(M.statusOf(hs.data.user.id).unit, '週');
+});
