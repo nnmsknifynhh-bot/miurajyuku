@@ -424,3 +424,35 @@ body.is-trial .not-trial { display: none !important; }
 .firstday .fd-close { position: absolute; top: 2px; right: 6px; border: 0; background: none; font-size: 18px; color: var(--muted); }
 #tour-pick .tour-pick-btns { display: grid; gap: 8px; }
 .firstday.mini ul, .firstday.mini small { display: none; }
+
+/* 🔁 英語の音読の練習 */
+.reading { position: fixed; inset: 0; z-index: 60; background: rgba(20, 24, 40, .55); display: grid; place-items: center; padding: calc(10px + env(safe-area-inset-top)) 10px calc(10px + env(safe-area-inset-bottom)); }
+.rd-card { position: relative; width: min(680px, 100%); max-height: 100%; overflow: auto; background: #fffdf8; border-radius: 18px; padding: 12px 14px 16px; box-shadow: 0 10px 30px rgba(0,0,0,.3); }
+.rd-head { display: flex; align-items: center; gap: 8px; padding-right: 30px; }
+.rd-head h2 { margin: 0; font-size: 18px; flex: 1; min-width: 0; }
+.rd-head .wc-close { top: 8px; right: 10px; }
+.rd-body { display: grid; gap: 10px; margin-top: 8px; }
+.rd-units { display: grid; gap: 8px; }
+.rd-unit { display: flex; justify-content: space-between; align-items: center; gap: 8px; text-align: left; border: 2px solid var(--line); background: #fff; border-radius: 14px; padding: 10px 12px; font: inherit; }
+.rd-unit b { display: block; font-size: 16px; }
+.rd-unit small { color: var(--muted); }
+.rd-badge { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.rd-badge.ok { color: #2fae74; font-weight: 800; }
+.rd-top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.rd-timer { font-variant-numeric: tabular-nums; font-weight: 800; background: #eef4ff; color: #2f7de1; border-radius: 99px; padding: 4px 12px; margin-right: auto; }
+.rd-timer.over { background: #fff1f1; color: #e5484d; }
+.rd-passage { background: #fff; border: 2px solid var(--line); border-radius: 14px; padding: 10px 12px; display: grid; gap: 8px; }
+.rd-line { display: grid; gap: 2px; }
+.rd-speaker { font-size: 12px; color: #9a96a3; font-weight: 700; }
+.rd-en { margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 19px; line-height: 1.6; }
+.rd-en .ng { color: #e5484d; text-decoration: underline wavy; text-underline-offset: 4px; }
+.rd-ja { margin: 0; font-size: 13px; color: var(--muted); }
+.rd-live { margin: 0; font-size: 13px; color: var(--muted); min-height: 1.4em; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.rd-result { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; align-items: center; background: #fff6e6; border-radius: 14px; padding: 10px 12px; }
+.rd-result.ok { background: #eaf8f1; }
+.rd-result p { grid-column: 1 / -1; margin: 0; font-weight: 700; }
+.rd-score { font-size: 34px; line-height: 1; color: #f08c00; font-variant-numeric: tabular-nums; }
+.rd-result.ok .rd-score { color: #2fae74; }
+.rd-btns { display: flex; justify-content: center; }
+.rd-big { font-size: 18px; padding: 12px 26px; }
+.rd-warn { margin: 0; background: #fff1f1; color: #b42318; border-radius: 10px; padding: 8px 10px; font-size: 13px; font-weight: 700; }

@@ -1,0 +1,125 @@
+// 英語の音読：単元（教科書の本文と日本語訳）・制限時間（語数と学年から自動）・練習の記録
+// 練習の採点は、生徒の端末のブラウザの聞き取り（無料）で行う。サーバーは結果を受け取って記録する
+// （本番のテストの採点〔Microsoft〕は、あとでつなぐ）
+const { db, now, getSetting, setSetting, audit } = require('./db');
+const G = require('./ganbari');
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS reading_units (id INTEGER PRIMARY KEY AUTOINCREMENT, grade TEXT NOT NULL, title TEXT NOT NULL, lines TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS reading_practice (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, unit_id INTEGER NOT NULL, score INTEGER NOT NULL, seconds INTEGER NOT NULL, limit_sec INTEGER NOT NULL, passed INTEGER NOT NULL, created_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_reading_practice_user ON reading_practice(user_id, unit_id);
+`);
+
+// 学年ごとの「1分に読む語数」（中3の本文52語を1分 → 52語。ほかは目安。管理画面で変えられる）
+const DEFAULT_WPM = { '小1': 30, '小2': 30, '小3': 30, '小4': 30, '小5': 30, '小6': 30, '中1': 40, '中2': 45, '中3': 52, '高1': 60, '高2': 70, '高3': 70 };
+const PASS_SCORE = 90;
+function getConfig() {
+  let saved = {};
+  try { saved = JSON.parse(getSetting('reading', '{}')); } catch (e) { saved = {}; }
+  return { wpm: { ...DEFAULT_WPM, ...(saved.wpm || {}) }, passScore: PASS_SCORE };
+}
+function setConfig(p, actorId) {
+  const c = getConfig();
+  if (p.wpm) {
+    for (const [g, v] of Object.entries(p.wpm)) {
+      if (!G.GRADES.includes(g)) continue;
+      if (!Number.isInteger(v) || v < 10 || v > 300) return `${g}の語数は10〜300にしてください`;
+      c.wpm[g] = v;
+    }
+  }
+  setSetting('reading', JSON.stringify({ wpm: c.wpm }));
+  audit(actorId, 'reading.config', null, null);
+  return null;
+}
+
+// 本文の単語（話す人の名前はのぞく）
+const wordsOf = (text) => String(text || '').split(/\s+/).map(w => w.replace(/^[^A-Za-z0-9']+|[^A-Za-z0-9']+$/g, '')).filter(Boolean);
+const clean = (s, n) => String(s || '').replace(/[\u0000-\u0009\u000b-\u001f<>]/g, '').trim().slice(0, n);
+/**
+ * 貼り付けた本文を行に分ける。英語の行と、そのすぐ下の日本語の行を1組にする。
+ * 「Jin: I'm sorry.」のように行の頭に「名前:」があれば、話す人の名前として分ける（読まない・数えない）
+ */
+function parseText(text) {
+  const raw = String(text || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  const isEn = (s) => /[A-Za-z]/.test(s) && !/[぀-ヿ一-鿿]/.test(s);
+  const out = [];
+  for (const line of raw) {
+    if (isEn(line)) {
+      const m = line.match(/^([A-Z][A-Za-z .'-]{0,20}):\s*(.+)$/);
+      out.push({ speaker: m ? m[1].trim() : null, en: clean(m ? m[2] : line, 400), ja: '' });
+    } else if (out.length && !out[out.length - 1].ja) out[out.length - 1].ja = clean(line, 400);
+  }
+  return out;
+}
+const limitSec = (words, grade, c = getConfig()) => Math.max(10, Math.ceil((words / (c.wpm[grade] || 52)) * 60 / 5) * 5);
+function view(u, c = getConfig(), grade = u.grade) {
+  const lines = JSON.parse(u.lines);
+  const words = lines.reduce((n, l) => n + wordsOf(l.en).length, 0);
+  return { id: u.id, grade: u.grade, title: u.title, lines, words, limit: limitSec(words, grade || u.grade, c), active: !!u.active };
+}
+
+function addUnit(p, actorId) {
+  if (!G.GRADES.includes(p.grade)) return { error: '学年をえらんでください' };
+  const title = clean(p.title, 60);
+  if (!title) return { error: '単元の名前を入れてください（例：Unit 1 Part 1）' };
+  const lines = parseText(p.text);
+  if (!lines.length) return { error: '英語の本文を入れてください' };
+  if (lines.length > 60) return { error: '本文が長すぎます（60行まで）' };
+  const r = db.prepare('INSERT INTO reading_units (grade, title, lines, created_at) VALUES (?, ?, ?, ?)').run(p.grade, title, JSON.stringify(lines), now());
+  audit(actorId, 'reading.unit_added', title, { grade: p.grade });
+  return { ok: true, id: Number(r.lastInsertRowid) };
+}
+function updateUnit(id, p, actorId) {
+  const u = db.prepare('SELECT * FROM reading_units WHERE id = ?').get(id);
+  if (!u) return { error: '単元が見つかりません' };
+  const grade = p.grade !== undefined ? p.grade : u.grade;
+  if (!G.GRADES.includes(grade)) return { error: '学年をえらんでください' };
+  const title = p.title !== undefined ? clean(p.title, 60) : u.title;
+  if (!title) return { error: '単元の名前を入れてください' };
+  const lines = p.text !== undefined ? parseText(p.text) : JSON.parse(u.lines);
+  if (!lines.length) return { error: '英語の本文を入れてください' };
+  const active = p.active !== undefined ? (p.active ? 1 : 0) : u.active;
+  db.prepare('UPDATE reading_units SET grade = ?, title = ?, lines = ?, active = ? WHERE id = ?').run(grade, title, JSON.stringify(lines), active, id);
+  audit(actorId, 'reading.unit_updated', title, null);
+  return { ok: true };
+}
+function deleteUnit(id, actorId) {
+  const r = db.prepare('DELETE FROM reading_units WHERE id = ?').run(id);
+  db.prepare('DELETE FROM reading_practice WHERE unit_id = ?').run(id);
+  audit(actorId, 'reading.unit_deleted', String(id), null);
+  return r.changes > 0;
+}
+function listUnits(c = getConfig()) {
+  return db.prepare('SELECT * FROM reading_units ORDER BY grade, title, id').all().map(u => view(u, c));
+}
+
+// 生徒の単元の一覧（自分の学年。先生・オーナーは全部）。練習の記録つき
+function unitsFor(user) {
+  const c = getConfig();
+  const staff = user.role === 'owner' || user.role === 'teacher';
+  const rows = staff ? db.prepare('SELECT * FROM reading_units WHERE active = 1 ORDER BY grade, title, id').all()
+    : db.prepare('SELECT * FROM reading_units WHERE active = 1 AND grade = ? ORDER BY title, id').all(user.grade || '');
+  return rows.map(u => {
+    const best = db.prepare('SELECT MAX(score) AS best, COUNT(*) AS n, MAX(passed) AS passed FROM reading_practice WHERE user_id = ? AND unit_id = ?').get(user.id, u.id);
+    return { ...view(u, c, staff ? u.grade : user.grade), practice: { count: best.n, best: best.best, passed: !!best.passed } };
+  });
+}
+/** 練習の結果を記録する（点数・時間は端末で計算したもの）。合格ライン：90点以上・時間内 */
+function recordPractice(user, unitId, score, seconds) {
+  const u = db.prepare('SELECT * FROM reading_units WHERE id = ? AND active = 1').get(unitId);
+  if (!u) return { error: '単元が見つかりません' };
+  const sc = Math.round(Number(score)), sec = Math.round(Number(seconds));
+  if (!Number.isFinite(sc) || sc < 0 || sc > 100 || !Number.isFinite(sec) || sec < 1 || sec > 3600) return { error: '結果が正しくありません' };
+  const v = view(u, getConfig(), user.role === 'student' ? user.grade : u.grade);
+  const passed = sc >= PASS_SCORE && sec <= v.limit;
+  db.prepare('INSERT INTO reading_practice (user_id, unit_id, score, seconds, limit_sec, passed, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(user.id, unitId, sc, sec, v.limit, passed ? 1 : 0, now());
+  return { ok: true, passed, limit: v.limit };
+}
+// 先生用：生徒ごと・単元ごとの練習のようす
+function practiceSummary() {
+  return db.prepare(`SELECT p.user_id, u.display_name AS name, u.grade, p.unit_id, r.title, COUNT(*) AS count, MAX(p.score) AS best, MAX(p.passed) AS passed, MAX(p.created_at) AS last
+    FROM reading_practice p JOIN users u ON u.id = p.user_id JOIN reading_units r ON r.id = p.unit_id GROUP BY p.user_id, p.unit_id ORDER BY last DESC LIMIT 300`).all()
+    .map(r => ({ ...r, passed: !!r.passed }));
+}
+
+module.exports = { DEFAULT_WPM, PASS_SCORE, getConfig, setConfig, parseText, wordsOf, limitSec, addUnit, updateUnit, deleteUnit, listUnits, unitsFor, recordPractice, practiceSummary };

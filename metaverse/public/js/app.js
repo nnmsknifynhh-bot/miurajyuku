@@ -939,6 +939,7 @@
       const pos = q.queue.findIndex(x => x.id === me.id);
       const booth = q.booths.find(b => b.userId === me.id);
       $('#btn-test').hidden = !inTest;
+      $('#btn-read').hidden = !inTest || !!state.user.trialUntil; // 🔁 音読の練習はテスト教室で
       $('#test-label').textContent = booth ? 'テスト中' : pos >= 0 ? `${pos + 1}番目` : 'テストに並ぶ';
       $('#btn-test').classList.toggle('on', pos >= 0 || !!booth);
       $('#btn-test').disabled = !!booth;
@@ -1752,6 +1753,10 @@
     state.onboard.tourSeen = true;
     window.Tour.start(tourKind(), { onDone: () => api('POST', '/api/me/tour-seen').catch(() => {}) });
   }
+  // 🔁 英語の音読の練習
+  state.reading = window.Reading ? window.Reading.create({ api, toast, getUser: () => state.user }) : null;
+  $('#btn-read').onclick = () => state.reading && state.reading.open();
+  $('#menu-reading').onclick = () => { $('#me-menu').hidden = true; if (state.reading) state.reading.open(); };
   $('#menu-help').onclick = () => {
     $('#me-menu').hidden = true;
     if (isStaff()) { $('#tour-pick').showModal(); return; }

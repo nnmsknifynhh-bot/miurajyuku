@@ -11,6 +11,7 @@
     if (!meta.canManageUsers && !meta.canManageRooms && !meta.canReviewGoals) return denied();
     $('#tab-ganbari-btn').hidden = !(meta.canManageUsers || meta.canReviewGoals);
     $('#tab-kanken-btn').hidden = !meta.canManageUsers;
+    $('#tab-reading-btn').hidden = me.role !== 'owner';
     $('#who').textContent = `${me.displayName}（${ROLE_LABEL[me.role]}）`;
     $('#tab-users-btn').hidden = !meta.canManageUsers;
     $('#promote-grades').hidden = me.role !== 'owner';
@@ -38,6 +39,7 @@
     if (tab === 'logs') loadLogs();
     if (tab === 'ganbari') window.AdminGanbari.load($('#tab-ganbari'), { me, meta, api, toast });
     if (tab === 'kanken') window.AdminKanken.load($('#tab-kanken'), { api, toast });
+    if (tab === 'reading') window.AdminReading.load($('#tab-reading'), { api, toast });
   }
 
   // ═════════ ユーザー ═════════
