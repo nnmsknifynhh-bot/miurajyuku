@@ -13,6 +13,7 @@ const fun = require('./fun');
 const startphoto = require('./startphoto');
 const parents = require('./parents');
 const birthday = require('./birthday');
+const onboard = require('./onboard');
 const referral = require('./referral');
 const myseat = require('./myseat');
 const SchoolMap = require('../public/shared/map.js');
@@ -156,7 +157,15 @@ app.get('/api/me', auth.requireAuth, (req, res) => {
     // 保護者会の時間は、生徒は入れない
     trial: req.user.trial_until ? { until: req.user.trial_until, inviter: (db.prepare('SELECT display_name FROM users WHERE id = ?').get(referral.referrerOf(req.user.id)) || {}).display_name || null } : null,
     closed: req.user.role === 'student' && parents.meetingOn() ? `今は保護者会です。${parents.getMeeting().end}から入れます` : null,
+    onboard: onboard.status(req.user), // ようこそツアーを見たか・はじめての日の「やることチェック」
   });
+});
+app.post('/api/me/tour-seen', auth.requireAuth, (req, res) => { onboard.markTour(req.user.id); res.json({ ok: true }); });
+app.post('/api/me/first-day', auth.requireAuth, (req, res) => {
+  const r = onboard.finishFirstDay(req.user);
+  if (r.error) return bad(res, r.error);
+  realtime.refreshGanbari(req.user.id);
+  res.json(r);
 });
 
 // ═════════ 入室前の漢字テスト ═════════

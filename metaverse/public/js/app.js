@@ -149,6 +149,7 @@
     state.studyPhotos = !!(data.features && data.features.studyPhotos);
     state.closed = data.closed || null;
     state.trial = data.trial || null;
+    state.onboard = data.onboard || { tourSeen: true, firstDay: null };
     $('#menu-admin').hidden = !(data.user.role === 'owner' || data.user.permissions.manage_classroom);
   }
 
@@ -257,6 +258,7 @@
       { const mine = state.testQueue && state.testQueue.booths.find(b => b.userId === d.me.id); state.testBooth = mine ? mine.seat : null; }
       buildReactions(); updateAll(); refreshWeek(true); refreshFun(true); renderTest();
       if (isParent()) parentInit(d.visit);
+      if (!state.onboardStarted) { state.onboardStarted = true; setTimeout(autoTour, 1500); firstDayInit(); }
       updateOverviewBtn();
     });
     // ── 保護者 ──
@@ -998,11 +1000,11 @@
     // 🎒 小学生がろうか・ロビーを20秒ウロウロしていたら、小学生自習室の席えらびを出す
     const wander = state.ready && me && state.user.role === 'student' && !state.user.trialUntil && isKidGrade(state.user.grade) && !me.room
       && !state.pathSeat && !(state.path && state.path.length) && document.visibilityState === 'visible' && !document.querySelector('dialog[open]')
-      && $('#start-photo').hidden && $('#quiz').hidden;
+      && $('#start-photo').hidden && $('#quiz').hidden && !(window.Tour && window.Tour.active());
     if (!wander) wanderSince = 0;
     else if (!wanderSince) wanderSince = Date.now();
     else if (Date.now() - wanderSince > WANDER_LIMIT_MS) { wanderSince = 0; openSeatPicker('class2'); }
-    const watching = state.ready && me && studentLike() && SM.isStudyRoom(me.room) && !me.seat
+    const watching = state.ready && me && studentLike() && !(window.Tour && window.Tour.active()) && SM.isStudyRoom(me.room) && !me.seat
       && !state.pathSeat && document.visibilityState === 'visible' && !document.querySelector('dialog[open]');
     if (!watching) { standingSince = 0; return; } // すわった・歩いて席へ向かっている・ほかの画面を開いている・アプリを見ていないときは数えない
     if (!standingSince) { standingSince = Date.now(); return; }
@@ -1741,6 +1743,57 @@
       pgift.parents.shift(); if (!pgift.parents.length) $('#pgift-chip').hidden = true;
     });
   };
+
+  // ❓ ようこそツアー：はじめてログインしたときに1回だけ（ほかの画面が閉じてから）
+  const tourKind = () => isStaff() ? 'staff' : isParent() ? 'parent' : /^小/.test(state.user.grade || '') ? 'es' : /^高/.test(state.user.grade || '') ? 'hs' : 'jh';
+  function autoTour(tries = 0) {
+    if (!state.onboard || state.onboard.tourSeen || !window.Tour) return;
+    if (document.querySelector('dialog[open]') || !$('#welcome-card').hidden) { if (tries < 60) setTimeout(() => autoTour(tries + 1), 1000); return; }
+    state.onboard.tourSeen = true;
+    window.Tour.start(tourKind(), { onDone: () => api('POST', '/api/me/tour-seen').catch(() => {}) });
+  }
+  $('#menu-help').onclick = () => {
+    $('#me-menu').hidden = true;
+    if (isStaff()) { $('#tour-pick').showModal(); return; }
+    window.Tour.start(tourKind());
+  };
+  document.querySelectorAll('#tour-pick [data-kind]').forEach(b => b.onclick = () => { $('#tour-pick').close(); window.Tour.start(b.dataset.kind); });
+  $('#tour-pick-close').onclick = () => $('#tour-pick').close();
+
+  // 🌱 はじめての日の「やることチェック」（生徒・登録して14日のあいだ・終わるまで）
+  let fdTimer = null, fdSending = false;
+  function firstDayInit() {
+    const fd = state.onboard && state.onboard.firstDay;
+    if (!fd || state.user.role !== 'student') return;
+    const key = 'juku-fd-' + state.user.id;
+    let got = {}; try { got = JSON.parse(localStorage.getItem(key) || '{}'); } catch (e) {}
+    $('#firstday').hidden = false;
+    $('#fd-cam').hidden = !state.studyPhotos;
+    $('#fd-min').textContent = `☐ ${fd.minutes}分 勉強`;
+    $('#fd-note').textContent = fd.points ? `ぜんぶできたら 🎁 +${fd.points}ポイント！` : 'ぜんぶできたら 🎉';
+    $('#fd-close').onclick = () => $('#firstday').classList.toggle('mini');
+    const mark = (id, ok, label) => { const li = $(id); li.classList.toggle('ok', ok); li.textContent = (ok ? '✅ ' : '☐ ') + label; };
+    const tick = async () => {
+      const me = state.me; if (!me) return;
+      if (me.seat && SM.isStudyRoom(me.room)) got.seat = true;
+      if (me.studyCam) got.cam = true;
+      try { localStorage.setItem(key, JSON.stringify(got)); } catch (e) {}
+      const min = typeof me.today === 'number' && me.today >= fd.minutes;
+      mark('#fd-seat', !!got.seat, '自習室ですわる');
+      mark('#fd-cam', !!got.cam, 'カメラをオン');
+      mark('#fd-min', min, `${fd.minutes}分 勉強`);
+      if (got.seat && (got.cam || !state.studyPhotos) && min && !fdSending) {
+        fdSending = true;
+        try {
+          const r = await api('POST', '/api/me/first-day');
+          clearInterval(fdTimer); $('#firstday').hidden = true; state.onboard.firstDay = null;
+          chime(0.25); toast(r.points ? `🎉 はじめての日のチャレンジ達成！ +${r.points}ポイント` : '🎉 はじめての日のチャレンジ達成！', 7000);
+          refreshPts();
+        } catch (e) { fdSending = false; }
+      }
+    };
+    tick(); fdTimer = setInterval(tick, 3000);
+  }
 
   // 🌅 今日の朝活 成功者
   async function loadMorning() { try { state.morning = (await api('GET', '/api/morning-board')).board; } catch (e) { /* 次の機会に */ } }
