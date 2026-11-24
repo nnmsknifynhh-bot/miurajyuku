@@ -110,3 +110,15 @@ test('ライティング：音読テストに合格した単元だけ。練習�
   assert.equal((await http('GET', '/api/reading/units', null, a)).data.units[0].writing.testPassed, true);
   assert.ok((await http('GET', '/api/admin/reading', null, owner)).data.writing.some(w => w.name === 'tsa' && w.passed));
 });
+
+test('スピーキング：聞き取れなかった単語が3つ以上なら、点数が足りていても再テスト（練習もテストも）', async () => {
+  const owner = (await http('POST', '/api/login', { loginId: 'owner', password: 'ownerpass1' })).cookie;
+  await http('POST', '/api/admin/users', { role: 'student', loginId: 'tsm', displayName: 'tsm', grade: '中3', password: 'password123' }, owner);
+  const m = (await http('POST', '/api/login', { loginId: 'tsm', password: 'password123' })).cookie;
+  const unit = (await http('GET', '/api/reading/units', null, m)).data.units[0];
+  assert.equal((await http('POST', '/api/reading/practice', { unitId: unit.id, score: 95, seconds: 40, jaOnly: true, missing: 3 }, m)).data.passed, false, '練習：3つで不合格');
+  assert.equal((await http('POST', '/api/reading/practice', { unitId: unit.id, score: 95, seconds: 40, jaOnly: true, missing: 2 }, m)).data.passed, true, '練習：2つまでOK');
+  const r = (await http('POST', '/api/reading/test', { unitId: unit.id, score: 96, seconds: 40, missing: 4 }, m)).data;
+  assert.equal(r.passed, false); assert.equal(r.points, 0);
+  assert.equal((await http('POST', '/api/reading/test', { unitId: unit.id, score: 96, seconds: 40, missing: 0 }, m)).data.points, 4, '2回目でクリア → +4');
+});

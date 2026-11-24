@@ -20,6 +20,7 @@ const TEST_POINTS = (attempt) => attempt <= 1 ? 5 : attempt === 2 ? 4 : 3;
 
 // 学年ごとの「1分に読む語数」（中3の本文52語を1分 → 52語。ほかは目安。管理画面で変えられる）
 const DEFAULT_WPM = { '小1': 30, '小2': 30, '小3': 30, '小4': 30, '小5': 30, '小6': 30, '中1': 40, '中2': 45, '中3': 52, '高1': 60, '高2': 70, '高3': 70 };
+const MAX_MISSING = 3; // スピーキング：聞き取れなかった単語が3つ以上なら、点数が足りていても再テスト
 const PASS_SCORE = 90; // 合格ライン（管理画面で変えられる）
 function getConfig() {
   let saved = {};
@@ -123,13 +124,14 @@ function unitsFor(user) {
   });
 }
 /** 練習の結果を記録する（点数・時間は端末で計算したもの）。合格ライン：90点以上・時間内 */
-function recordPractice(user, unitId, score, seconds, jaOnly = false) {
+function recordPractice(user, unitId, score, seconds, jaOnly = false, missing = 0) {
   const u = db.prepare('SELECT * FROM reading_units WHERE id = ? AND active = 1').get(unitId);
   if (!u) return { error: '単元が見つかりません' };
   const sc = Math.round(Number(score)), sec = Math.round(Number(seconds));
   if (!Number.isFinite(sc) || sc < 0 || sc > 100 || !Number.isFinite(sec) || sec < 1 || sec > 3600) return { error: '結果が正しくありません' };
   const v = view(u, getConfig(), user.role === 'student' ? user.grade : u.grade);
-  const passed = sc >= getConfig().passScore && sec <= v.limit;
+  const miss = Math.max(0, Math.round(Number(missing)) || 0);
+  const passed = sc >= getConfig().passScore && sec <= v.limit && miss < MAX_MISSING;
   db.prepare('INSERT INTO reading_practice (user_id, unit_id, score, seconds, limit_sec, passed, ja_only, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(user.id, unitId, sc, sec, v.limit, passed ? 1 : 0, jaOnly ? 1 : 0, now());
   return { ok: true, passed, limit: v.limit };
 }
@@ -150,7 +152,8 @@ function recordTest(user, unitId, r) {
   const v = view(u, getConfig(), staff ? u.grade : user.grade);
   const before = db.prepare('SELECT COUNT(*) AS n, MAX(passed) AS p FROM reading_tests WHERE user_id = ? AND unit_id = ?').get(user.id, unitId);
   const attempt = before.n + 1;
-  const passed = sc >= getConfig().passScore && sec <= v.limit;
+  const miss = Math.max(0, Math.round(Number(r.missing)) || 0);
+  const passed = sc >= getConfig().passScore && sec <= v.limit && miss < MAX_MISSING;
   let points = 0;
   if (passed && !before.p && user.role === 'student' && !user.trial_until) {
     points = TEST_POINTS(attempt);
@@ -175,4 +178,4 @@ function practiceSummary() {
     .map(r => ({ ...r, passed: !!r.passed, enPassed: !!r.enPassed }));
 }
 
-module.exports = { TEST_POINTS, recordTest, testSummary, DEFAULT_WPM, PASS_SCORE, getConfig, setConfig, parseText, wordsOf, limitSec, addUnit, updateUnit, deleteUnit, listUnits, unitsFor, recordPractice, practiceSummary };
+module.exports = { MAX_MISSING, TEST_POINTS, recordTest, testSummary, DEFAULT_WPM, PASS_SCORE, getConfig, setConfig, parseText, wordsOf, limitSec, addUnit, updateUnit, deleteUnit, listUnits, unitsFor, recordPractice, practiceSummary };

@@ -171,7 +171,7 @@ app.get('/api/reading/units', auth.requireAuth, (req, res) => {
 });
 app.post('/api/reading/practice', auth.requireAuth, (req, res) => {
   if (req.user.role === 'parent') return bad(res, '生徒の機能です', 403);
-  const r = reading.recordPractice(req.user, Number(req.body.unitId), req.body.score, req.body.seconds, req.body.jaOnly === true);
+  const r = reading.recordPractice(req.user, Number(req.body.unitId), req.body.score, req.body.seconds, req.body.jaOnly === true, req.body.missing);
   if (r.error) return bad(res, r.error);
   res.json(r);
 });

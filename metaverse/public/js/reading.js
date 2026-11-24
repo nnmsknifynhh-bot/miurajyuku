@@ -9,6 +9,7 @@
   const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   let PASS = 90; // 合格ライン（サーバーの設定でかわる）
+  const MAX_MISS = 3; // スピーキング：聞き取れなかった単語が3つ以上なら再テスト
 
   // ── 単語をそろえる（大文字小文字・記号・短縮形） ──
   const CONTR = { "i'm": 'i am', "can't": 'can not', "cannot": 'can not', "won't": 'will not', "let's": 'let us', "it's": 'it is', "that's": 'that is', "what's": 'what is', "where's": 'where is', "there's": 'there is', "here's": 'here is', "he's": 'he is', "she's": 'she is', "who's": 'who is', "how's": 'how is' };
@@ -58,6 +59,37 @@
     hit.forEach((h, k) => { if (!h) ok[owner[k]] = false; });
     const score = words.length ? Math.round(ok.filter(Boolean).length / words.length * 100) : 0;
     return { ok, score };
+  }
+
+  // 🌸 合格の花吹雪（big：本番のクリア＝たくさん・大きな文字つき）
+  function celebrate(big, text) {
+    if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const cv = document.createElement('canvas'); cv.className = 'rd-confetti';
+    const W = cv.width = innerWidth * (devicePixelRatio || 1), H = cv.height = innerHeight * (devicePixelRatio || 1);
+    document.body.append(cv);
+    const g = cv.getContext('2d'), dpr = devicePixelRatio || 1;
+    const COLORS = ['#ff8fb1', '#ffc2d6', '#ffd43b', '#4dabf7', '#69db7c', '#b197fc', '#ffa94d'];
+    const N = big ? 160 : 70, ps = [];
+    for (let i = 0; i < N; i++) {
+      const petal = Math.random() < 0.55;
+      ps.push({ x: Math.random() * W, y: -Math.random() * H * 0.6 - 20, vx: (Math.random() - 0.5) * 2.2 * dpr, vy: (1.6 + Math.random() * 2.6) * dpr, r: (petal ? 7 + Math.random() * 6 : 4 + Math.random() * 4) * dpr,
+        a: Math.random() * Math.PI * 2, va: (Math.random() - 0.5) * 0.2, sw: Math.random() * Math.PI * 2, petal, c: petal ? COLORS[Math.random() < 0.7 ? 0 : 1] : COLORS[Math.floor(Math.random() * COLORS.length)] });
+    }
+    if (big && text) { const b = document.createElement('div'); b.className = 'rd-banner'; b.textContent = text; document.body.append(b); setTimeout(() => b.remove(), 3200); }
+    const t0 = performance.now(), DUR = big ? 4200 : 2800;
+    (function frame(now) {
+      const t = now - t0;
+      g.clearRect(0, 0, W, H);
+      g.globalAlpha = t > DUR - 700 ? Math.max(0, (DUR - t) / 700) : 1;
+      for (const p of ps) {
+        p.sw += 0.05; p.x += p.vx + Math.sin(p.sw) * 0.8 * dpr; p.y += p.vy; p.a += p.va;
+        g.save(); g.translate(p.x, p.y); g.rotate(p.a); g.fillStyle = p.c;
+        if (p.petal) { g.beginPath(); g.ellipse(0, 0, p.r, p.r * 0.55, 0, 0, Math.PI * 2); g.fill(); g.fillStyle = 'rgba(255,255,255,.35)'; g.beginPath(); g.ellipse(-p.r * 0.3, -p.r * 0.1, p.r * 0.35, p.r * 0.18, 0, 0, Math.PI * 2); g.fill(); }
+        else g.fillRect(-p.r, -p.r * 0.45, p.r * 2, p.r * 0.9);
+        g.restore();
+      }
+      if (t < DUR) requestAnimationFrame(frame); else cv.remove();
+    })(t0);
   }
 
   function create({ api, toast, getUser, onClose }) {
@@ -153,7 +185,7 @@
         const res = el('div', 'rd-result' + (r.passed ? ' ok' : ''));
         res.append(el('b', 'rd-score', `${r.score}点`), el('span', null, test ? `ライティング（${r.attempt}回目）` : '書く練習'));
         const bad = r.words.filter(w => w.status !== 'ok');
-        res.append(el('p', null, r.passed ? (test ? (r.points ? `🎉 クリア！ +${r.points}ポイント！` : r.alreadyCleared ? '🎉 クリア！（この単元はもうポイントをもらっているよ）' : '🎉 クリア！') : '🎉 100点！ ライティングを受けられるよ') : `あと${bad.length + r.extra.length}か所。下をたしかめて、書きなおしてね`));
+        res.append(el('p', null, r.passed ? (test ? (r.points ? `🎉 クリア！ +${r.points}ポイント！` : r.alreadyCleared ? '🎉 クリア！（この単元はもうポイントをもらっているよ）' : '🎉 クリア！') : '🎉 100点！ ライティングを受けられるよ') : `${test ? '🔁 再テスト' : '🔁 もう一度'}：あと${bad.length + r.extra.length}か所。${bad.some(w => w.status === 'missing') ? '抜けている単語があります。' : ''}下をたしかめて、書きなおしてね`));
         for (const st3 of ['spell', 'missing', 'case', 'punct']) {
           const list = bad.filter(w => w.status === st3);
           if (list.length) res.append(el('small', 'rd-sub w-sum-' + st3, `${({ spell: '✏️', missing: '🔇', case: '🔠', punct: '❗' })[st3]} ${W_LABEL[st3]}：${list.slice(0, 10).map(w => w.got ? `${w.got} → ${w.ref}` : w.ref).join('・')}${list.length > 10 ? ' ほか' : ''}`));
@@ -190,6 +222,7 @@
             const d = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(d.error || '採点できませんでした');
             st.wres = d; URL.revokeObjectURL(st.wimg.url); st.wimg = null;
+            if (d.passed) celebrate(test, test ? (d.points ? `✍️ ライティングクリア！ +${d.points}ポイント` : '✍️ ライティングクリア！') : null);
             const wr = u.writing || (u.writing = {});
             if (test) { wr.testCount = (wr.testCount || 0) + 1; if (d.passed) wr.testPassed = true; if (d.points) toast(`🏅 ライティングクリア！ +${d.points}ポイント`, 6000); }
             else { wr.practiceCount = (wr.practiceCount || 0) + 1; wr.practiceBest = Math.max(wr.practiceBest || 0, d.score); if (d.passed) wr.practicePassed = true; }
@@ -252,12 +285,13 @@
           ? (r.passed ? (r.points ? `🎉 クリア！（${r.attempt}回目） +${r.points}ポイント！` : r.alreadyCleared ? '🎉 クリア！（この単元はもうポイントをもらっているよ）' : '🎉 クリア！') : r.score < PASS ? '下の「言えていない単語」「発音をもう少し」をたしかめてから、もう一度！' : `点数はOK！ 制限時間（${mmss(u.limit)}）の中で読めるように、もう一度`)
           : st.mode === 'practice' ? (r.passed ? '🎉 英文で合格！ 次は「訳だけ」で言えるか練習しよう' : r.score < PASS ? `赤い単語を、お手本を聞いてからもう一度！ ${PASS}点まであと少し` : `点数はOK！ 制限時間（${mmss(u.limit)}）の中で読めるように、もう一度`)
           : (r.passed ? '🎉 訳だけで合格！ 本番のテストを受けられるよ' : r.score < PASS ? `赤い単語を、お手本を聞いてからもう一度！ ${PASS}点まであと少し` : `点数はOK！ 制限時間（${mmss(u.limit)}）の中で読めるように、もう一度`);
-        res.append(el('p', null, msg));
+        const missFail = !r.passed && r.missing >= MAX_MISS && r.score >= PASS && r.seconds <= u.limit;
+        res.append(el('p', null, missFail ? `🔁 再テスト：聞き取れなかった単語が${r.missing}つ（3つ以上は再テスト）。点数はOKなので、赤い単語（the・a なども）をはっきり言おう！` : msg));
         // 何がいけなかったか：言えていない単語・発音をもう少しの単語
         const words = wordsOf(u.lines.map(l => l.en).join(' '));
         const miss = [], weak = [];
         words.forEach((w, i) => { if (r.ok[i]) return; const a = r.acc ? r.acc[i] : null; if (a !== null && a !== undefined) weak.push(`${w}（${a}点）`); else miss.push(w); });
-        if (miss.length) res.append(el('small', 'rd-sub', `🔇 言えていない・聞き取れなかった単語（赤）：${miss.length}語 … ${miss.slice(0, 12).join('・')}${miss.length > 12 ? ' ほか' : ''}`));
+        if (miss.length) res.append(el('small', 'rd-sub' + (miss.length >= MAX_MISS ? ' w-alert' : ''), `🔇 言えていない・聞き取れなかった単語（赤）：${miss.length}語${miss.length >= MAX_MISS ? '（3つ以上なので再テスト）' : '（3つ以上で再テスト）'} … ${miss.slice(0, 12).join('・')}${miss.length > 12 ? ' ほか' : ''}`));
         if (weak.length) res.append(el('small', 'rd-sub', `🗣 発音をもう少し（オレンジ）：${weak.slice(0, 10).join('・')}${weak.length > 10 ? ' ほか' : ''}`));
         if (r.seconds > u.limit) res.append(el('small', 'rd-sub', `⏱ 時間が ${r.seconds - u.limit}秒 オーバー`));
         if (miss.length || weak.length) res.append(el('small', 'rd-sub', '色のついた単語を押すと、お手本の発音が聞けるよ'));
@@ -343,13 +377,15 @@
       stopRec(false);
       const g = grade(wordsOf(st.unit.lines.map(l => l.en).join(' ')), heard);
       const seconds = Math.max(1, Math.round((end - st.startAt) / 1000));
-      const passed = g.score >= PASS && seconds <= st.unit.limit;
-      st.result = { ...g, seconds, passed };
+      const missing = g.ok.filter(x => !x).length; // 練習（無料の聞き取り）では赤＝聞き取れなかった単語
+      const passed = g.score >= PASS && seconds <= st.unit.limit && missing < MAX_MISS;
+      st.result = { ...g, seconds, passed, missing };
       st.interim = '';
       render();
+      if (passed) celebrate(false);
       try {
         const jaOnly = st.mode === 'jaPractice';
-        const r = await api('POST', '/api/reading/practice', { unitId: st.unit.id, score: g.score, seconds, jaOnly });
+        const r = await api('POST', '/api/reading/practice', { unitId: st.unit.id, score: g.score, seconds, jaOnly, missing });
         const pr = st.unit.practice; pr.count++;
         if (jaOnly) { pr.best = Math.max(pr.best || 0, g.score); if (r.passed) pr.passed = true; }
         else { pr.enBest = Math.max(pr.enBest || 0, g.score); if (r.passed) pr.enPassed = true; }
@@ -479,14 +515,16 @@
       }
       const seconds = Math.max(1, Math.round(st.lastEnd || pressedSec));
       const g = scoreTest();
-      st.result = { ...g, seconds, passed: g.score >= PASS && seconds <= st.unit.limit, heard: (st.heardText || '').slice(0, 400) };
+      const missing = g.acc.filter(a => a === null).length; // 聞き取れなかった単語（the・a なども）
+      st.result = { ...g, seconds, missing, passed: g.score >= PASS && seconds <= st.unit.limit && missing < MAX_MISS, heard: (st.heardText || '').slice(0, 400) };
       st.interim = '';
       render();
       try {
-        const r = await api('POST', '/api/reading/test', { unitId: st.unit.id, score: g.score, accuracy: g.accuracy, fluency: g.fluency, completeness: g.completeness, seconds });
+        const r = await api('POST', '/api/reading/test', { unitId: st.unit.id, score: g.score, accuracy: g.accuracy, fluency: g.fluency, completeness: g.completeness, seconds, missing });
         Object.assign(st.result, { points: r.points, attempt: r.attempt, alreadyCleared: r.alreadyCleared, passed: r.passed });
         st.unit.test.count++; st.unit.test.best = Math.max(st.unit.test.best || 0, g.score);
         if (r.passed) st.unit.test.passed = true;
+        if (r.passed) celebrate(true, r.points ? `🎉 クリア！ +${r.points}ポイント` : '🎉 クリア！');
         if (r.points) toast(`🏅 テストクリア！ +${r.points}ポイント`, 6000);
         render();
       } catch (e) { toast(e.message); }
@@ -494,5 +532,5 @@
 
     return { open, close, _grade: grade };
   }
-  window.Reading = { create, grade, toks };
+  window.Reading = { create, grade, toks, celebrate };
 })();
