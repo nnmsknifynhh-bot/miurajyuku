@@ -29,7 +29,7 @@ if (process.env.TRUST_PROXY) app.set('trust proxy', Number(process.env.TRUST_PRO
 app.use((req, res, next) => {
   res.setHeader('Content-Security-Policy', [
     "default-src 'self'", "script-src 'self'", "style-src 'self'", "img-src 'self' data: blob:",
-    "media-src 'self' blob:", `connect-src 'self' ws://${req.headers.host} wss://${req.headers.host} ${livekit.cspSources().join(' ')}`.trim(), "font-src 'self'", "object-src 'none'",
+    "media-src 'self' blob:", `connect-src 'self' ws://${req.headers.host} wss://${req.headers.host} ${livekit.cspSources().join(' ')} ${speechCsp()}`.trim(), "font-src 'self'", "object-src 'none'",
     "base-uri 'self'", "form-action 'self'", "frame-ancestors 'none'",
   ].join('; '));
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -69,6 +69,8 @@ function validateName(name) {
   if (!name || name.length > 20) return '表示名は1〜20文字にしてください';
   return null;
 }
+// 本番の音読テスト：Microsoft の音声サービスにつなぐ先（キーがあるときだけ）
+const speechCsp = () => { const r = (process.env.AZURE_SPEECH_REGION || '').replace(/[^a-z0-9]/g, ''); return process.env.AZURE_SPEECH_KEY && r ? `wss://${r}.stt.speech.microsoft.com https://${r}.stt.speech.microsoft.com https://${r}.api.cognitive.microsoft.com` : ''; };
 const bad = (res, msg, code = 400) => res.status(code).json({ error: msg });
 
 // ── 公開用のユーザー情報 ──
@@ -170,6 +172,28 @@ app.post('/api/reading/practice', auth.requireAuth, (req, res) => {
   if (req.user.role === 'parent') return bad(res, '生徒の機能です', 403);
   const r = reading.recordPractice(req.user, Number(req.body.unitId), req.body.score, req.body.seconds);
   if (r.error) return bad(res, r.error);
+  res.json(r);
+});
+// 本番のテスト：Microsoft の発音評価を、生徒の端末から直接使うための短い合言葉（10分）。キーそのものは渡さない
+const SPEECH_KEY = process.env.AZURE_SPEECH_KEY || '', SPEECH_REGION = (process.env.AZURE_SPEECH_REGION || '').replace(/[^a-z0-9]/g, '');
+let speechToken = { value: null, at: 0 };
+app.get('/api/reading/speech-token', auth.requireAuth, async (req, res) => {
+  if (req.user.role === 'parent') return bad(res, '生徒の機能です', 403);
+  if (!SPEECH_KEY || !SPEECH_REGION) return bad(res, '本番のテストの採点の準備がまだできていません（先生に伝えてね）', 503);
+  if (!speechToken.value || Date.now() - speechToken.at > 8 * 60e3) {
+    try {
+      const r = await fetch(`https://${SPEECH_REGION}.api.cognitive.microsoft.com/sts/v1.0/issueToken`, { method: 'POST', headers: { 'Ocp-Apim-Subscription-Key': SPEECH_KEY, 'Content-Length': '0' } });
+      if (!r.ok) throw new Error('status ' + r.status);
+      speechToken = { value: await r.text(), at: Date.now() };
+    } catch (e) { console.error('音声サービスの合言葉をもらえませんでした:', e.message); return bad(res, '採点の準備ができませんでした。少し待ってからもう一度ためしてね', 502); }
+  }
+  res.json({ token: speechToken.value, region: SPEECH_REGION });
+});
+app.post('/api/reading/test', auth.requireAuth, (req, res) => {
+  if (req.user.role === 'parent') return bad(res, '生徒の機能です', 403);
+  const r = reading.recordTest(req.user, Number(req.body.unitId), req.body || {});
+  if (r.error) return bad(res, r.error);
+  if (r.points) realtime.refreshGanbari(req.user.id);
   res.json(r);
 });
 app.post('/api/me/tour-seen', auth.requireAuth, (req, res) => { onboard.markTour(req.user.id); res.json({ ok: true }); });
@@ -863,7 +887,7 @@ admin.patch('/ganbari/config', requireOwner, (req, res) => {
   realtime.refreshAllGanbari();
   res.json({ config: ganbari.getConfig() });
 });
-admin.get('/reading', requireOwner, (req, res) => res.json({ units: reading.listUnits(), config: reading.getConfig(), summary: reading.practiceSummary(), grades: ganbari.GRADES }));
+admin.get('/reading', requireOwner, (req, res) => res.json({ units: reading.listUnits(), config: reading.getConfig(), summary: reading.practiceSummary(), tests: reading.testSummary(), grades: ganbari.GRADES, speechReady: !!(process.env.AZURE_SPEECH_KEY && process.env.AZURE_SPEECH_REGION) }));
 admin.post('/reading/units', requireOwner, (req, res) => { const r = reading.addUnit(req.body || {}, req.user.id); if (r.error) return bad(res, r.error); res.status(201).json(r); });
 admin.patch('/reading/units/:id', requireOwner, (req, res) => { const r = reading.updateUnit(Number(req.params.id), req.body || {}, req.user.id); if (r.error) return bad(res, r.error); res.json(r); });
 admin.delete('/reading/units/:id', requireOwner, (req, res) => { if (!reading.deleteUnit(Number(req.params.id), req.user.id)) return bad(res, '単元が見つかりません', 404); res.json({ ok: true }); });
@@ -1010,6 +1034,10 @@ const LK_DIST = path.join(path.dirname(require.resolve('livekit-client')), '');
 app.get(['/vendor/livekit-client.umd.js', '/vendor/livekit-client.umd.js.map'], (req, res) => {
   res.sendFile(path.join(LK_DIST, path.basename(req.path)), { maxAge: '1d' });
 });
+// Microsoft の音声のブラウザ用ライブラリ（本番の音読テストの採点に使う）
+const SPEECH_DIST = path.join(path.dirname(require.resolve('microsoft-cognitiveservices-speech-sdk/package.json')), 'distrib', 'browser');
+app.get('/vendor/speech-sdk.js', (req, res) => res.sendFile(path.join(SPEECH_DIST, 'microsoft.cognitiveservices.speech.sdk.bundle-min.js'), { maxAge: '1d' }));
+app.get('/vendor/speech-processor.js', (req, res) => res.sendFile(path.join(SPEECH_DIST, 'speech-processor.js'), { maxAge: '1d' }));
 app.use(express.static(path.join(__dirname, '..', 'public'), { extensions: ['html'], index: 'index.html' }));
 
 app.use((err, req, res, _next) => {

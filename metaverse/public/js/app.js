@@ -1753,9 +1753,62 @@
     state.onboard.tourSeen = true;
     window.Tour.start(tourKind(), { onDone: () => api('POST', '/api/me/tour-seen').catch(() => {}) });
   }
-  // 🔁 英語の音読の練習
-  state.reading = window.Reading ? window.Reading.create({ api, toast, getUser: () => state.user }) : null;
-  $('#btn-read').onclick = () => state.reading && state.reading.open();
+  // 🔁 英語の音読：テスト教室で「先生を呼ぶ」→ 後ろの扉から Ms. Miura が出てくる（自分の画面だけ）→ 練習・テスト
+  state.reading = window.Reading ? window.Reading.create({ api, toast, getUser: () => state.user, onClose: () => miuraLeave() }) : null;
+  // 季節のイベント（教室のかざり）に合わせた衣装：head＝頭、hand＝手に持つもの、clothes＝服
+  const MIURA_COSTUME = {
+    newyear: { clothes: 'kimono', hand: '🎍' }, winter: { head: '❄️', hand: '☃️' }, setsubun: { head: '👹', hand: '🫘' }, valentine: { head: '💝', hand: '🍫' },
+    hina: { clothes: 'kimono', head: '🌸', hand: '🎎' }, whiteday: { head: '🍬', hand: '🍭' }, graduation: { head: '🎓', hand: '📜' }, entrance: { head: '🌸', hand: '🎒' },
+    hanami: { head: '🌸', hand: '🍡' }, kodomo: { head: '🎏', hand: '⚔️' }, mothersday: { head: '💐', hand: '🌹' }, shinryoku: { head: '🍃', hand: '🌿' },
+    ajisai: { head: '☔', hand: '🐌' }, tanabata: { clothes: 'kimono', head: '⭐', hand: '🎋' }, summer: { head: '👒', hand: '🌻' }, matsuri: { clothes: 'kimono', head: '🎆', hand: '🍧' },
+    earlyautumn: { head: '🍂', hand: '☕' }, tsukimi: { head: '🐰', hand: '🍡' }, halloween: { head: '🎃', hand: '🍬' }, koyo: { head: '🍁', hand: '🍠' },
+    harvest: { head: '🌰', hand: '🧺' }, christmas: { head: '🎅', hand: '🎁' }, prenewyear: { head: '🎍', hand: '🧹' },
+  };
+  const MIURA_DOOR = { x: 4, y: 1 }; // テスト教室の後ろ（上）の壁の扉
+  const miura = { on: false, path: [], t0: 0, leaving: false, arrived: false, x: 0, y: 0, dir: 'down', moving: false, say: null };
+  function miuraUser() {
+    const ev = state.gb && state.gb.forest && state.gb.forest.event, c = (ev && MIURA_COSTUME[ev.id]) || {};
+    return { id: -1, name: 'Ms. Miura', role: 'teacher', color: '#7c5cf0', dir: miura.dir, moving: miura.moving, seat: null, topic: miura.say, equip: { hair: 'bob', head: c.head || null, hand: c.hand || null, clothes: c.clothes || null } };
+  }
+  function miuraPathTo(fromX, fromY, toX, toY) { return [{ x: fromX, y: fromY }, ...(SM.findPath(fromX, fromY, toX, toY) || [])]; }
+  function summonMiura() {
+    if (!state.reading) return;
+    if (miura.on && miura.arrived && !miura.leaving) { state.reading.open(); return; }
+    if (miura.on) return;
+    const me = state.me, mx = Math.floor(me.x / T), my = Math.floor(me.y / T);
+    let target = null, best = Infinity;
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+      const x = mx + dx, y = my + dy;
+      if ((dx || dy) && SM.isWalkable(x, y) && !SM.isSeat(x, y) && SM.findPath(MIURA_DOOR.x, MIURA_DOOR.y, x, y)) { const d = Math.hypot(dx, dy); if (d < best) { best = d; target = { x, y }; } }
+    }
+    if (!target) { state.reading.open(); return; }
+    Object.assign(miura, { on: true, leaving: false, arrived: false, path: miuraPathTo(MIURA_DOOR.x, MIURA_DOOR.y, target.x, target.y), t0: performance.now() + 700, say: null });
+    chime(0.15);
+  }
+  function miuraLeave() {
+    if (!miura.on || miura.leaving) return;
+    const x = Math.floor(miura.x / T), y = Math.floor(miura.y / T);
+    Object.assign(miura, { leaving: true, arrived: false, path: miuraPathTo(x, y, MIURA_DOOR.x, MIURA_DOOR.y), t0: performance.now() + 300, say: 'See you! 👋' });
+  }
+  function miuraTick(now) {
+    if (!miura.on) return;
+    const p = miura.path, steps = p.length - 1, f = Math.max(0, (now - miura.t0) / 1000 * 3.2); // 1秒に3.2マス
+    const i = Math.min(steps, Math.floor(f)), k = i >= steps ? 0 : f - i;
+    const a = SM.tileCenter(p[i].x, p[i].y), b = SM.tileCenter(p[Math.min(steps, i + 1)].x, p[Math.min(steps, i + 1)].y);
+    miura.x = a.x + (b.x - a.x) * k; miura.y = a.y + (b.y - a.y) * k;
+    miura.moving = i < steps && now >= miura.t0;
+    if (b.x !== a.x || b.y !== a.y) miura.dir = Math.abs(b.x - a.x) > Math.abs(b.y - a.y) ? (b.x > a.x ? 'right' : 'left') : (b.y > a.y ? 'down' : 'up');
+    if (i >= steps) {
+      if (miura.leaving) { miura.on = false; return; }
+      if (!miura.arrived) {
+        miura.arrived = true; miura.dir = 'down';
+        miura.say = `Hello, ${state.me.name}! I'm Ms. Miura. どの単元にする？`;
+        setTimeout(() => { if (miura.on && !miura.leaving) state.reading.open(); }, 1300);
+      }
+    }
+    if (miura.on && !miura.leaving && state.me && state.me.room !== 'class1') { miura.on = false; state.reading.close(); } // 教室を出たら帰る
+  }
+  $('#btn-read').onclick = () => summonMiura();
   $('#menu-reading').onclick = () => { $('#me-menu').hidden = true; if (state.reading) state.reading.open(); };
   $('#menu-help').onclick = () => {
     $('#me-menu').hidden = true;
@@ -2104,6 +2157,8 @@
     }
     const list = [...state.others.values()].filter(u => !hiddenKid(u)).map(u => ({ u, x: u.rx, y: u.ry, isMe: false }));
     list.push({ u: me, x: me.x, y: me.y, isMe: true });
+    miuraTick(time);
+    if (miura.on) list.push({ u: miuraUser(), x: miura.x, y: miura.y, isMe: false });
     const forest = state.gb && state.gb.forest;
     SM.FOREST.forEach((f, i) => { const p = treePos(i); list.push({ tree: forest ? forest.trees[i] : null, x: p.x, y: p.y }); });
     // 家族の木（ロビー）：見たよスタンプで花が咲く
@@ -2119,6 +2174,13 @@
     list.sort((a, b) => (a.z || a.y) - (b.z || b.y));
     const season = window.Render.seasonOf();
     if (forest && forest.event) window.Render.drawDecorations(ctx, forest.event.id, time);
+    if (miura.on) { // 後ろの扉（開いている）
+      const dx = MIURA_DOOR.x * T, dy = (MIURA_DOOR.y - 1) * T;
+      ctx.fillStyle = '#2a2230'; ctx.fillRect(dx + 4, dy + 2, T - 8, T - 2);
+      const g = ctx.createRadialGradient(dx + T / 2, dy + T, 2, dx + T / 2, dy + T, T); g.addColorStop(0, 'rgba(255,240,190,.95)'); g.addColorStop(1, 'rgba(242,200,106,.2)');
+      ctx.fillStyle = g; ctx.fillRect(dx + 4, dy + 2, T - 8, T - 2);
+      ctx.fillStyle = '#b58b5f'; ctx.fillRect(dx + 1, dy + 2, 5, T - 2); // 開いた戸
+    }
     for (const it of list) {
       if ('tree' in it) window.Render.drawTree(ctx, it.x, it.y, it.tree, { time: time / 1000, season, highlight: it.tree && state.user && it.tree.grades.includes(state.user.grade) });
       else if (it.follower) window.Render.drawFollower(ctx, it.follower, it.x, it.y, time / 1000);

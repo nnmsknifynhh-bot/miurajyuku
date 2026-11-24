@@ -57,3 +57,29 @@ test('単元を登録して、生徒は自分の学年の単元を練習でき�
   assert.equal((await http('GET', '/api/reading/units', null, sc)).data.units[0].limit, 55);
   assert.equal((await http('GET', '/api/admin/reading', null, sc)).status, 403, '生徒は管理画面を使えない');
 });
+
+test('本番のテスト：練習で合格するまで受けられない。クリアは単元ごとに1回、1回目+5／2回目+4／3回目から+3', async () => {
+  const owner = (await http('POST', '/api/login', { loginId: 'owner', password: 'ownerpass1' })).cookie;
+  const G = require('../server/ganbari.js');
+  const mk = async (id) => { await http('POST', '/api/admin/users', { role: 'student', loginId: id, displayName: id, grade: '中3', password: 'password123' }, owner); return (await http('POST', '/api/login', { loginId: id, password: 'password123' })).cookie; };
+  const a = await mk('tsa'), b = await mk('tsb');
+  const unit = (await http('GET', '/api/reading/units', null, a)).data.units[0];
+  assert.match((await http('POST', '/api/reading/test', { unitId: unit.id, score: 95, seconds: 50 }, a)).data.error, /練習/);
+  for (const c of [a, b]) await http('POST', '/api/reading/practice', { unitId: unit.id, score: 92, seconds: 50 }, c);
+  // A：1回目でクリア → +5
+  let r = (await http('POST', '/api/reading/test', { unitId: unit.id, score: 93, accuracy: 92, fluency: 95, completeness: 100, seconds: 50 }, a)).data;
+  assert.equal(r.passed, true); assert.equal(r.points, 5); assert.equal(r.attempt, 1);
+  r = (await http('POST', '/api/reading/test', { unitId: unit.id, score: 99, seconds: 50 }, a)).data;
+  assert.equal(r.points, 0, '2回目のクリアはポイントなし'); assert.equal(r.alreadyCleared, true);
+  // B：時間オーバー → 点数たりない → 3回目でクリア → +3
+  assert.equal((await http('POST', '/api/reading/test', { unitId: unit.id, score: 95, seconds: 70 }, b)).data.passed, false);
+  assert.equal((await http('POST', '/api/reading/test', { unitId: unit.id, score: 85, seconds: 50 }, b)).data.passed, false);
+  r = (await http('POST', '/api/reading/test', { unitId: unit.id, score: 91, seconds: 52 }, b)).data;
+  assert.equal(r.points, 3);
+  const units = (await http('GET', '/api/reading/units', null, b)).data.units;
+  assert.equal(units[0].test.passed, true);
+  const adm = (await http('GET', '/api/admin/reading', null, owner)).data;
+  assert.ok(adm.tests.some(t => t.name === 'tsb' && t.clearedAt === 3 && t.points === 3));
+  assert.equal(adm.speechReady, false, 'キーがないときは準備まだ');
+  assert.equal((await http('GET', '/api/reading/speech-token', null, a)).status, 503);
+});

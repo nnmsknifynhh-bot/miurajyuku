@@ -8,7 +8,11 @@ db.exec(`
 CREATE TABLE IF NOT EXISTS reading_units (id INTEGER PRIMARY KEY AUTOINCREMENT, grade TEXT NOT NULL, title TEXT NOT NULL, lines TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS reading_practice (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, unit_id INTEGER NOT NULL, score INTEGER NOT NULL, seconds INTEGER NOT NULL, limit_sec INTEGER NOT NULL, passed INTEGER NOT NULL, created_at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_reading_practice_user ON reading_practice(user_id, unit_id);
+CREATE TABLE IF NOT EXISTS reading_tests (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, unit_id INTEGER NOT NULL, attempt INTEGER NOT NULL, score INTEGER NOT NULL, accuracy INTEGER, fluency INTEGER, completeness INTEGER, seconds INTEGER NOT NULL, limit_sec INTEGER NOT NULL, passed INTEGER NOT NULL, points INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_reading_tests_user ON reading_tests(user_id, unit_id);
 `);
+// 本番のテストでクリアしたときのポイント（単元ごとに1回）：1回目 +5／2回目 +4／3回目から +3
+const TEST_POINTS = (attempt) => attempt <= 1 ? 5 : attempt === 2 ? 4 : 3;
 
 // 学年ごとの「1分に読む語数」（中3の本文52語を1分 → 52語。ほかは目安。管理画面で変えられる）
 const DEFAULT_WPM = { '小1': 30, '小2': 30, '小3': 30, '小4': 30, '小5': 30, '小6': 30, '中1': 40, '中2': 45, '中3': 52, '高1': 60, '高2': 70, '高3': 70 };
@@ -86,6 +90,7 @@ function updateUnit(id, p, actorId) {
 function deleteUnit(id, actorId) {
   const r = db.prepare('DELETE FROM reading_units WHERE id = ?').run(id);
   db.prepare('DELETE FROM reading_practice WHERE unit_id = ?').run(id);
+  db.prepare('DELETE FROM reading_tests WHERE unit_id = ?').run(id);
   audit(actorId, 'reading.unit_deleted', String(id), null);
   return r.changes > 0;
 }
@@ -101,7 +106,9 @@ function unitsFor(user) {
     : db.prepare('SELECT * FROM reading_units WHERE active = 1 AND grade = ? ORDER BY title, id').all(user.grade || '');
   return rows.map(u => {
     const best = db.prepare('SELECT MAX(score) AS best, COUNT(*) AS n, MAX(passed) AS passed FROM reading_practice WHERE user_id = ? AND unit_id = ?').get(user.id, u.id);
-    return { ...view(u, c, staff ? u.grade : user.grade), practice: { count: best.n, best: best.best, passed: !!best.passed } };
+    const t = db.prepare('SELECT MAX(score) AS best, COUNT(*) AS n, MAX(passed) AS passed, MAX(points) AS points FROM reading_tests WHERE user_id = ? AND unit_id = ?').get(user.id, u.id);
+    return { ...view(u, c, staff ? u.grade : user.grade), practice: { count: best.n, best: best.best, passed: !!best.passed },
+      test: { count: t.n, best: t.best, passed: !!t.passed, points: t.points || 0, nextPoints: t.passed ? 0 : TEST_POINTS(t.n + 1) } };
   });
 }
 /** 練習の結果を記録する（点数・時間は端末で計算したもの）。合格ライン：90点以上・時間内 */
@@ -115,6 +122,41 @@ function recordPractice(user, unitId, score, seconds) {
   db.prepare('INSERT INTO reading_practice (user_id, unit_id, score, seconds, limit_sec, passed, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(user.id, unitId, sc, sec, v.limit, passed ? 1 : 0, now());
   return { ok: true, passed, limit: v.limit };
 }
+/**
+ * 本番のテストの結果を記録する（採点は Microsoft の発音評価。端末で受け取った点数を送ってくる）
+ * 受けられるのは、その単元の練習で合格した生徒だけ（先生・オーナーは、ためしに受けられる・ポイントなし）
+ * 90点以上・時間内でクリア。はじめてクリアしたときだけポイント
+ */
+function recordTest(user, unitId, r) {
+  const u = db.prepare('SELECT * FROM reading_units WHERE id = ? AND active = 1').get(unitId);
+  if (!u) return { error: '単元が見つかりません' };
+  const staff = user.role === 'owner' || user.role === 'teacher';
+  const okPractice = db.prepare('SELECT 1 FROM reading_practice WHERE user_id = ? AND unit_id = ? AND passed = 1').get(user.id, unitId);
+  if (!staff && !okPractice) return { error: '先に練習で90点以上・時間内を出してね' };
+  const num = (v) => { const n = Math.round(Number(v)); return Number.isFinite(n) && n >= 0 && n <= 100 ? n : null; };
+  const sc = num(r.score), sec = Math.round(Number(r.seconds));
+  if (sc === null || !Number.isFinite(sec) || sec < 1 || sec > 3600) return { error: '結果が正しくありません' };
+  const v = view(u, getConfig(), staff ? u.grade : user.grade);
+  const before = db.prepare('SELECT COUNT(*) AS n, MAX(passed) AS p FROM reading_tests WHERE user_id = ? AND unit_id = ?').get(user.id, unitId);
+  const attempt = before.n + 1;
+  const passed = sc >= PASS_SCORE && sec <= v.limit;
+  let points = 0;
+  if (passed && !before.p && user.role === 'student' && !user.trial_until) {
+    points = TEST_POINTS(attempt);
+    const ins = db.prepare('INSERT OR IGNORE INTO bonus_points (user_id, reason, points, created_at) VALUES (?, ?, ?, ?)').run(user.id, `reading:${unitId}`, points, now());
+    if (!ins.changes) points = 0;
+  }
+  db.prepare('INSERT INTO reading_tests (user_id, unit_id, attempt, score, accuracy, fluency, completeness, seconds, limit_sec, passed, points, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(user.id, unitId, attempt, sc, num(r.accuracy), num(r.fluency), num(r.completeness), sec, v.limit, passed ? 1 : 0, points, now());
+  return { ok: true, passed, points, attempt, limit: v.limit, alreadyCleared: !!before.p };
+}
+function testSummary() {
+  return db.prepare(`SELECT t.user_id, u.display_name AS name, u.grade, t.unit_id, r.title, COUNT(*) AS count, MAX(t.score) AS best, MAX(t.passed) AS passed, MAX(t.points) AS points,
+      MIN(CASE WHEN t.passed = 1 THEN t.attempt END) AS clearedAt, MAX(t.created_at) AS last
+    FROM reading_tests t JOIN users u ON u.id = t.user_id JOIN reading_units r ON r.id = t.unit_id GROUP BY t.user_id, t.unit_id ORDER BY last DESC LIMIT 300`).all()
+    .map(r => ({ ...r, passed: !!r.passed }));
+}
+
 // 先生用：生徒ごと・単元ごとの練習のようす
 function practiceSummary() {
   return db.prepare(`SELECT p.user_id, u.display_name AS name, u.grade, p.unit_id, r.title, COUNT(*) AS count, MAX(p.score) AS best, MAX(p.passed) AS passed, MAX(p.created_at) AS last
@@ -122,4 +164,4 @@ function practiceSummary() {
     .map(r => ({ ...r, passed: !!r.passed }));
 }
 
-module.exports = { DEFAULT_WPM, PASS_SCORE, getConfig, setConfig, parseText, wordsOf, limitSec, addUnit, updateUnit, deleteUnit, listUnits, unitsFor, recordPractice, practiceSummary };
+module.exports = { TEST_POINTS, recordTest, testSummary, DEFAULT_WPM, PASS_SCORE, getConfig, setConfig, parseText, wordsOf, limitSec, addUnit, updateUnit, deleteUnit, listUnits, unitsFor, recordPractice, practiceSummary };

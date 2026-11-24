@@ -15,6 +15,7 @@
     "express": "^4.22.3",
     "livekit-client": "^2.24.1",
     "livekit-server-sdk": "^2.19.3",
+    "microsoft-cognitiveservices-speech-sdk": "^1.53.0",
     "pg": "^8.23.1",
     "socket.io": "^4.8.4",
     "web-push": "^3.6.7"

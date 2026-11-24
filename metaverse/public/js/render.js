@@ -521,7 +521,7 @@
     const eq = u.equip || {};
     const staff = u.role === 'owner' || u.role === 'teacher';
     const costume = !staff && eq.costume ? COSTUMES[eq.costume] : null;
-    const clothes = staff ? 'suit' : !costume && eq.clothes ? eq.clothes : null; // 先生・オーナーはいつもスーツ
+    const clothes = staff ? (eq.clothes || 'suit') : !costume && eq.clothes ? eq.clothes : null; // 先生・オーナーはふだんスーツ（Ms. Miura の季節の衣装だけ例外）
     const bodyH = seated ? 13 : 15;
     // ヒーローのマント（体の後ろ）
     if (clothes === 'king' && u.dir !== 'down') { ctx.fillStyle = '#b71c1c'; ctx.beginPath(); ctx.moveTo(x - 10, by - 5); ctx.lineTo(x + 10, by - 5); ctx.lineTo(x + 14, by + 14); ctx.lineTo(x - 14, by + 14); ctx.fill(); ctx.fillStyle = '#fff'; for (let i = -12; i <= 12; i += 4) { ctx.beginPath(); ctx.arc(x + i, by + 14, 1.6, 0, Math.PI * 2); ctx.fill(); } }

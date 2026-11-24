@@ -72,6 +72,19 @@
     wsave.onclick = async () => { try { await api('PATCH', '/api/admin/reading/config', { wpm: Object.fromEntries(Object.entries(winputs).map(([g, i]) => [g, Number(i.value)])) }); toast('保存しました'); load(root, { api, toast }); } catch (e) { toast(e.message); } };
     ws.append(wrow, wsave);
 
+    // ── 本番のテストの結果 ──
+    const ts = section('📝 本番のテストの結果', `Microsoft の音声サービスが採点します。90点以上・時間内でクリア（単元ごとに1回：1回目+5／2回目+4／3回目から+3ポイント）。採点の準備：${d.speechReady ? '✅ できています' : '⚠️ まだです（Render の Environment に AZURE_SPEECH_KEY と AZURE_SPEECH_REGION を入れてください）'}`);
+    const tw2 = el('div', 'table-wrap'); ts.append(tw2);
+    const tt = el('table', 'logs'); const th2 = el('tr'); ['生徒', '学年', '単元', '回数', 'いちばんよい点', 'クリア', 'ポイント', '最後'].forEach(x => th2.append(el('th', null, x))); tt.append(el('thead')); tt.firstChild.append(th2);
+    const tb2 = el('tbody');
+    for (const r of d.tests || []) {
+      const tr = el('tr');
+      [r.name, r.grade || '', r.title, `${r.count}回`, `${r.best}点`, r.passed ? `✅ ${r.clearedAt}回目` : '', r.points ? `+${r.points}` : '', new Date(r.last).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })].forEach(v => tr.append(el('td', null, v)));
+      tb2.append(tr);
+    }
+    if (!(d.tests || []).length) { const tr = el('tr'); const td = el('td', 'empty', 'まだテストの記録はありません'); td.colSpan = 8; tr.append(td); tb2.append(tr); }
+    tt.append(tb2); tw2.append(tt);
+
     // ── 練習のようす ──
     const ps = section('🔁 練習のようす', `生徒ごと・単元ごとの練習の回数といちばんよい点数です。「${d.config.passScore}点以上・時間内」で合格（テストを受けられる）。`);
     const pw = el('div', 'table-wrap'); ps.append(pw);
