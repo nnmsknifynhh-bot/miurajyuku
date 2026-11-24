@@ -499,6 +499,40 @@
   }
   const TALL_HAIR = new Set(['spiky', 'gold', 'regent', 'mohawk', 'afro', 'bun']);
 
+  // 手に持つアイテム：体の横に大きめに。杖（⚡・🌠）は棒の先にのせて、ときどきピカッと光る
+  const STAFF = { '⚡': { glow: '255,214,10', spark: '#ffe066' }, '🌠': { glow: '180,200,255', spark: '#fff3b0' } };
+  function drawHandItem(ctx, item, x, by, dir, t) {
+    const side = dir === 'left' ? 1 : -1; // 体の横
+    const hx = x + side * 17, sway = Math.sin(t * 2) * 0.05;
+    const st = STAFF[item];
+    ctx.save();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    if (!st) { // ふつうのアイテム（剣・盾など）：1.3倍くらい
+      ctx.translate(hx, by + 2); ctx.rotate(side * -0.35 + sway);
+      ctx.font = '20px sans-serif'; ctx.fillText(item, 0, 0); ctx.restore(); return;
+    }
+    ctx.translate(hx, by + 16); ctx.rotate(side * -0.12 + sway);
+    // 棒（金のふちの茶色）
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#6b4423'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -26); ctx.stroke();
+    ctx.strokeStyle = '#e0b341'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(0, -20); ctx.lineTo(0, -26); ctx.stroke();
+    // ピカッ（3秒に1回・0.4秒）
+    const ph = (t % 3) / 3, flash = ph < 0.13 ? Math.sin(ph / 0.13 * Math.PI) : 0;
+    const top = -33;
+    const glow = 0.25 + flash * 0.6;
+    const gr = ctx.createRadialGradient(0, top, 1, 0, top, 14 + flash * 10);
+    gr.addColorStop(0, `rgba(${st.glow},${glow})`); gr.addColorStop(1, `rgba(${st.glow},0)`);
+    ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(0, top, 14 + flash * 10, 0, Math.PI * 2); ctx.fill();
+    if (flash > 0) { // 火花
+      ctx.strokeStyle = st.spark; ctx.lineWidth = 2;
+      for (let i = 0; i < 6; i++) {
+        const a = i / 6 * Math.PI * 2 + 0.3, r1 = 11 + flash * 4, r2 = r1 + 4 + flash * 6;
+        ctx.beginPath(); ctx.moveTo(Math.cos(a) * r1, top + Math.sin(a) * r1); ctx.lineTo(Math.cos(a) * r2, top + Math.sin(a) * r2); ctx.stroke();
+      }
+    }
+    ctx.font = '20px sans-serif'; ctx.fillText(item, 0, top);
+    ctx.restore();
+  }
   function drawAvatar(ctx, u, x, y, opts = {}) {
     const t = opts.time || 0;
     const seated = !!u.seat;
@@ -554,11 +588,7 @@
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       if (eq.face && u.dir !== 'up') { ctx.font = '12px sans-serif'; ctx.fillText(eq.face, x, by - 11); }
       if (eq.head && !costume) { ctx.font = '16px sans-serif'; ctx.fillText(eq.head, x, by - 24); }
-      if (eq.hand) {
-        const side = u.dir === 'left' ? 1 : -1; // 体の横
-        ctx.save(); ctx.translate(x + side * 13, by + 2); ctx.rotate(side * -0.35 + Math.sin(t * 2) * 0.05);
-        ctx.font = '15px sans-serif'; ctx.fillText(eq.hand, 0, 0); ctx.restore();
-      }
+      if (eq.hand) drawHandItem(ctx, eq.hand, x, by, u.dir, t);
       if (eq.pet) {
         const hop = u.moving ? Math.abs(Math.sin(t * 10)) * -4 : Math.sin(t * 2) * 1;
         ctx.font = '16px sans-serif'; ctx.fillText(eq.pet, x + 19, y + 4 + hop);
