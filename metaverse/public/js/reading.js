@@ -331,17 +331,28 @@
     // 全体の点数：本文の単語と、聞き取った単語（と発音の点）を順番どおりに合わせる
     // 正確さ＝合った単語の発音の点の平均、読みもれなし＝合った単語の割合、なめらかさ＝文ごとの平均
     // 総合＝3つを低い順にならべて 0.6・0.2・0.2 の重み（Microsoft のサンプルと同じ計算）
+    // 本番の点数（やさしめ）
+    // - 言い直しOK：同じ単語を何回か言ったら、いちばんよく言えたものを使う（言い直した分は減点しない）
+    // - 単語ごと：発音60点以上なら満点あつかい、40〜59は7割、それより下は4割、言えていなければ0
+    // - 総合 ＝ 単語の点の平均 ×0.9 ＋ なめらかさ ×0.1（なめらかさはほとんど影響しない）
     function scoreTest() {
       const words = wordsOf(st.unit.lines.map(l => l.en).join(' '));
       const P = [], owner = [];
       words.forEach((w, i) => toks(w).forEach(t => { P.push(t); owner.push(i); }));
       const H = [];
-      for (const sg of st.segs) for (const w of sg.words) for (const t of toks(w.word)) H.push({ t, acc: w.acc, err: w.err });
+      for (const sg of st.segs) for (const w of sg.words) for (const t of toks(w.word)) H.push({ t, acc: w.err === 'Mispronunciation' ? Math.min(w.acc, 59) : w.acc });
       const n = P.length, m = H.length;
       const dp = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
       for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) dp[i][j] = P[i] === H[j].t ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
       const accOf = new Array(n).fill(null);
-      for (let i = 0, j = 0; i < n && j < m;) { if (P[i] === H[j].t) { accOf[i] = H[j].err === 'Mispronunciation' ? Math.min(H[j].acc, 59) : H[j].acc; i++; j++; } else if (dp[i + 1][j] >= dp[i][j + 1]) i++; else j++; }
+      for (let i = 0, j = 0; i < n && j < m;) {
+        if (P[i] === H[j].t) {
+          // 言い直し：近く（前後4語）で同じ単語を言っていたら、いちばんよい発音の点
+          let best = H[j].acc;
+          for (let k = Math.max(0, j - 4); k <= Math.min(m - 1, j + 4); k++) if (H[k].t === P[i]) best = Math.max(best, H[k].acc);
+          accOf[i] = best; i++; j++;
+        } else if (dp[i + 1][j] >= dp[i][j + 1]) i++; else j++;
+      }
       const wAcc = words.map(() => []);
       accOf.forEach((a, k) => wAcc[owner[k]].push(a));
       const per = wAcc.map(list => list.some(a => a === null) ? null : list.reduce((x, y) => x + y, 0) / list.length);
@@ -350,8 +361,9 @@
       const completeness = words.length ? Math.round(matched.length / words.length * 100) : 0;
       let fw = 0, fs = 0; for (const sg of st.segs) { fw += sg.words.length; fs += sg.fluency * sg.words.length; }
       const fluency = fw ? Math.round(fs / fw) : 0;
-      const sorted = [accuracy, fluency, completeness].sort((a, b) => a - b);
-      const score = Math.round(sorted[0] * 0.6 + sorted[1] * 0.2 + sorted[2] * 0.2);
+      const credit = per.map(a => a === null ? 0 : a >= 60 ? 100 : a >= 40 ? 70 : 40);
+      const wordScore = credit.length ? credit.reduce((x, y) => x + y, 0) / credit.length : 0;
+      const score = Math.min(100, Math.round(wordScore * 0.9 + fluency * 0.1));
       return { score, accuracy, fluency, completeness, ok: per.map(a => a !== null && a >= 60), acc: per.map(a => a === null ? null : Math.round(a)) };
     }
     async function finishTest() {

@@ -20,7 +20,7 @@ const TEST_POINTS = (attempt) => attempt <= 1 ? 5 : attempt === 2 ? 4 : 3;
 
 // 学年ごとの「1分に読む語数」（中3の本文52語を1分 → 52語。ほかは目安。管理画面で変えられる）
 const DEFAULT_WPM = { '小1': 30, '小2': 30, '小3': 30, '小4': 30, '小5': 30, '小6': 30, '中1': 40, '中2': 45, '中3': 52, '高1': 60, '高2': 70, '高3': 70 };
-const PASS_SCORE = 80; // 合格ラインのはじめの値（管理画面で変えられる。はじめは90だったが、やさしく80に）
+const PASS_SCORE = 90; // 合格ライン（管理画面で変えられる）
 function getConfig() {
   let saved = {};
   try { saved = JSON.parse(getSetting('reading', '{}')); } catch (e) { saved = {}; }
