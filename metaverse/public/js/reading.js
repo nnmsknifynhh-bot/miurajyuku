@@ -104,6 +104,7 @@
 
     function showUnit(u, mode = 'practice') {
       st.unit = u; st.result = null; st.showJa = false; st.mode = mode;
+      if (mode === 'test') prepareTest(); // iPhone・iPad：ボタンを押したその場でマイクを始めるため、合言葉は先にもらっておく
       $('#rd-back').hidden = false; $('#rd-title').textContent = ({ test: '📝 テスト：', jaPractice: '🇯🇵 訳だけで練習：', practice: '🔤 英文で練習：' })[mode] + u.title;
       render();
     }
@@ -155,7 +156,8 @@
       }
       const btns = el('div', 'rd-btns');
       if (st.recording) { const stop = el('button', 'btn rd-big', '⏹ 読みおわった'); stop.type = 'button'; stop.onclick = () => finish(); btns.append(stop); }
-      else if (test) { const go = el('button', 'btn rd-big', st.preparing ? '準備中…' : r ? '📝 もう一度テスト' : '📝 テストを始める'); go.type = 'button'; go.disabled = !!st.preparing; go.onclick = startTest; btns.append(go); }
+      else if (st.scoring) { const w = el('button', 'btn rd-big', '採点中…'); w.type = 'button'; w.disabled = true; btns.append(w); }
+      else if (test) { const go = el('button', 'btn rd-big', st.preparing ? '準備中…' : !prep ? '🔄 準備する' : r ? '📝 もう一度テスト' : '📝 テストを始める'); go.type = 'button'; go.disabled = !!st.preparing; go.onclick = startTest; btns.append(go); }
       else { const go = el('button', 'btn rd-big', r ? '🔁 もう一度読む' : '🎤 読みはじめる'); go.type = 'button'; go.disabled = !SR; go.onclick = startRec; btns.append(go); }
       body.append(btns);
       if (!SR && !test) body.append(el('p', 'rd-warn', 'この端末では聞き取りが使えません（Safari か Chrome で開いてください）'));
@@ -242,14 +244,20 @@
       if (!sdkLoading) sdkLoading = new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = '/vendor/speech-sdk.js'; sc.onload = () => res(window.SpeechSDK); sc.onerror = () => { sdkLoading = null; rej(new Error('採点のしくみを読みこめませんでした')); }; document.head.append(sc); });
       return sdkLoading;
     }
-    async function startTest() {
-      if (st.recording || st.preparing) return;
+    let prep = null; // { sdk, tk, at }
+    async function prepareTest() {
+      if (prep && Date.now() - prep.at < 7 * 60e3) return prep;
+      st.preparing = true; if (st.unit) render();
+      try { const [sdk, tk] = await Promise.all([loadSdk(), api('GET', '/api/reading/speech-token')]); prep = { sdk, tk, at: Date.now() }; }
+      catch (e) { prep = null; toast(e.message, 6000); }
+      st.preparing = false; if (st.unit && !st.recording) render();
+      return prep;
+    }
+    function startTest() {
+      if (st.recording || st.preparing || st.scoring) return;
       if (window.speechSynthesis) speechSynthesis.cancel();
-      st.preparing = true; render();
-      let sdk, tk;
-      try { [sdk, tk] = await Promise.all([loadSdk(), api('GET', '/api/reading/speech-token')]); }
-      catch (e) { st.preparing = false; render(); return toast(e.message, 6000); }
-      st.preparing = false;
+      if (!prep || Date.now() - prep.at > 7 * 60e3) { prepareTest(); return; } // 準備ができたら、もう一度押してもらう
+      const { sdk, tk } = prep;
       const ref = st.unit.lines.map(l => l.en).join(' ');
       const cfg = sdk.SpeechConfig.fromAuthorizationToken(tk.token, tk.region);
       cfg.speechRecognitionLanguage = 'en-US';
@@ -260,13 +268,15 @@
       pa.applyTo(recog);
       st.segs = []; st.result = null; st.interim = ''; st.recording = true; st.startAt = Date.now(); st.lastEnd = 0;
       st.rec = { azure: recog };
-      recog.recognizing = (_s, e) => { st.interim = e.result.text || ''; const live = $('#rd-live'); if (live) live.textContent = `🎧 ${st.interim.slice(-80)}`; };
+      st.heardAny = false;
+      recog.recognizing = (_s, e) => { st.interim = e.result.text || ''; if (st.interim) st.heardAny = true; const live = $('#rd-live'); if (live) live.textContent = `🎧 ${st.interim.slice(-80)}`; };
       recog.recognized = (_s, e) => {
         if (e.result.reason !== sdk.ResultReason.RecognizedSpeech) return;
         let detail = null;
         try { detail = JSON.parse(e.result.properties.getProperty(sdk.PropertyId.SpeechServiceResponse_JsonResult)); } catch (er) {}
         const nb = detail && detail.NBest && detail.NBest[0];
         if (!nb) return;
+        st.heardAny = true;
         st.segs.push({ words: (nb.Words || []).map(w => ({ word: w.Word, acc: w.PronunciationAssessment ? w.PronunciationAssessment.AccuracyScore : 0, err: w.PronunciationAssessment ? w.PronunciationAssessment.ErrorType : 'None' })), fluency: nb.PronunciationAssessment ? nb.PronunciationAssessment.FluencyScore : (nb.FluencyScore || 0) });
         st.lastEnd = (e.result.offset + e.result.duration) / 1e7;
         const g = scoreTest(); if (g.completeness >= 100) setTimeout(() => { if (st.recording) finish(); }, 900);
@@ -310,8 +320,23 @@
       return { score, accuracy, fluency, completeness, ok: per.map(a => a !== null && a >= 60) };
     }
     async function finishTest() {
-      const seconds = Math.max(1, Math.round(st.lastEnd || (Date.now() - st.startAt) / 1000));
-      stopRec(false);
+      const pressedSec = (Date.now() - st.startAt) / 1000;
+      const rec = st.rec;
+      clearInterval(st.timer); st.recording = false; st.scoring = true; st.rec = null; render();
+      // 最後の部分の採点がとどくのを待ってから計算する
+      await new Promise((res) => {
+        let done = false; const end = () => { if (!done) { done = true; setTimeout(res, 600); } };
+        try { rec.azure.stopContinuousRecognitionAsync(() => { end(); }, () => end()); } catch (e) { end(); }
+        setTimeout(end, 4000);
+      });
+      try { rec.azure.close(); } catch (e) {}
+      st.scoring = false;
+      if (!st.segs.length) { // 声がとどいていない：記録しない（テストの回数にも数えない）
+        st.interim = ''; render();
+        toast(st.heardAny ? '採点の結果がとどきませんでした。もう一度ためしてね' : '声が聞きとれませんでした。マイクを許可しているか、iPad・iPhone の音量・マナーモードではなくマイクの近くで話しているか確かめて、もう一度ためしてね', 8000);
+        return;
+      }
+      const seconds = Math.max(1, Math.round(st.lastEnd || pressedSec));
       const g = scoreTest();
       st.result = { ...g, seconds, passed: g.score >= 90 && seconds <= st.unit.limit };
       st.interim = '';

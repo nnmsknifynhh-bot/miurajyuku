@@ -13,6 +13,8 @@ CREATE INDEX IF NOT EXISTS idx_reading_tests_user ON reading_tests(user_id, unit
 `);
 // 練習が「英文を見て」か「訳だけで」か（テストを受けられるのは、訳だけで合格したとき）
 if (!db.prepare('PRAGMA table_info(reading_practice)').all().some(c => c.name === 'ja_only')) db.exec('ALTER TABLE reading_practice ADD COLUMN ja_only INTEGER NOT NULL DEFAULT 0');
+// 声がとどかずに0点で記録されたテスト（読みもれなし0）は、回数に数えないので消す（1回だけ）
+if (getSetting('reading_clean0', '') !== '1') { db.prepare('DELETE FROM reading_tests WHERE score = 0 AND COALESCE(completeness, 0) = 0').run(); setSetting('reading_clean0', '1'); }
 // 本番のテストでクリアしたときのポイント（単元ごとに1回）：1回目 +5／2回目 +4／3回目から +3
 const TEST_POINTS = (attempt) => attempt <= 1 ? 5 : attempt === 2 ? 4 : 3;
 
