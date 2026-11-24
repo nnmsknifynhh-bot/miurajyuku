@@ -279,3 +279,17 @@ test('大人のポイントになる時間は別（最初は 8:00〜15:00）。�
   assert.equal(G.tick(new Map([[id, fake]]), { date: at('16:00') }).length, 0, '16時はポイントにならない');
   await http('PATCH', '/api/admin/ganbari/config', { ad: { window: { start: '08:00', end: '15:00' }, window2: null, dailyCap: 360 } }, owner);
 });
+
+test('大人の週のメダルは別に決められる（最初は高校生と同じ）', async () => {
+  const G = require('../server/ganbari.js');
+  const { db } = require('../server/db.js');
+  const owner = (await http('POST', '/api/login', { loginId: 'owner', password: 'ownerpass1' })).cookie;
+  const id = db.prepare("SELECT id FROM users WHERE login_id = 'adultpt'").get().id;
+  const hsM = G.getConfig().hs.medals.map(m => m.minutes);
+  assert.deepEqual(G.hsWeeks(id).medals.map(m => m.minutes), hsM, '最初は高校生と同じ');
+  assert.equal((await http('PATCH', '/api/admin/ganbari/config', { ad: { medals: [{ minutes: 300, points: 5 }, { minutes: 120, points: 10 }, { minutes: 600, points: 20 }] } }, owner)).status, 400, '🥉＜🥈＜🥇');
+  const r = await http('PATCH', '/api/admin/ganbari/config', { ad: { medals: [{ minutes: 60, points: 5 }, { minutes: 120, points: 10 }, { minutes: 180, points: 20 }] } }, owner);
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.deepEqual(G.hsWeeks(id).medals.map(m => m.minutes), [60, 120, 180]);
+  assert.deepEqual(G.getConfig().hs.medals.map(m => m.minutes), hsM, '高校生はそのまま');
+});

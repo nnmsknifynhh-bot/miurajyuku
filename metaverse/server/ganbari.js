@@ -293,6 +293,17 @@ function checkWindows(s1, e1, s2, e2, label) {
 })();
 // 入力のチェックをしてから保存する。エラーならメッセージを返す
 // 数える時間帯・1日の上限・曜日ごとの設定を、t（中学生の設定か高校生の設定）に入れる。エラーならメッセージを返す
+// 週のメダル（🥉🥈🥇）の時間とポイントのチェック
+function checkMedals(m) {
+  const int = (v, min, max) => Number.isInteger(v) && v >= min && v <= max;
+  if (!Array.isArray(m) || m.length !== 3) return 'メダルは3つ（🥉🥈🥇）決めてください';
+  for (const x of m) {
+    if (!x || !int(x.minutes, 10, 7 * 1440)) return 'メダルの時間は10分〜7日分にしてください';
+    if (!int(x.points, 0, 1000)) return 'メダルのポイントは0〜1000にしてください';
+  }
+  if (!(m[0].minutes < m[1].minutes && m[1].minutes < m[2].minutes)) return 'メダルの時間は 🥉＜🥈＜🥇 にしてください';
+  return null;
+}
 function applyRules(c, p) {
   const int = (v, min, max) => Number.isInteger(v) && v >= min && v <= max;
   if (p.window || p.window2 !== undefined) {
@@ -353,14 +364,9 @@ function setConfig(patch, actorId) {
     err = applyRules(hs, h);
     if (err) return '高校生：' + err;
     if (h.medals !== undefined) {
-      const m = h.medals;
-      if (!Array.isArray(m) || m.length !== 3) return '高校生：メダルは3つ（🥉🥈🥇）決めてください';
-      for (const x of m) {
-        if (!x || !int(x.minutes, 10, 7 * 1440)) return '高校生：メダルの時間は10分〜7日分にしてください';
-        if (!int(x.points, 0, 1000)) return '高校生：メダルのポイントは0〜1000にしてください';
-      }
-      if (!(m[0].minutes < m[1].minutes && m[1].minutes < m[2].minutes)) return '高校生：メダルの時間は 🥉＜🥈＜🥇 にしてください';
-      hs.medals = m.map(x => ({ minutes: x.minutes, points: x.points }));
+      err = checkMedals(h.medals);
+      if (err) return '高校生：' + err;
+      hs.medals = h.medals.map(x => ({ minutes: x.minutes, points: x.points }));
     }
     if (h.lateMinutes !== undefined) { if (!int(h.lateMinutes, 1, 240)) return '高校生：遅れの通知は1〜240分後にしてください'; hs.lateMinutes = h.lateMinutes; }
     c.hs = hs;
@@ -373,6 +379,11 @@ function setConfig(patch, actorId) {
     const ad = { ...c.ad };
     err = applyRules(ad, p.ad || {});
     if (err) return '大人：' + err;
+    if (p.ad && p.ad.medals !== undefined) { // 大人だけの週のメダル（最初は高校生と同じ）
+      err = checkMedals(p.ad.medals);
+      if (err) return '大人：' + err;
+      ad.medals = p.ad.medals.map(x => ({ minutes: x.minutes, points: x.points }));
+    }
     c.ad = ad;
   }
   if (p.hs3 !== undefined) {
@@ -996,7 +1007,8 @@ const medalIndex = (min, medals) => { let k = -1; medals.forEach((m, i) => { if 
  * @returns {{ week:{start,minutes,medal,next,achieved}, today:{minutes}, medals:Array, streak:number, achievedWeeks:number, bonusPoints:number, counts:{bronze,silver,gold} }}
  */
 function hsWeeks(userId, date = new Date(), c = getConfig()) {
-  const hs = c.hs, medals = hs.medals || DEFAULT_MEDALS, today = jst(date).day, mon = mondayOf(today);
+  const gu = db.prepare('SELECT grade FROM users WHERE id = ?').get(userId);
+  const hs = c.hs, medals = (gu && gu.grade === '大人' && c.ad && c.ad.medals) || hs.medals || DEFAULT_MEDALS, today = jst(date).day, mon = mondayOf(today); // 大人は大人のメダル
   const rows = db.prepare(`SELECT day, ${allExpr} AS m FROM study_days WHERE user_id = ? AND day >= ? AND day <= ?`).all(userId, mondayOf(c.pointsFrom), today); // 勉強時間（全部）で数える
   const byWeek = new Map(); // 月曜日 -> 分
   const byDay = new Map(rows.map(r => [r.day, r.m]));

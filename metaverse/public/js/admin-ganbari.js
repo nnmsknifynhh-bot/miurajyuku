@@ -131,6 +131,7 @@
         },
       };
     };
+    const medalsCfgOf = (cc) => cc.hs.medals || [{ minutes: 240, points: 10 }, { minutes: 360, points: 20 }, { minutes: 540, points: 30 }];
     const jh = ruleBlock(c, '📚 自習室（中学生など）');
     const hs = ruleBlock(c.hs, '☕ 高校生自習室（高校生）', '高校生（高1〜高3）の数え方です。中学生とは別に決められます。');
     // 🎓 高3（受験生）：オンにすると高1・高2とは別の数え方
@@ -139,11 +140,17 @@
     const h3sep = check('高3は高1・高2とは別の数え方にする', !!h3src.separate);
     { const inner = [...hs3.box.children].slice(2); hs3.box.insertBefore(h3sep[0], hs3.box.children[2] || null);
       const sync = () => { inner.forEach(n => { n.style.display = h3sep[1].checked ? '' : 'none'; }); }; h3sep[1].onchange = sync; sync(); }
-    const ad = ruleBlock(c.ad || { window: { start: '08:00', end: '15:00' }, window2: null, dailyCap: 360, weekly: null }, '🧑‍💼 大人（大人英会話）', '学年「大人」の数え方です（スピーキング・ライティング教室にいる時間）。最初は 8:00〜15:00 です。🔥とメダルは高校生と同じです。');
+    const ad = ruleBlock(c.ad || { window: { start: '08:00', end: '15:00' }, window2: null, dailyCap: 360, weekly: null }, '🧑‍💼 大人（大人英会話）', '学年「大人」の数え方です（スピーキング・ライティング教室にいる時間）。最初は 8:00〜15:00 です。🔥は高校生と同じ「週」で数えます。');
+    // 大人の週のメダル（最初は高校生と同じ）
+    const adMedalsCfg = (c.ad && c.ad.medals) || medalsCfgOf(c);
+    const adMedalInputs = adMedalsCfg.map(m => [numInput(m.minutes, 10, 10080), numInput(m.points, 0, 1000)]);
+    { const g2 = el('div', 'gb-grid'); const MD2 = [['🥉', 'ブロンズ'], ['🥈', 'シルバー'], ['🥇', 'ゴールド']];
+      adMedalInputs.forEach(([mi, pi], i) => g2.append(field(`${MD2[i][0]} ${MD2[i][1]}：週の合計（分）`, mi, `例：${adMedalsCfg[i].minutes} = ${adMedalsCfg[i].minutes / 60}時間`), field(`${MD2[i][0]} のボーナス（ポイント）`, pi, 'その週にとった、いちばん上のメダルの分だけふえます')));
+      ad.box.append(el('b', null, '🏅 大人の週のメダル'), g2, el('p', 'muted', '大人だけのメダルの時間です（高校生のメダルとは別）。🔥は「🥉以上をとった週」が続いた数です。')); }
     const es = ruleBlock(c.es, '🎒 小学生自習室（小学生）', '小学生（小1〜小6）の数え方です。最初は 朝6:00〜7:30・夕方15:00〜18:00 です。');
     // 高校生の週のノルマ
     const MD = [['🥉', 'ブロンズ'], ['🥈', 'シルバー'], ['🥇', 'ゴールド']];
-    const medalsCfg = c.hs.medals || [{ minutes: 240, points: 10 }, { minutes: 360, points: 20 }, { minutes: 540, points: 30 }];
+    const medalsCfg = medalsCfgOf(c);
     const medalInputs = medalsCfg.map(m => [numInput(m.minutes, 10, 10080), numInput(m.points, 0, 1000)]);
     const hsLate = numInput(c.hs.lateMinutes, 1, 240);
     const hg = el('div', 'gb-grid');
@@ -190,7 +197,7 @@
         requireSeat: seat[1].checked, requireCamera: cam[1].checked,
         es: es.value(),
         hs3: { ...hs3.value(), separate: h3sep[1].checked },
-        ad: ad.value(),
+        ad: { ...ad.value(), medals: adMedalInputs.map(([mi, pi]) => ({ minutes: Number(mi.value), points: Number(pi.value) })) },
         vacations: vacRows.filter(r => r.st.value && r.en.value).map(r => ({ name: r.nm.value.trim() || '休み', start: r.st.value, end: r.en.value })),
         hs: { ...hs.value(), medals: medalInputs.map(([mi, pi]) => ({ minutes: Number(mi.value), points: Number(pi.value) })), lateMinutes: Number(hsLate.value) },
       }, '数え方を保存しました').then(ok => { if (ok) load(root, ctx).then(() => window.scrollTo(0, y)); });
