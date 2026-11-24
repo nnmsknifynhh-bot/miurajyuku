@@ -11,6 +11,8 @@ CREATE INDEX IF NOT EXISTS idx_reading_practice_user ON reading_practice(user_id
 CREATE TABLE IF NOT EXISTS reading_tests (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, unit_id INTEGER NOT NULL, attempt INTEGER NOT NULL, score INTEGER NOT NULL, accuracy INTEGER, fluency INTEGER, completeness INTEGER, seconds INTEGER NOT NULL, limit_sec INTEGER NOT NULL, passed INTEGER NOT NULL, points INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_reading_tests_user ON reading_tests(user_id, unit_id);
 `);
+// 大人英会話：その人だけの文（user_id があれば、その人だけに見える）
+if (!db.prepare('PRAGMA table_info(reading_units)').all().some(c => c.name === 'user_id')) db.exec('ALTER TABLE reading_units ADD COLUMN user_id INTEGER');
 // 練習が「英文を見て」か「訳だけで」か（テストを受けられるのは、訳だけで合格したとき）
 if (!db.prepare('PRAGMA table_info(reading_practice)').all().some(c => c.name === 'ja_only')) db.exec('ALTER TABLE reading_practice ADD COLUMN ja_only INTEGER NOT NULL DEFAULT 0');
 // 声がとどかずに0点で記録されたテスト（読みもれなし0）は、回数に数えないので消す（1回だけ）
@@ -77,19 +79,27 @@ const limitSec = (words, grade, c = getConfig()) => Math.max(10, Math.ceil((word
 function view(u, c = getConfig(), grade = u.grade) {
   const lines = JSON.parse(u.lines);
   const words = lines.reduce((n, l) => n + wordsOf(l.en).length, 0);
-  return { id: u.id, grade: u.grade, title: u.title, lines, words, limit: limitSec(words, grade || u.grade, c), active: !!u.active };
+  return { id: u.id, grade: u.grade, title: u.title, lines, words, limit: limitSec(words, grade || u.grade, c), active: !!u.active, userId: u.user_id || null, userName: u.user_name || null };
 }
 
+// 大人英会話：だれ用の文か（userId が空なら、大人みんな）
+function personOf(p, grade = p.grade) {
+  if (grade !== '大人' || p.userId == null || p.userId === '') return { id: null };
+  const u = db.prepare("SELECT id FROM users WHERE id = ? AND role = 'student' AND grade = '大人'").get(Number(p.userId));
+  return u ? { id: u.id } : { error: '大人英会話の生徒をえらんでください' };
+}
 function addUnit(p, actorId) {
   if (!G.GRADES.includes(p.grade)) return { error: '学年をえらんでください' };
   // 大人英会話：名前が空なら「11/24の週」（毎週の3文）
   const j = G.jst();
-  const title = clean(p.title, 60) || (p.grade === '大人' ? `${Number(j.day.slice(5, 7))}/${Number(j.day.slice(8))}の週` : '');
+  const title = clean(p.title, 60) || (p.grade === '大人' ? `${Number(j.day.slice(5, 7))}/${Number(j.day.slice(8))}の文` : '');
+  const who = personOf(p);
+  if (who.error) return who;
   if (!title) return { error: '単元の名前を入れてください（例：Unit 1 Part 1）' };
   const lines = parseText(p.text);
   if (!lines.length) return { error: '英語の本文を入れてください' };
   if (lines.length > 60) return { error: '本文が長すぎます（60行まで）' };
-  const r = db.prepare('INSERT INTO reading_units (grade, title, lines, created_at) VALUES (?, ?, ?, ?)').run(p.grade, title, JSON.stringify(lines), now());
+  const r = db.prepare('INSERT INTO reading_units (grade, title, lines, created_at, user_id) VALUES (?, ?, ?, ?, ?)').run(p.grade, title, JSON.stringify(lines), now(), who.id);
   audit(actorId, 'reading.unit_added', title, { grade: p.grade });
   return { ok: true, id: Number(r.lastInsertRowid) };
 }
@@ -103,7 +113,9 @@ function updateUnit(id, p, actorId) {
   const lines = p.text !== undefined ? parseText(p.text) : JSON.parse(u.lines);
   if (!lines.length) return { error: '英語の本文を入れてください' };
   const active = p.active !== undefined ? (p.active ? 1 : 0) : u.active;
-  db.prepare('UPDATE reading_units SET grade = ?, title = ?, lines = ?, active = ? WHERE id = ?').run(grade, title, JSON.stringify(lines), active, id);
+  const who = p.userId !== undefined ? personOf(p, grade) : { id: grade === '大人' ? u.user_id : null };
+  if (who.error) return who;
+  db.prepare('UPDATE reading_units SET grade = ?, title = ?, lines = ?, active = ?, user_id = ? WHERE id = ?').run(grade, title, JSON.stringify(lines), active, who.id, id);
   audit(actorId, 'reading.unit_updated', title, null);
   return { ok: true };
 }
@@ -116,7 +128,7 @@ function deleteUnit(id, actorId) {
   return r.changes > 0;
 }
 function listUnits(c = getConfig()) {
-  return db.prepare('SELECT * FROM reading_units ORDER BY grade, title, id').all().map(u => view(u, c));
+  return db.prepare('SELECT r.*, u.display_name AS user_name FROM reading_units r LEFT JOIN users u ON u.id = r.user_id ORDER BY r.grade, CASE WHEN r.grade = \'大人\' THEN -r.id ELSE 0 END, r.title, r.id').all().map(u => view(u, c));
 }
 
 // 生徒の単元の一覧（自分の学年。先生・オーナーは全部）。練習の記録つき
@@ -126,8 +138,8 @@ function unitsFor(user) {
   const rows = staff ? db.prepare('SELECT * FROM reading_units WHERE active = 1 ORDER BY grade, title, id').all()
     : /^小[1-6]$/.test(user.grade || '') // 小学生は、自分の学年の単元と「中1」の単元をえらべる
       ? db.prepare("SELECT * FROM reading_units WHERE active = 1 AND grade IN (?, '中1') ORDER BY CASE WHEN grade = ? THEN 0 ELSE 1 END, title, id").all(user.grade, user.grade)
-      : user.grade === '大人' // 大人：毎週の文。新しい週が上
-        ? db.prepare("SELECT * FROM reading_units WHERE active = 1 AND grade = '大人' ORDER BY id DESC").all()
+      : user.grade === '大人' // 大人：自分の文（と大人みんなの文）。新しいものが上
+        ? db.prepare("SELECT * FROM reading_units WHERE active = 1 AND grade = '大人' AND (user_id IS NULL OR user_id = ?) ORDER BY id DESC").all(user.id)
         : db.prepare('SELECT * FROM reading_units WHERE active = 1 AND grade = ? ORDER BY title, id').all(user.grade || '');
   return rows.map(u => {
     const best = db.prepare(`SELECT COUNT(*) AS n, MAX(CASE WHEN ja_only = 1 THEN score END) AS best, MAX(CASE WHEN ja_only = 1 THEN passed END) AS passed,
@@ -139,9 +151,11 @@ function unitsFor(user) {
   });
 }
 /** 練習の結果を記録する（点数・時間は端末で計算したもの）。合格ライン：90点以上・時間内 */
+// その人が使える単元か（ほかの人だけの文は使えない）
+const mine = (u, user) => u && (!u.user_id || u.user_id === user.id || user.role === 'owner' || user.role === 'teacher');
 function recordPractice(user, unitId, score, seconds, jaOnly = false, missing = 0) {
   const u = db.prepare('SELECT * FROM reading_units WHERE id = ? AND active = 1').get(unitId);
-  if (!u) return { error: '単元が見つかりません' };
+  if (!mine(u, user)) return { error: '単元が見つかりません' };
   const sc = Math.round(Number(score)), sec = Math.round(Number(seconds));
   if (!Number.isFinite(sc) || sc < 0 || sc > 100 || !Number.isFinite(sec) || sec < 1 || sec > 3600) return { error: '結果が正しくありません' };
   const v = view(u, getConfig(), user.role === 'student' ? user.grade : u.grade);
@@ -157,7 +171,7 @@ function recordPractice(user, unitId, score, seconds, jaOnly = false, missing = 
  */
 function recordTest(user, unitId, r) {
   const u = db.prepare('SELECT * FROM reading_units WHERE id = ? AND active = 1').get(unitId);
-  if (!u) return { error: '単元が見つかりません' };
+  if (!mine(u, user)) return { error: '単元が見つかりません' };
   const staff = user.role === 'owner' || user.role === 'teacher';
   const okPractice = db.prepare('SELECT 1 FROM reading_practice WHERE user_id = ? AND unit_id = ? AND passed = 1 AND ja_only = 1').get(user.id, unitId);
   if (!staff && !okPractice) return { error: '先に「訳だけで練習」で90点以上・時間内を出してね' };

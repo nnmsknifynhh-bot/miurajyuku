@@ -900,7 +900,7 @@ admin.patch('/ganbari/config', requireOwner, (req, res) => {
   realtime.refreshAllGanbari();
   res.json({ config: ganbari.getConfig() });
 });
-admin.get('/reading', requireOwner, (req, res) => res.json({ units: reading.listUnits(), config: reading.getConfig(), summary: reading.practiceSummary(), tests: reading.testSummary(), writing: writing.summary(), visionReady: writing.visionReady(), grades: ganbari.GRADES, speechReady: !!(process.env.AZURE_SPEECH_KEY && process.env.AZURE_SPEECH_REGION) }));
+admin.get('/reading', requireOwner, (req, res) => res.json({ units: reading.listUnits(), config: reading.getConfig(), summary: reading.practiceSummary(), tests: reading.testSummary(), writing: writing.summary(), visionReady: writing.visionReady(), grades: ganbari.GRADES, adults: db.prepare("SELECT id, display_name AS name FROM users WHERE role = 'student' AND grade = '大人' AND is_active = 1 ORDER BY display_name").all(), speechReady: !!(process.env.AZURE_SPEECH_KEY && process.env.AZURE_SPEECH_REGION) }));
 admin.post('/reading/units', requireOwner, (req, res) => { const r = reading.addUnit(req.body || {}, req.user.id); if (r.error) return bad(res, r.error); res.status(201).json(r); });
 admin.patch('/reading/units/:id', requireOwner, (req, res) => { const r = reading.updateUnit(Number(req.params.id), req.body || {}, req.user.id); if (r.error) return bad(res, r.error); res.json(r); });
 admin.delete('/reading/units/:id', requireOwner, (req, res) => { if (!reading.deleteUnit(Number(req.params.id), req.user.id)) return bad(res, '単元が見つかりません', 404); res.json({ ok: true }); });

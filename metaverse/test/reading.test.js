@@ -216,7 +216,20 @@ test('大人（大人英会話）：テスト教室だけ入れる・毎週の�
   assert.equal(w1.status, 201, JSON.stringify(w1.data));
   await http('POST', '/api/admin/reading/units', { grade: '大人', title: 'Week 2', text: 'I went hiking.\nハイキングに行きました。' }, owner);
   const us = (await http('GET', '/api/reading/units', null, ac)).data.units;
-  assert.deepEqual(us.map(u => u.title), ['Week 2', `${Number(G.jst().day.slice(5, 7))}/${Number(G.jst().day.slice(8))}の週`]);
+  assert.deepEqual(us.map(u => u.title), ['Week 2', `${Number(G.jst().day.slice(5, 7))}/${Number(G.jst().day.slice(8))}の文`]);
+  // 1人ずつの文：その人だけに見える（ほかの大人には見えない・使えない）
+  await http('POST', '/api/admin/users', { role: 'student', loginId: 'adult2', displayName: '鈴木', grade: '大人', password: 'password123' }, owner);
+  const bc = (await http('POST', '/api/login', { loginId: 'adult2', password: 'password123' })).cookie;
+  const adm0 = (await http('GET', '/api/admin/reading', null, owner)).data;
+  const suzuki = adm0.adults.find(x => x.name === '鈴木');
+  assert.ok(suzuki && adm0.adults.some(x => x.name === '佐藤'));
+  assert.equal((await http('POST', '/api/admin/reading/units', { grade: '大人', userId: 999999, text: 'Hi.\nやあ。' }, owner)).status, 400);
+  const own = await http('POST', '/api/admin/reading/units', { grade: '大人', userId: suzuki.id, title: '鈴木さんの文', text: 'Could you tell me the way to the station?\n駅への道を教えていただけますか？\nI have a meeting at ten.\n10時に会議があります。' }, owner);
+  assert.equal(own.status, 201);
+  assert.equal((await http('GET', '/api/reading/units', null, bc)).data.units[0].title, '鈴木さんの文', '本人には見える');
+  assert.ok(!(await http('GET', '/api/reading/units', null, ac)).data.units.some(u => u.title === '鈴木さんの文'), 'ほかの大人には見えない');
+  assert.match((await http('POST', '/api/reading/practice', { unitId: own.data.id, score: 95, seconds: 3 }, ac)).data.error, /見つかりません/);
+  assert.equal((await http('GET', '/api/admin/reading', null, owner)).data.units.find(u => u.id === own.data.id).userName, '鈴木');
   // 練習 → テスト（ポイントは生徒と同じ）
   for (const ja of [false, true]) await http('POST', '/api/reading/practice', { unitId: us[0].id, score: 95, seconds: 3, jaOnly: ja }, ac);
   const t = (await http('POST', '/api/reading/test', { unitId: us[0].id, score: 95, seconds: 3 }, ac)).data;

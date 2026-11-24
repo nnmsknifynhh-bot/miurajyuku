@@ -25,34 +25,38 @@
     // ── 単元を追加・直す ──
     const fs = section('📖 単元を登録する', '英語の行のすぐ下に、その日本語訳の行を書いてください。行の頭の「Jin:」のような話す人の名前は、読まない・数えない部分になります。教科書の本文は塾の中だけで使ってください。');
     const gsel = el('select'); d.grades.forEach(g => { const o = el('option', null, g); o.value = g; gsel.append(o); }); gsel.value = '中3';
-    const title = el('input'); title.placeholder = '単元の名前（例：Unit 1 Part 1）。大人は空なら「11/24の週」'; title.maxLength = 60;
+    const title = el('input'); title.placeholder = '単元の名前（例：Unit 1 Part 1）。大人は空なら「11/24の文」'; title.maxLength = 60;
+    // 大人英会話：だれ用の文か（1人ずつ自由に入れられる）
+    const psel = el('select'); [['', '👥 大人みんな'], ...(d.adults || []).map(a => [String(a.id), '👤 ' + a.name + 'さんだけ'])].forEach(([v, t]) => { const o = el('option', null, t); o.value = v; psel.append(o); });
+    const syncP = () => { psel.hidden = gsel.value !== '大人'; };
     const ta = el('textarea', 'gb-out'); ta.rows = 12; ta.placeholder = "Jin: I'm sorry I'm late.\n遅れてごめんなさい。\nSho: Don't worry. We've just arrived, too.\n気にしないで。ぼくたちもちょうど着いたところだよ。";
     const pv = el('p', 'muted');
     const upd = () => { const ls = parse(ta.value), w = ls.reduce((n, l) => n + wordsOf(l.en).length, 0); pv.textContent = ls.length ? `${ls.length}行・${w}語 → ${gsel.value}の制限時間 ${mmss(limitOf(w, gsel.value))}${ls.some(l => !l.ja) ? '（訳がない行があります）' : ''}` : ''; };
-    ta.oninput = gsel.onchange = upd;
+    ta.oninput = upd; gsel.onchange = () => { upd(); syncP(); }; syncP();
     let editing = null;
     const save = el('button', 'btn', '登録する'), cancel = el('button', 'btn secondary', 'やめる'); cancel.hidden = true;
-    const row = el('div', 'gb-row'); row.append(gsel, title);
+    const row = el('div', 'gb-row'); row.append(gsel, psel, title);
     fs.append(row, ta, pv, (() => { const r = el('div', 'gb-row'); r.append(save, cancel); return r; })());
-    cancel.onclick = () => { editing = null; save.textContent = '登録する'; cancel.hidden = true; ta.value = ''; title.value = ''; upd(); };
+    cancel.onclick = () => { editing = null; save.textContent = '登録する'; cancel.hidden = true; ta.value = ''; title.value = ''; psel.value = ''; upd(); };
     save.onclick = async () => {
       try {
-        if (editing) await api('PATCH', `/api/admin/reading/units/${editing}`, { grade: gsel.value, title: title.value, text: ta.value });
-        else await api('POST', '/api/admin/reading/units', { grade: gsel.value, title: title.value, text: ta.value });
+        const body = { grade: gsel.value, title: title.value, text: ta.value, userId: gsel.value === '大人' && psel.value ? Number(psel.value) : null };
+        if (editing) await api('PATCH', `/api/admin/reading/units/${editing}`, body);
+        else await api('POST', '/api/admin/reading/units', body);
         toast(editing ? '直しました' : '登録しました'); load(root, { api, toast });
       } catch (e) { toast(e.message); }
     };
 
     // ── 単元の一覧 ──
-    const ls = section('📚 登録した単元', '生徒は、自分の学年の単元だけ練習できます（先生・オーナーは全部）。');
+    const ls = section('📚 登録した単元', '生徒は、自分の学年の単元だけ練習できます（小学生は中1も。大人は「自分だけ」の文と「大人みんな」の文。先生・オーナーは全部）。');
     const tw = el('div', 'table-wrap'); ls.append(tw);
     const t = el('table', 'logs'); const h = el('tr'); ['学年', '単元', '語数', '制限時間', '', ''].forEach(x => h.append(el('th', null, x))); t.append(el('thead')); t.firstChild.append(h);
     const tb = el('tbody');
     for (const u of d.units) {
       const tr = el('tr'); if (!u.active) tr.style.opacity = '.5';
-      [u.grade, u.title, `${u.words}語`, mmss(u.limit)].forEach(v => tr.append(el('td', null, v)));
+      [u.grade + (u.grade === '大人' ? (u.userName ? `（${u.userName}さん）` : '（みんな）') : ''), u.title, `${u.words}語`, mmss(u.limit)].forEach(v => tr.append(el('td', null, v)));
       const a = el('td'); const eb = el('button', 'btn small secondary', '直す');
-      eb.onclick = () => { editing = u.id; gsel.value = u.grade; title.value = u.title; ta.value = toText(u.lines); save.textContent = '直す'; cancel.hidden = false; upd(); fs.scrollIntoView({ behavior: 'smooth' }); };
+      eb.onclick = () => { editing = u.id; gsel.value = u.grade; psel.value = u.userId ? String(u.userId) : ''; syncP(); title.value = u.title; ta.value = toText(u.lines); save.textContent = '直す'; cancel.hidden = false; upd(); fs.scrollIntoView({ behavior: 'smooth' }); };
       const hb = el('button', 'btn small secondary', u.active ? 'かくす' : '出す');
       hb.onclick = async () => { try { await api('PATCH', `/api/admin/reading/units/${u.id}`, { active: !u.active }); load(root, { api, toast }); } catch (e) { toast(e.message); } };
       a.append(eb, hb); tr.append(a);
