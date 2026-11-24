@@ -499,14 +499,118 @@
   }
   const TALL_HAIR = new Set(['spiky', 'gold', 'regent', 'mohawk', 'afro', 'bun']);
 
+  // ───────── 高いアイテムの演出（動きは小さめ・ゆっくり。すわっているときは、もっと控えめ） ─────────
+  // 周期 period 秒に1回、0〜1〜0 でふくらむ値（dur は光っている長さの割合）
+  const pulse = (t, period, dur = 0.15, off = 0) => { const ph = ((t + off) % period) / period; return ph < dur ? Math.sin(ph / dur * Math.PI) : 0; };
+  function sparkle(ctx, x, y, r, a, color = '#fff') { // 4本の光
+    ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = color; ctx.beginPath();
+    ctx.moveTo(x, y - r); ctx.lineTo(x + r * 0.25, y - r * 0.25); ctx.lineTo(x + r, y); ctx.lineTo(x + r * 0.25, y + r * 0.25);
+    ctx.lineTo(x, y + r); ctx.lineTo(x - r * 0.25, y + r * 0.25); ctx.lineTo(x - r, y); ctx.lineTo(x - r * 0.25, y - r * 0.25); ctx.fill(); ctx.restore();
+  }
+  function glint(ctx, x, y, fx, period, off = 0) { const k = pulse(fx.t, period, 0.12, off); if (k > 0) sparkle(ctx, x, y, 3 + k * 4, k); }
+  function drawHeadItem(ctx, item, x, by, fx) {
+    const t = fx.t, hy = by - 24;
+    if (item === '🌟') { // スターのかんむり：ゆっくり回って、ときどきキラッ
+      ctx.save(); ctx.translate(x, hy); ctx.scale(Math.max(0.25, Math.abs(Math.cos(t * 1.2))), 1);
+      ctx.font = '16px sans-serif'; ctx.fillText(item, 0, 0); ctx.restore();
+      glint(ctx, x + 6, hy - 6, fx, 3);
+      return;
+    }
+    if (item === '🌈') { // にじのわっか：頭の上に浮かぶ虹色のわっか
+      const fy = by - 27 + Math.sin(t * 2) * 1.5;
+      ['#ff6b6b', '#ffa94d', '#ffd43b', '#69db7c', '#4dabf7', '#b197fc'].forEach((c, i) => {
+        ctx.strokeStyle = c; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.ellipse(x, fy, 11 - i * 0.9, 3.6 - i * 0.3, 0, 0, Math.PI * 2); ctx.stroke();
+      });
+      ctx.fillStyle = 'rgba(255,255,255,.25)'; ctx.beginPath(); ctx.ellipse(x, fy, 11, 4, 0, 0, Math.PI * 2); ctx.fill();
+      return;
+    }
+    ctx.font = '16px sans-serif'; ctx.fillText(item, x, hy);
+    if (item === '💎') { // ダイヤ：光の線と小さな✨
+      const k = pulse(t, 2.5, 0.2);
+      if (k > 0) { ctx.save(); ctx.globalAlpha = k * 0.8; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x - 6 + k * 10, hy - 6); ctx.lineTo(x - 10 + k * 10, hy + 6); ctx.stroke(); ctx.restore(); }
+      if (!fx.seated) for (let i = 0; i < 3; i++) { const a = pulse(t, 3, 0.25, i * 1); if (a > 0) sparkle(ctx, x + [-13, 12, 9][i], hy + [-4, -9, 6][i], 2.5 + a * 2, a, '#e3f2ff'); }
+    }
+  }
+  // 宇宙服のヘルメット（頭のまわりのガラス）
+  function helmetFx(ctx, x, by, fx) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(180,220,255,.22)'; ctx.strokeStyle = 'rgba(220,235,255,.95)'; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.arc(x, by - 13, 13, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    const k = pulse(fx.t, 3.5, 0.25);
+    ctx.strokeStyle = `rgba(255,255,255,${0.55 + k * 0.45})`; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x, by - 13, 9.5, Math.PI * 1.15, Math.PI * 1.45); ctx.stroke();
+    ctx.restore();
+  }
+  // ドラゴン：ときどき口から小さな🔥
+  function dragonFx(ctx, x, by, fx) {
+    if (fx.seated || fx.dir === 'up') return;
+    const k = pulse(fx.t, 5, 0.18);
+    if (k <= 0) return;
+    const d = fx.dir === 'left' ? -1 : fx.dir === 'right' ? 1 : 0;
+    ctx.save(); ctx.globalAlpha = Math.min(1, k * 1.4); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = `${8 + k * 8}px sans-serif`; ctx.fillText('🔥', x + d * (12 + k * 8), by - 6 + (d ? 0 : 6 + k * 6));
+    ctx.restore();
+  }
+  // 歩いたあとに残るもの（足元のうしろ側）
+  function trailFx(ctx, x, y, fx, kind) {
+    if (!fx.moving || fx.seated) return;
+    const back = fx.dir === 'left' ? 1 : fx.dir === 'right' ? -1 : 0, backY = fx.dir === 'up' ? 1 : fx.dir === 'down' ? -1 : 0;
+    const RB = ['#ff6b6b', '#ffd43b', '#69db7c', '#4dabf7', '#b197fc'];
+    for (let i = 0; i < 4; i++) {
+      const ph = ((fx.t * 2 + i / 4) % 1); // 0→1 で遠ざかって消える
+      const px = x + back * (6 + ph * 16) + Math.sin(i * 7 + fx.t) * 2, py = y + 8 + backY * (4 + ph * 12) - ph * 4;
+      ctx.save(); ctx.globalAlpha = (1 - ph) * 0.7;
+      if (kind === 'smoke') { ctx.fillStyle = '#b8b8c4'; ctx.beginPath(); ctx.arc(px, py, 3 + ph * 5, 0, Math.PI * 2); ctx.fill(); }
+      else sparkle(ctx, px, py - 4, 2.5 + (1 - ph) * 2, (1 - ph) * 0.9, RB[i % RB.length]);
+      ctx.restore();
+    }
+  }
+  // ペット：高いペットは大きめ・それぞれの動き
+  function drawPet(ctx, pet, x, y, moving, t, fx) {
+    const hop = moving ? Math.abs(Math.sin(t * 10)) * -4 : Math.sin(t * 2) * 1;
+    ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    if (pet === '🦅') { // わし：肩のあたりを飛ぶ
+      const fl = Math.sin(t * 6);
+      ctx.translate(x + 16 + Math.sin(t * 1.3) * 3, y - 22 + fl * 2); ctx.scale(1, 0.85 + Math.abs(fl) * 0.15);
+      ctx.font = '19px sans-serif'; ctx.fillText(pet, 0, 0);
+    } else if (pet === '🐳') { // くじら：空中を泳いで、ときどき潮をふく
+      const wx = x + 22 + Math.sin(t * 0.9) * 3, wy = y - 6 + Math.sin(t * 1.8) * 3;
+      ctx.font = '19px sans-serif'; ctx.fillText(pet, wx, wy);
+      const k = pulse(fx.t, 5, 0.3);
+      if (k > 0 && !fx.seated) { ctx.globalAlpha = k; ctx.font = `${8 + k * 6}px sans-serif`; ctx.fillText('💦', wx - 2, wy - 12 - k * 6); }
+    } else if (pet === '🦕') { // 首長りゅう：大きめで、ゆっくりついて歩く
+      ctx.font = '24px sans-serif'; ctx.fillText(pet, x + 24 + Math.sin(t * 1.2) * 1.5, y + 1 + (moving ? Math.abs(Math.sin(t * 5)) * -2 : 0));
+    } else if (pet === '🦚') { // くじゃく：ときどき羽を広げてキラッ
+      const k = pulse(fx.t, 4.5, 0.3);
+      if (k > 0) { const gr = ctx.createRadialGradient(x + 20, y + 2, 1, x + 20, y + 2, 14); gr.addColorStop(0, `rgba(80,200,160,${k * 0.6})`); gr.addColorStop(1, 'rgba(80,200,160,0)'); ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(x + 20, y + 2, 14, 0, Math.PI * 2); ctx.fill(); }
+      ctx.translate(x + 20, y + 4 + hop); ctx.scale(1 + k * 0.35, 1 + k * 0.35);
+      ctx.font = '18px sans-serif'; ctx.fillText(pet, 0, 0);
+      if (k > 0.5) sparkle(ctx, 7, -9, 4, k);
+    } else {
+      ctx.font = pet === '🦁' ? '19px sans-serif' : '16px sans-serif'; // ライオンは少し大きめ
+      ctx.fillText(pet, x + 19, y + 4 + hop);
+    }
+    ctx.restore();
+  }
   // 手に持つアイテム：体の横に大きめに。杖（⚡・🌠）は棒の先にのせて、ときどきピカッと光る
   const STAFF = { '⚡': { glow: '255,214,10', spark: '#ffe066' }, '🌠': { glow: '180,200,255', spark: '#fff3b0' } };
-  function drawHandItem(ctx, item, x, by, dir, t) {
+  function drawHandItem(ctx, item, x, by, dir, t, seated = false) {
     const side = dir === 'left' ? 1 : -1; // 体の横
     const hx = x + side * 17, sway = Math.sin(t * 2) * 0.05;
     const st = STAFF[item];
     ctx.save();
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    if (item === '🏆') { // 自習王のトロフィー：金色に光って、ときどき紙ふぶき
+      ctx.translate(hx, by + 2);
+      const gr = ctx.createRadialGradient(0, -2, 1, 0, -2, 16); gr.addColorStop(0, `rgba(255,215,64,${0.35 + Math.sin(t * 2.5) * 0.12})`); gr.addColorStop(1, 'rgba(255,215,64,0)');
+      ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(0, -2, 16, 0, Math.PI * 2); ctx.fill();
+      ctx.font = '20px sans-serif'; ctx.fillText(item, 0, 0);
+      const ph = (t % 6) / 6;
+      if (ph < 0.25 && !seated) { const k = ph / 0.25, C = ['#ff8fb1', '#ffd43b', '#4dabf7', '#69db7c', '#b197fc'];
+        for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; ctx.globalAlpha = 1 - k; ctx.fillStyle = C[i % C.length];
+          ctx.fillRect(Math.cos(a) * (6 + k * 16), -12 + Math.sin(a) * (4 + k * 8) + k * k * 14, 3, 2); } }
+      ctx.restore(); return;
+    }
     if (!st) { // ふつうのアイテム（剣・盾など）：1.3倍くらい
       ctx.translate(hx, by + 2); ctx.rotate(side * -0.35 + sway);
       ctx.font = '20px sans-serif'; ctx.fillText(item, 0, 0); ctx.restore(); return;
@@ -523,7 +627,7 @@
     const gr = ctx.createRadialGradient(0, top, 1, 0, top, 14 + flash * 10);
     gr.addColorStop(0, `rgba(${st.glow},${glow})`); gr.addColorStop(1, `rgba(${st.glow},0)`);
     ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(0, top, 14 + flash * 10, 0, Math.PI * 2); ctx.fill();
-    if (flash > 0) { // 火花
+    if (flash > 0 && !seated) { // 火花（すわっているときは光るだけ）
       ctx.strokeStyle = st.spark; ctx.lineWidth = 2;
       for (let i = 0; i < 6; i++) {
         const a = i / 6 * Math.PI * 2 + 0.3, r1 = 11 + flash * 4, r2 = r1 + 4 + flash * 6;
@@ -536,8 +640,14 @@
   function drawAvatar(ctx, u, x, y, opts = {}) {
     const t = opts.time || 0;
     const seated = !!u.seat;
+    const eq0 = u.equip || {};
+    const floaty = eq0.clothes === 'astronaut' && !seated && !eq0.costume; // 宇宙服：ふわふわ浮く
     const bob = u.moving && !seated ? Math.sin(t * 14) * 1.5 : 0;
-    const by = y + bob - (seated ? 3 : 0);
+    const by = y + bob - (seated ? 3 : 0) - (floaty ? 3 + Math.sin(t * 2.2) * 2 : 0);
+    const fx = { t: t + ((u.id || 0) % 97) * 0.37, seated, moving: !!u.moving, dir: u.dir }; // 高いアイテムの演出（人ごとに少しずらす）
+    // 動いたあとに残るもの（忍者の煙・ユニコーンの光）
+    if (eq0.clothes === 'ninja' && !eq0.costume) trailFx(ctx, x, y, fx, 'smoke');
+    if (eq0.costume === 'unicorn') trailFx(ctx, x, y, fx, 'rainbow');
 
     ctx.fillStyle = 'rgba(0,0,0,.2)';
     ctx.beginPath(); ctx.ellipse(x, y + 12, 11, 4, 0, 0, Math.PI * 2); ctx.fill();
@@ -558,7 +668,12 @@
     const clothes = staff ? (eq.clothes || 'suit') : !costume && eq.clothes ? eq.clothes : null; // 先生・オーナーはふだんスーツ（Ms. Miura の季節の衣装だけ例外）
     const bodyH = seated ? 13 : 15;
     // ヒーローのマント（体の後ろ）
-    if (clothes === 'king' && u.dir !== 'down') { ctx.fillStyle = '#b71c1c'; ctx.beginPath(); ctx.moveTo(x - 10, by - 5); ctx.lineTo(x + 10, by - 5); ctx.lineTo(x + 14, by + 14); ctx.lineTo(x - 14, by + 14); ctx.fill(); ctx.fillStyle = '#fff'; for (let i = -12; i <= 12; i += 4) { ctx.beginPath(); ctx.arc(x + i, by + 14, 1.6, 0, Math.PI * 2); ctx.fill(); } }
+    if (clothes === 'king' && u.dir !== 'down') { // 王様のマント：歩くとひらひら
+      const fl = u.moving ? Math.sin(t * 9) * 3 : Math.sin(t * 1.5) * 0.8, back = u.dir === 'left' ? 1 : u.dir === 'right' ? -1 : 0;
+      ctx.fillStyle = '#b71c1c'; ctx.beginPath(); ctx.moveTo(x - 10, by - 5); ctx.lineTo(x + 10, by - 5);
+      ctx.quadraticCurveTo(x + 15 + back * 3, by + 5, x + 14 + back * 5 + fl, by + 14); ctx.lineTo(x - 14 + back * 5 - fl, by + 14);
+      ctx.quadraticCurveTo(x - 15 + back * 3, by + 5, x - 10, by - 5); ctx.fill();
+      ctx.fillStyle = '#fff'; for (let i = -12; i <= 12; i += 4) { ctx.beginPath(); ctx.arc(x + i + back * 5 + (i / 12) * fl, by + 14, 1.6, 0, Math.PI * 2); ctx.fill(); } }
     if (clothes === 'hero' && u.dir !== 'down') { ctx.fillStyle = '#c62828'; ctx.beginPath(); ctx.moveTo(x - 9, by - 4); ctx.lineTo(x + 9, by - 4); ctx.lineTo(x + 12, by + 13); ctx.lineTo(x - 12, by + 13); ctx.fill(); }
     // 髪型（頭のうしろに来る部分：ポニーテール・ツインテール・ロング・アフロ）
     const hair = !costume && eq.hair ? eq.hair : null; // 先生・オーナーも、管理画面で決めた髪型
@@ -583,16 +698,17 @@
       ctx.fillStyle = 'rgba(255,120,120,.35)';
       if (u.dir === 'down') { ctx.fillRect(x - 8, by - 8, 3, 2); ctx.fillRect(x + 5, by - 8, 3, 2); }
     }
+    if (clothes === 'astronaut') helmetFx(ctx, x, by, fx);
+    if (eq.costume === 'dragon') dragonFx(ctx, x, by, fx);
+    if (hair === 'gold') glint(ctx, x - 3, by - 22, fx, 3, 0.5);
     // 着せかえ（眼鏡・帽子・手に持つもの・ペット）。着ぐるみのときは帽子をかくす
     if (u.equip) {
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      if (eq.face && u.dir !== 'up') { ctx.font = '12px sans-serif'; ctx.fillText(eq.face, x, by - 11); }
-      if (eq.head && !costume) { ctx.font = '16px sans-serif'; ctx.fillText(eq.head, x, by - 24); }
-      if (eq.hand) drawHandItem(ctx, eq.hand, x, by, u.dir, t);
-      if (eq.pet) {
-        const hop = u.moving ? Math.abs(Math.sin(t * 10)) * -4 : Math.sin(t * 2) * 1;
-        ctx.font = '16px sans-serif'; ctx.fillText(eq.pet, x + 19, y + 4 + hop);
-      }
+      ctx.fillStyle = '#000'; ctx.globalAlpha = 1; // 絵文字がうすくならないように（前に使った半とうめいの色をリセット）
+      if (eq.face && u.dir !== 'up') { ctx.font = '12px sans-serif'; ctx.fillText(eq.face, x, by - 11); if (eq.face === '🎭') glint(ctx, x + 3, by - 13, fx, 4, 1.1); }
+      if (eq.head && !costume) drawHeadItem(ctx, eq.head, x, by, fx);
+      if (eq.hand) drawHandItem(ctx, eq.hand, x, by, u.dir, t, seated);
+      if (eq.pet) drawPet(ctx, eq.pet, x, y, u.moving, t, fx);
       ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
     }
     // 誕生日の子が席にすわっていたら、席に🎈風船
