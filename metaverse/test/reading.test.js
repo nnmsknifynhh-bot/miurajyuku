@@ -199,7 +199,7 @@ test('先生・オーナーの画面：生徒がいま音読・ライティン�
   conns.forEach(s => s.disconnect());
 });
 
-test('大人（大人英会話）：テスト教室だけ入れる・毎週の文（新しい週が上・名前は自動）・ポイントと自習の記録なし', async () => {
+test('大人（大人英会話）：テスト教室だけ入れる・毎週の文（新しい週が上・名前は自動）・高校生と同じポイント・ライティングなし・入室前は漢字と英単語', async () => {
   const P = require('../server/permissions.js');
   const SM = require('../public/shared/map.js');
   const G = require('../server/ganbari.js');
@@ -217,15 +217,32 @@ test('大人（大人英会話）：テスト教室だけ入れる・毎週の�
   await http('POST', '/api/admin/reading/units', { grade: '大人', title: 'Week 2', text: 'I went hiking.\nハイキングに行きました。' }, owner);
   const us = (await http('GET', '/api/reading/units', null, ac)).data.units;
   assert.deepEqual(us.map(u => u.title), ['Week 2', `${Number(G.jst().day.slice(5, 7))}/${Number(G.jst().day.slice(8))}の週`]);
-  // 練習 → テスト（ポイントはなし）
+  // 練習 → テスト（ポイントは生徒と同じ）
   for (const ja of [false, true]) await http('POST', '/api/reading/practice', { unitId: us[0].id, score: 95, seconds: 3, jaOnly: ja }, ac);
   const t = (await http('POST', '/api/reading/test', { unitId: us[0].id, score: 95, seconds: 3 }, ac)).data;
-  assert.equal(t.passed, true); assert.equal(t.points, 0);
-  // 生徒向けの案内・漢字テスト・朝の写真・がんばりの一覧はなし。学年は上がらない
-  const me = (await http('GET', '/api/me', null, ac)).data;
-  assert.ok(!G.studentSummary().some(s => s.name === '佐藤'));
+  assert.equal(t.passed, true); assert.equal(t.points, 5);
+  // ライティングはなし
+  const jpg = Buffer.concat([Buffer.from([0xff, 0xd8]), Buffer.alloc(2000, 7)]);
+  const wr = await fetch(`${base}/api/reading/writing?unitId=${us[0].id}&mode=practice`, { method: 'POST', headers: { 'Content-Type': 'image/jpeg', Cookie: ac }, body: jpg }).then(x => x.json());
+  assert.match(wr.error, /ライティングはありません/);
+  // 高校生と同じ数え方（週の🔥・メダル）・がんばりの一覧に出る。学年は上がらない
+  assert.equal(G.groupOf('大人'), 'hs'); assert.equal(G.isHS('大人'), true);
+  assert.ok(G.studentSummary().some(s => s.name === '佐藤' && s.hs));
   assert.equal(G.NEXT_GRADE['大人'], undefined); assert.equal(G.NEXT_GRADE['高3'], '卒業');
-  assert.equal(require('../server/kanken.js').required({ id: 1, role: 'student', grade: '大人' }), false);
-  assert.equal(require('../server/onboard.js').status({ id: r.data.user.id, role: 'student', grade: '大人', created_at: new Date().toISOString() }).firstDay, null);
-  assert.ok(me);
+  // 入室前：漢字（準2級・2級）→ 英単語
+  const K = require('../server/kanken.js');
+  await http('PATCH', '/api/admin/kanken/config', { enabled: true }, owner);
+  assert.deepEqual(K.levelsFor('大人'), ['準2級', '2級']);
+  assert.equal((await http('GET', '/api/quiz/status', null, ac)).data.required, true);
+  const q1 = (await http('POST', '/api/quiz/question', null, ac)).data;
+  assert.equal(q1.kind, 'kanji'); assert.equal(q1.step, 1);
+  const a1 = (await http('POST', '/api/quiz/answer', { choice: 0 }, ac)).data;
+  assert.equal(a1.more, true, '次は英単語');
+  assert.equal((await http('GET', '/api/quiz/status', null, ac)).data.required, true, 'まだ終わっていない');
+  const q2 = (await http('POST', '/api/quiz/question', null, ac)).data;
+  assert.equal(q2.kind, 'word'); assert.equal(q2.level, '英単語'); assert.ok(/^[A-Za-z ]+$/.test(q2.word), q2.word);
+  const a2 = (await http('POST', '/api/quiz/answer', { choice: 1 }, ac)).data;
+  assert.equal(a2.more, false);
+  assert.equal((await http('GET', '/api/quiz/status', null, ac)).data.required, false, '2問でおわり');
+  await http('PATCH', '/api/admin/kanken/config', { enabled: false }, owner);
 });

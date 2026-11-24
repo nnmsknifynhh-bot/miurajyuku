@@ -50,7 +50,10 @@
     let q;
     try { q = await api('POST', '/api/quiz/question'); } catch (e) { return; }
     const box = $('#quiz');
-    $('#quiz-level').textContent = `漢検 ${q.level}`;
+    const word = q.kind === 'word'; // 大人：漢字のあとに英単語も1問
+    $('#quiz-level').textContent = (word ? '英単語' : `漢検 ${q.level}`) + (q.total ? `（${q.step}/${q.total}）` : '');
+    $('#quiz-title').textContent = word ? '入室の前に、英単語を1問！' : q.total ? '入室の前に、漢字の読みと英単語を1問ずつ！' : '入室の前に、漢字の読みを1問！';
+    $('#quiz-q').textContent = word ? '意味はどれ？' : '読み方はどれ？';
     $('#quiz-word').textContent = q.word;
     const choices = $('#quiz-choices'); choices.textContent = '';
     $('#quiz-result').hidden = true; $('#quiz-enter').hidden = true;
@@ -65,11 +68,12 @@
           choices.children[r.answerIndex].classList.add('ok');
           if (!r.correct) b.classList.add('ng');
           const res = $('#quiz-result');
-          res.textContent = r.correct ? '🎉 正解！' : `ざんねん！ 正しい読みは「${r.answer}」`;
+          res.textContent = r.correct ? '🎉 正解！' : `ざんねん！ 正しい${word ? '意味' : '読み'}は「${r.answer}」`;
           res.style.color = r.correct ? 'var(--success)' : 'var(--danger)';
           res.hidden = false;
           const enter = $('#quiz-enter'); enter.hidden = false; enter.focus();
-          enter.onclick = () => { box.hidden = true; resolve(); };
+          enter.textContent = r.more ? '次の問題へ' : '入室する';
+          enter.onclick = () => { box.hidden = true; if (r.more) runQuiz().then(resolve); else resolve(); };
         };
         choices.append(b);
       });
@@ -815,7 +819,7 @@
   }
   let funBusy = false, lastFunAt = 0;
   async function refreshFun(force) {
-    if (!state.user || state.user.role !== 'student' || state.user.grade === '大人') { $('#fun-chip').hidden = true; return; } // 大人英会話は季節のクエストなし
+    if (!state.user || state.user.role !== 'student') { $('#fun-chip').hidden = true; return; }
     if (funBusy || (!force && Date.now() - lastFunAt < 50_000)) return;
     funBusy = true; lastFunAt = Date.now();
     try {
@@ -1150,7 +1154,7 @@
   }
 
   // ── 左上：生徒・保護者は今のポイント（🎁 120pt ⬆/⏸）。先生・オーナーは自習室ぜんぶの生徒数 ──
-  const ptsMode = () => !!(state.user && (state.user.role === 'student' || state.user.role === 'parent') && !state.user.trialUntil && state.user.grade !== '大人'); // 大人英会話はポイントなし
+  const ptsMode = () => !!(state.user && (state.user.role === 'student' || state.user.role === 'parent') && !state.user.trialUntil);
   let earningUntil = 0;
   function renderPts() {
     const chip = $('#pts-chip'), on = ptsMode() && state.pts;
@@ -1769,7 +1773,7 @@
   };
 
   // ❓ ようこそツアー：はじめてログインしたときに1回だけ（ほかの画面が閉じてから）
-  const tourKind = () => isStaff() ? 'staff' : isParent() ? 'parent' : /^小/.test(state.user.grade || '') ? 'es' : /^高/.test(state.user.grade || '') ? 'hs' : 'jh';
+  const tourKind = () => isStaff() ? 'staff' : isParent() ? 'parent' : /^小/.test(state.user.grade || '') ? 'es' : /^高|^大人$/.test(state.user.grade || '') ? 'hs' : 'jh';
   function autoTour(tries = 0) {
     if (!state.onboard || state.onboard.tourSeen || !window.Tour) return;
     if (document.querySelector('dialog[open]') || !$('#welcome-card').hidden) { if (tries < 60) setTimeout(() => autoTour(tries + 1), 1000); return; }

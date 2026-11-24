@@ -13,7 +13,7 @@ const SM = require('../public/shared/map.js');
 const { isHoliday } = require('./holidays');
 
 const TZ = 'Asia/Tokyo';
-// 「大人」＝大人英会話の生徒（スピーキング・ライティング教室だけ。自習の記録・ポイントなし。学年は上がらない）
+// 「大人」＝大人英会話の生徒（スピーキング・ライティング教室だけ。ポイント・🔥・クエストは高校生と同じ数え方。学年は上がらない）
 const GRADES = ['小1', '小2', '小3', '小4', '小5', '小6', '中1', '中2', '中3', '高1', '高2', '高3', '大人'];
 const ADULT = '大人';
 const isAdult = (grade) => grade === ADULT;
@@ -115,13 +115,13 @@ const weekdayOf = (day) => new Date(day + 'T00:00:00Z').getUTCDay();
 
 // ───────── 設定 ─────────
 const HS_GRADES = ['高1', '高2', '高3'];
-const isHS = (grade) => HS_GRADES.includes(grade);
+const isHS = (grade) => HS_GRADES.includes(grade) || grade === '大人'; // 大人も高校生と同じ（週の🔥・メダル）
 const HS_TREE = { name: '高校生の木', grades: HS_GRADES };
 const ES_GRADES = ['小1', '小2', '小3', '小4', '小5', '小6'];
 const isES = (grade) => ES_GRADES.includes(grade);
 // 数え方のグループ：'hs'＝高校生、'es'＝小学生、null＝中学生
 // 数え方のグループ：'hs3'＝高3（「高3は別」にしたときだけ別の数え方）、'hs'＝高1・高2（と高3）、'es'＝小学生、null＝中学生
-const groupOf = (grade) => grade === '高3' ? 'hs3' : HS_GRADES.includes(grade) ? 'hs' : ES_GRADES.includes(grade) ? 'es' : null;
+const groupOf = (grade) => grade === '高3' ? 'hs3' : (HS_GRADES.includes(grade) || grade === '大人') ? 'hs' : ES_GRADES.includes(grade) ? 'es' : null;
 // そのグループの数え方の設定（高3は「別にする」がオフなら高校生と同じ）
 const rulesSrc = (c, group) => group === 'hs3' ? (c.hs3 && c.hs3.separate ? c.hs3 : c.hs) : group === 'hs' ? c.hs : group === 'es' ? c.es : c;
 const ES_TREE = { name: '小学生の木', grades: ES_GRADES };
@@ -558,7 +558,7 @@ function tick(online, opt = {}) {
   db.exec('BEGIN');
   try {
     for (const p of online.values()) {
-      if (p.user.role !== 'student' || p.user.trial_until || isAdult(p.user.grade) || !SM.isStudyRoom(p.room) || p.away) continue; // 体験中の子・大人は記録しない
+      if (p.user.role !== 'student' || p.user.trial_until || !SM.isStudyRoom(p.room) || p.away) continue; // 体験中の子は記録しない
       if (c.requireSeat && !p.seat) continue;
       if (c.requireCamera && opt.photosOn && !p.studyCam) continue;
       const r = rules[groupOf(p.user.grade) || 'jh'];
@@ -896,7 +896,7 @@ function studentSummary(date = new Date()) {
   const c = getConfig();
   const today = jst(date).day;
   const term = termOf(today, c);
-  return db.prepare("SELECT id, display_name AS name, grade FROM users WHERE role = 'student' AND is_active = 1 AND trial_until IS NULL AND COALESCE(grade, '') != '大人' ORDER BY grade, display_name").all().map(s => {
+  return db.prepare("SELECT id, display_name AS name, grade FROM users WHERE role = 'student' AND is_active = 1 AND trial_until IS NULL ORDER BY grade, display_name").all().map(s => {
     const pt = points(s.id, date);
     return {
       ...s, today: dayTotal(s.id, today), todayAll: dayAll(s.id, today), term: term ? minutesBetween(s.id, term.start, term.end) : 0,

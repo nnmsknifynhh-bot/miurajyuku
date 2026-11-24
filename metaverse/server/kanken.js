@@ -146,7 +146,7 @@ const SAMPLE = {
 // ───────── 設定 ─────────
 const ES_LEVELS = ['6級', '5級']; // 小5・小6は6級・5級
 const LOW_LEVELS = { '小1': ['9級'], '小2': ['9級'], '小3': ['9級', '8級'], '小4': ['8級', '7級'] }; // 前の学年の復習＋今の学年（小1は9級だけ）
-const DEFAULT_LEVELS = { ...LOW_LEVELS, '小5': ES_LEVELS, '小6': ES_LEVELS, '中1': ['5級', '4級'], '中2': ['4級', '3級'], '中3': ['3級', '準2級'] };
+const DEFAULT_LEVELS = { ...LOW_LEVELS, '小5': ES_LEVELS, '小6': ES_LEVELS, '中1': ['5級', '4級'], '中2': ['4級', '3級'], '中3': ['3級', '準2級'], '大人': ['準2級', '2級'] };
 function getConfig() {
   let saved = {};
   try { saved = JSON.parse(getSetting('kanken', '{}')); } catch (e) { saved = {}; }
@@ -157,6 +157,10 @@ function getConfig() {
   if (saved.gradeLevels && !saved.esV2) { // 小1〜小4を学年に合った級（9〜7級）に変える（1回だけ）
     for (const [g, lv] of Object.entries(LOW_LEVELS)) saved.gradeLevels[g] = [...lv];
     saved.esV2 = true; setSetting('kanken', JSON.stringify(saved));
+  }
+  if (saved.gradeLevels && !saved.adultV1) { // 大人（大人英会話）を足す（1回だけ）
+    if (!saved.gradeLevels['大人']) saved.gradeLevels['大人'] = [...DEFAULT_LEVELS['大人']];
+    saved.adultV1 = true; setSetting('kanken', JSON.stringify(saved));
   }
   return { enabled: true, gradeLevels: DEFAULT_LEVELS, ...saved };
 }
@@ -189,7 +193,7 @@ function hasQuestions(levels) {
 }
 /** この生徒は、入室の前にテストが必要か */
 function required(user, { quickRejoin = false } = {}) {
-  if (!user || user.role !== 'student' || user.trial_until || user.grade === '大人') return false; // 体験中の子・大人はテストなし
+  if (!user || user.role !== 'student' || user.trial_until) return false; // 体験中の子はテストなし
   const c = getConfig();
   if (!c.enabled || quickRejoin) return false;
   if (!hasQuestions(levelsFor(user.grade, c))) return false; // 対象の学年でない・問題がない
@@ -198,7 +202,24 @@ function required(user, { quickRejoin = false } = {}) {
 }
 function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = crypto.randomInt(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
+// 大人（大人英会話）：漢字のあとに英単語も1問（保護者の「今日の5問」の英単語の問題を使う）
+const wordStep = new Map(); // userId -> true（漢字が終わって、次は英単語）
+function wordQuestion(user) {
+  const all = db.prepare("SELECT id, question, answer, wrong FROM parent_questions WHERE active = 1 AND subject = '英単語'").all();
+  if (!all.length) return null;
+  const recent = new Set(db.prepare("SELECT question_id FROM quiz_results WHERE user_id = ? AND level = '英単語' ORDER BY id DESC LIMIT 30").all(user.id).map(r => r.question_id));
+  const fresh = all.filter(q => !recent.has(q.id));
+  const pool = fresh.length ? fresh : all;
+  const q = pool[crypto.randomInt(pool.length)];
+  const wrong = JSON.parse(q.wrong).slice(0, 3);
+  const choices = shuffle([q.answer, ...wrong]);
+  const m = /「(.+?)」/.exec(q.question);
+  const word = m ? m[1] : q.question;
+  pending.set(user.id, { qid: q.id, choices, answer: q.answer, level: '英単語', word, at: Date.now() });
+  return { level: '英単語', word, choices, kind: 'word', step: 2, total: 2 };
+}
 function newQuestion(user) {
+  if (user.grade === '大人' && wordStep.get(user.id)) { const w = wordQuestion(user); if (w) return w; wordStep.delete(user.id); }
   const levels = levelsFor(user.grade);
   if (!levels.length) return null;
   // 最近答えた問題はなるべく出さない
@@ -210,7 +231,7 @@ function newQuestion(user) {
   const q = pool[crypto.randomInt(pool.length)];
   const choices = shuffle([q.answer, q.wrong1, q.wrong2, q.wrong3]);
   pending.set(user.id, { qid: q.id, choices, answer: q.answer, level: q.level, word: q.word, at: Date.now() });
-  return { level: q.level, word: q.word, choices };
+  return { level: q.level, word: q.word, choices, kind: 'kanji', ...(user.grade === '大人' ? { step: 1, total: 2 } : {}) };
 }
 function answer(user, choiceIndex) {
   const p = pending.get(user.id);
@@ -219,8 +240,11 @@ function answer(user, choiceIndex) {
   pending.delete(user.id);
   const correct = p.choices[choiceIndex] === p.answer;
   db.prepare('INSERT INTO quiz_results (user_id, question_id, level, correct, answered_at) VALUES (?, ?, ?, ?, ?)').run(user.id, p.qid, p.level, correct ? 1 : 0, now());
-  passedAt.set(user.id, Date.now());
-  return { correct, answer: p.answer, answerIndex: p.choices.indexOf(p.answer), word: p.word, level: p.level };
+  // 大人：漢字のあとは英単語（英単語の問題がなければ、ここでおわり）
+  let more = false;
+  if (user.grade === '大人' && p.level !== '英単語' && db.prepare("SELECT 1 FROM parent_questions WHERE active = 1 AND subject = '英単語' LIMIT 1").get()) { wordStep.set(user.id, true); more = true; }
+  else { wordStep.delete(user.id); passedAt.set(user.id, Date.now()); }
+  return { more, correct, answer: p.answer, answerIndex: p.choices.indexOf(p.answer), word: p.word, level: p.level };
 }
 
 // ───────── 管理画面 ─────────

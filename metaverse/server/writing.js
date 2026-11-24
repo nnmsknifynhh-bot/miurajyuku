@@ -120,6 +120,7 @@ function status(userId, unitId) {
 async function grade(user, unit, mode, buf) {
   const staff = user.role === 'owner' || user.role === 'teacher';
   if (!['practice', 'test'].includes(mode)) return { error: 'えらび方が正しくありません' };
+  if (user.grade === '大人') return { error: '大人英会話にはライティングはありません' };
   if (!staff) {
     const readOk = db.prepare('SELECT 1 FROM reading_tests WHERE user_id = ? AND unit_id = ? AND passed = 1').get(user.id, unit.id);
     if (!readOk) return { error: '先に、この単元の音読テストに合格してね' };

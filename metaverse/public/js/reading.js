@@ -135,7 +135,7 @@
         t.onclick = () => showUnit(u, 'test');
         btns.append(p, j, t);
         // ✍️ ライティング（音読テストに合格した単元）
-        if (u.test.passed || staff) {
+        if ((u.test.passed || staff) && u.grade !== '大人' && getUser().grade !== '大人') { // 大人英会話はライティングなし
           const wr = u.writing || {};
           const wp = el('button', 'btn small secondary', '✍️ 書く練習'); wp.type = 'button'; wp.onclick = () => showUnit(u, 'wPractice');
           const wt = el('button', 'btn small', '📝 ライティング'); wt.type = 'button';

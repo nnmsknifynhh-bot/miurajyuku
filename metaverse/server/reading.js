@@ -170,7 +170,7 @@ function recordTest(user, unitId, r) {
   const miss = Math.max(0, Math.round(Number(r.missing)) || 0);
   const passed = sc >= getConfig().passScore && sec <= v.limit && miss < MAX_MISSING;
   let points = 0;
-  if (passed && !before.p && user.role === 'student' && !user.trial_until && user.grade !== '大人') { // 大人はポイントなし
+  if (passed && !before.p && user.role === 'student' && !user.trial_until) {
     points = TEST_POINTS(attempt);
     const ins = db.prepare('INSERT OR IGNORE INTO bonus_points (user_id, reason, points, created_at) VALUES (?, ?, ?, ?)').run(user.id, `reading:${unitId}`, points, now());
     if (!ins.changes) points = 0;

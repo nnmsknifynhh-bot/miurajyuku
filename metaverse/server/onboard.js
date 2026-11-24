@@ -13,12 +13,11 @@ function row(userId) { return db.prepare('SELECT tour_seen_at, firstday_done_at 
 function status(user) {
   const r = row(user.id);
   let firstDay = null;
-  const adult = user.grade === '大人'; // 大人英会話：生徒向けの案内・初めてチャレンジはなし
-  if (user.role === 'student' && !adult && !r.firstday_done_at) {
+  if (user.role === 'student' && !r.firstday_done_at) {
     const created = Date.parse(user.created_at || '');
     if (Number.isFinite(created) && Date.now() - created < NEW_DAYS * 86400e3) firstDay = { minutes: FIRSTDAY_MINUTES, points: user.trial_until ? 0 : FIRSTDAY_POINTS };
   }
-  return { tourSeen: adult || !!r.tour_seen_at, firstDay };
+  return { tourSeen: !!r.tour_seen_at, firstDay };
 }
 function markTour(userId) {
   db.prepare('INSERT INTO onboard (user_id, tour_seen_at) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET tour_seen_at = COALESCE(onboard.tour_seen_at, excluded.tour_seen_at)').run(userId, now());

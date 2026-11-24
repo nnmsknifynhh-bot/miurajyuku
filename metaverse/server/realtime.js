@@ -516,7 +516,7 @@ function attach(httpServer) {
     p.streak = user.role === 'student' ? ganbari.streak(p.id) : user.role === 'parent' ? parents.visitStreak(p.id) : 0;
     if (visit) { p.visitEndsAt = visit.endsAt; p.childIds = parents.childIds(p.id); }
     if (user.trial_until) p.referrerId = referral.referrerOf(p.id); // 体験中：招待してくれた子の名前だけ見える
-    p.today10 = user.role === 'student' && user.grade !== '大人' ? shownToday(ganbari.dayAll(p.id, ganbari.jst().day)) : null;
+    p.today10 = user.role === 'student' ? shownToday(ganbari.dayAll(p.id, ganbari.jst().day)) : null;
     p.bday = user.role === 'student' ? ganbari.birthdayInfo(p.id) : null;
     p.cakes = p.bday ? birthday.cakesOf(p.id) : null;
     p.follow = user.role === 'student' && !user.trial_until ? fun.followersOf(p.id) : null;
@@ -1287,7 +1287,7 @@ function shownToday(m) {
 }
 // 今日の自習時間（表示用に丸めたもの）を更新して、変わったら全員に知らせる
 function updateToday(p) {
-  if (p.user.role !== 'student' || p.user.grade === '大人') return; // 大人は自習時間を出さない
+  if (p.user.role !== 'student') return;
   const all = ganbari.dayAll(p.id, ganbari.jst().day);
   checkParentGifts(p); // おうちの人へのプレゼントの時間に届いたか
   // 日がかわったら、目標の✅ももどす

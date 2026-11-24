@@ -219,7 +219,7 @@ body:not(.is-student) .me-menu .student-only { display: none; }
 .quiz-card { width: min(440px, 100%); background: #fff; border-radius: 24px; padding: 22px 18px; display: grid; gap: 12px; text-align: center; box-shadow: var(--shadow); }
 .quiz-top { margin: 0; font-weight: 800; color: var(--muted); }
 .quiz-badge { display: inline-block; background: var(--accent); color: #fff; border-radius: 999px; padding: 2px 12px; margin-right: 4px; }
-.quiz-word { font-size: clamp(56px, 18vw, 84px); font-weight: 800; letter-spacing: .08em; line-height: 1.2; }
+.quiz-word { font-size: clamp(56px, 18vw, 84px); font-weight: 800; letter-spacing: .08em; line-height: 1.2; overflow-wrap: anywhere; }
 .quiz-q { margin: 0; font-weight: 700; }
 .quiz-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .quiz-choices button { min-height: 64px; border-radius: 16px; border: 3px solid var(--line); background: #fff; font-size: 20px; font-weight: 800; }
