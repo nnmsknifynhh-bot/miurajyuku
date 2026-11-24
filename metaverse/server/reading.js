@@ -22,10 +22,13 @@ const TEST_POINTS = (attempt) => attempt <= 1 ? 5 : attempt === 2 ? 4 : 3;
 const DEFAULT_WPM = { '小1': 30, '小2': 30, '小3': 30, '小4': 30, '小5': 30, '小6': 30, '中1': 40, '中2': 45, '中3': 52, '高1': 60, '高2': 70, '高3': 70 };
 const MAX_MISSING = 3; // スピーキング：聞き取れなかった単語が3つ以上なら、点数が足りていても再テスト
 const PASS_SCORE = 90; // 合格ライン（管理画面で変えられる）
+// ライティングテストを受けられる時間（授業の日の、授業の前・後）
+const DEFAULT_W_WINDOWS = [{ start: '19:30', end: '20:00' }, { start: '22:00', end: '22:30' }];
+const RE_HM = /^([01]\d|2[0-3]):[0-5]\d$|^24:00$/;
 function getConfig() {
   let saved = {};
   try { saved = JSON.parse(getSetting('reading', '{}')); } catch (e) { saved = {}; }
-  return { wpm: { ...DEFAULT_WPM, ...(saved.wpm || {}) }, passScore: Number.isInteger(saved.passScore) ? saved.passScore : PASS_SCORE, writingClassDay: saved.writingClassDay !== false };
+  return { wpm: { ...DEFAULT_WPM, ...(saved.wpm || {}) }, passScore: Number.isInteger(saved.passScore) ? saved.passScore : PASS_SCORE, writingClassDay: saved.writingClassDay !== false, writingWindows: Array.isArray(saved.writingWindows) ? saved.writingWindows : DEFAULT_W_WINDOWS };
 }
 function setConfig(p, actorId) {
   const c = getConfig();
@@ -41,7 +44,12 @@ function setConfig(p, actorId) {
     c.passScore = p.passScore;
   }
   if (p.writingClassDay !== undefined) c.writingClassDay = !!p.writingClassDay; // ライティングテストは授業の日だけ
-  setSetting('reading', JSON.stringify({ wpm: c.wpm, passScore: c.passScore, writingClassDay: c.writingClassDay }));
+  if (p.writingWindows !== undefined) { // その日の、テストを受けられる時間（0〜3つ。空なら授業の日のいつでも）
+    const w = p.writingWindows;
+    if (!Array.isArray(w) || w.length > 3 || !w.every(x => x && RE_HM.test(x.start || '') && RE_HM.test(x.end || '') && x.start < x.end)) return 'テストの時間が正しくありません（例：19:30〜20:00）';
+    c.writingWindows = w.map(x => ({ start: x.start, end: x.end })).sort((a, b) => a.start.localeCompare(b.start));
+  }
+  setSetting('reading', JSON.stringify({ wpm: c.wpm, passScore: c.passScore, writingClassDay: c.writingClassDay, writingWindows: c.writingWindows }));
   audit(actorId, 'reading.config', null, null);
   return null;
 }
@@ -123,7 +131,7 @@ function unitsFor(user) {
     const t = db.prepare('SELECT MAX(score) AS best, COUNT(*) AS n, MAX(passed) AS passed, MAX(points) AS points FROM reading_tests WHERE user_id = ? AND unit_id = ?').get(user.id, u.id);
     return { ...view(u, c, staff ? u.grade : user.grade), practice: { count: best.n, best: best.best, passed: !!best.passed, enBest: best.enBest, enPassed: !!best.enPassed },
       test: { count: t.n, best: t.best, passed: !!t.passed, points: t.points || 0, nextPoints: t.passed ? 0 : TEST_POINTS(t.n + 1) },
-      writing: { ...require('./writing').status(user.id, u.id), ...require('./writing').testDay(user) } };
+      writing: (() => { const W = require('./writing'), td = W.testDay(user); return { ...W.status(user.id, u.id), ...td, testMsg: td.testNow ? null : W.testDayMessage(td) }; })() };
   });
 }
 /** 練習の結果を記録する（点数・時間は端末で計算したもの）。合格ライン：90点以上・時間内 */

@@ -139,13 +139,13 @@
           const wr = u.writing || {};
           const wp = el('button', 'btn small secondary', '✍️ 書く練習'); wp.type = 'button'; wp.onclick = () => showUnit(u, 'wPractice');
           const wt = el('button', 'btn small', '📝 ライティング'); wt.type = 'button';
-          const notToday = !staff && wr.testToday === false;
-          wt.disabled = !(wr.practicePassed || staff) || notToday;
-          wt.title = notToday ? (wr.classDays ? `授業の日（${wr.classDays}曜）に受けられるよ` : '授業の日に受けられるよ') : wt.disabled ? '書く練習で100点を出すと受けられるよ' : '';
+          const notNow = !staff && wr.testNow === false;
+          wt.disabled = !(wr.practicePassed || staff) || notNow;
+          wt.title = notNow ? wr.testMsg : wt.disabled ? '書く練習で100点を出すと受けられるよ' : '';
           wt.onclick = () => showUnit(u, 'wTest');
           const br = el('span', 'rd-break'); btns.append(br, wp, wt);
           const ws = el('small', 'rd-status');
-          ws.textContent = wr.testPassed ? `✍️🏅 ライティングクリア` : wr.practicePassed ? (notToday ? `✍️ 書く練習で100点 → ライティングは授業の日${wr.classDays ? `（${wr.classDays}曜）` : ''}に受けてね（クリアで +${wr.nextPoints}pt）` : `✍️ 書く練習で100点 → ライティングへ！（クリアで +${wr.nextPoints}pt）`) : wr.practiceCount ? `✍️ 書く練習 ${wr.practiceBest}点（${wr.practiceCount}回）` : '✍️ 次はライティング（書く練習から）';
+          ws.textContent = wr.testPassed ? `✍️🏅 ライティングクリア` : wr.practicePassed ? (notNow ? `✍️ 書く練習で100点 → ${String(wr.testMsg || '').replace(/^📝 /, '')}（クリアで +${wr.nextPoints}pt）` : `✍️ 書く練習で100点 → ライティングへ！（クリアで +${wr.nextPoints}pt）`) : wr.practiceCount ? `✍️ 書く練習 ${wr.practiceBest}点（${wr.practiceCount}回）` : '✍️ 次はライティング（書く練習から）';
           left.append(ws);
         }
         row.append(left, btns); list.append(row);

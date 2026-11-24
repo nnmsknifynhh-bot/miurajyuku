@@ -72,9 +72,14 @@
     const prow = el('div', 'gb-row'); prow.append(el('b', null, '🎯 合格ライン（練習・テスト共通）'), pi, el('span', null, '点以上・時間内'));
     const cdl = el('label', 'gb-row'); const cd = el('input'); cd.type = 'checkbox'; cd.checked = d.config.writingClassDay !== false;
     cdl.append(cd, el('span', null, '📝 ライティングテストは「授業の日」だけ受けられる（生徒ごとの授業の曜日は、ユーザー管理で登録。練習はいつでもOK）'));
+    // 授業の日の、テストを受けられる時間（授業の前・後。2つまで）
+    const wins = d.config.writingWindows || [];
+    const twrow = el('div', 'gb-row'); twrow.append(el('span', null, '⏰ 受けられる時間：'));
+    const tins = [0, 1].map(i => { const a = el('input'); a.type = 'time'; a.value = (wins[i] && wins[i].start) || ''; const b = el('input'); b.type = 'time'; b.value = (wins[i] && wins[i].end) || ''; twrow.append(a, el('span', null, '〜'), b, el('span', null, i === 0 ? '　と　' : '')); return [a, b]; });
+    twrow.append(el('small', 'muted', '（空にすると、授業の日のいつでも。終わりの時間から15分までは写真を送れます）'));
     const wsave = el('button', 'btn', '保存する');
-    wsave.onclick = async () => { try { await api('PATCH', '/api/admin/reading/config', { writingClassDay: cd.checked, passScore: Number(pi.value), wpm: Object.fromEntries(Object.entries(winputs).map(([g, i]) => [g, Number(i.value)])) }); toast('保存しました'); load(root, { api, toast }); } catch (e) { toast(e.message); } };
-    ws.append(wrow, prow, cdl, wsave);
+    wsave.onclick = async () => { try { await api('PATCH', '/api/admin/reading/config', { writingClassDay: cd.checked, writingWindows: tins.filter(([a, b]) => a.value && b.value).map(([a, b]) => ({ start: a.value, end: b.value })), passScore: Number(pi.value), wpm: Object.fromEntries(Object.entries(winputs).map(([g, i]) => [g, Number(i.value)])) }); toast('保存しました'); load(root, { api, toast }); } catch (e) { toast(e.message); } };
+    ws.append(wrow, prow, cdl, twrow, wsave);
 
     // ── 本番のテストの結果 ──
     const ts = section('📝 本番のテストの結果', `Microsoft の音声サービスが採点します。${d.config.passScore}点以上・時間内でクリア（単元ごとに1回：1回目+5／2回目+4／3回目から+3ポイント）。採点の準備：${d.speechReady ? '✅ できています' : '⚠️ まだです（Render の Environment に AZURE_SPEECH_KEY と AZURE_SPEECH_REGION を入れてください）'}`);

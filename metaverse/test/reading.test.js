@@ -112,6 +112,19 @@ test('ライティング：音読テストに合格した単元だけ。練習�
   const { db } = require('../server/db.js');
   const G = require('../server/ganbari.js');
   const wd = new Date(G.jst().day + 'T00:00:00Z').getUTCDay();
+  // 受けられる時間：はじめは 19:30〜20:00・22:00〜22:30（授業の前・後）
+  assert.deepEqual(R.getConfig().writingWindows, [{ start: '19:30', end: '20:00' }, { start: '22:00', end: '22:30' }]);
+  const tue = { role: 'student', class_days: '2' }; // 火曜が授業
+  const at = (s) => new Date(s + '+09:00');
+  assert.equal(W.testDay(tue, at('2026-11-24T19:45:00')).testNow, true, '火曜の授業前');
+  assert.equal(W.testDay(tue, at('2026-11-24T21:00:00')).testNow, false, '授業中は受けられない');
+  assert.equal(W.testDay(tue, at('2026-11-24T22:29:00')).testNow, true, '授業後');
+  assert.equal(W.testDay(tue, at('2026-11-24T22:40:00')).testNow, false);
+  assert.equal(W.testDay(tue, at('2026-11-24T22:40:00'), 15).testNow, true, '終わってから15分までは写真を送れる');
+  assert.equal(W.testDay(tue, at('2026-11-25T19:45:00')).testNow, false, '授業の日でない');
+  assert.match(W.testDayMessage(W.testDay(tue, at('2026-11-25T19:45:00'))), /授業の日（火曜）の 19:30〜20:00・22:00〜22:30/);
+  assert.equal((await http('PATCH', '/api/admin/reading/config', { writingWindows: [{ start: '20:00', end: '19:30' }] }, owner)).status, 400);
+  assert.equal((await http('PATCH', '/api/admin/reading/config', { writingWindows: [] }, owner)).status, 200, '空にすると授業の日のいつでも');
   assert.match((await send(a, 'test')).data.error, /授業の日.*先生に伝えて/);
   db.prepare("UPDATE users SET class_days = ? WHERE login_id = 'tsa'").run(String((wd + 1) % 7));
   assert.match((await send(a, 'test')).data.error, /授業の日（.曜）/);

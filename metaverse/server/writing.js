@@ -15,16 +15,29 @@ const crypto = require('node:crypto');
 const G = require('./ganbari');
 const WD = ['日', '月', '火', '水', '木', '金', '土'];
 /**
- * ライティングテストを今日受けられるか（「授業の日だけ」の設定がオンなら、その生徒の授業の曜日だけ）
- * @returns {{ testToday: boolean, classDays: string|null }}  classDays は「火・金」のような表示用
+ * ライティングテストを今受けられるか（「授業の日だけ」がオンなら、その生徒の授業の曜日の、決めた時間だけ）
+ * 写真を送るのは、時間が終わってから15分までOK（書き終わるのを待つ）
+ * @returns {{ testToday: boolean, testNow: boolean, classDays: string|null, windows: string|null }}
  */
-function testDay(user, date = new Date()) {
+const GRACE_MIN = 15;
+function testDayMessage(td) {
+  if (!td.classDays) return '📝 ライティングテストは授業の日に受けられます。授業の曜日がまだ登録されていないので、先生に伝えてね';
+  return `📝 ライティングテストは、授業の日（${td.classDays}曜）${td.windows ? `の ${td.windows}` : ''} に塾で受けられるよ`;
+}
+function testDay(user, date = new Date(), grace = 0) {
   const staff = user.role === 'owner' || user.role === 'teacher';
   const days = String(user.class_days || '').split(',').filter(Boolean).map(Number);
   const label = days.length ? days.map(d => WD[d]).join('・') : null;
-  if (staff || !require('./reading').getConfig().writingClassDay) return { testToday: true, classDays: label };
-  const wd = new Date(G.jst(date).day + 'T00:00:00Z').getUTCDay();
-  return { testToday: days.includes(wd), classDays: label };
+  const c = require('./reading').getConfig();
+  const windows = c.writingWindows.length ? c.writingWindows.map(w => `${w.start}〜${w.end}`).join('・') : null;
+  if (staff || !c.writingClassDay) return { testToday: true, testNow: true, classDays: label, windows: null };
+  const j = G.jst(date);
+  const wd = new Date(j.day + 'T00:00:00Z').getUTCDay();
+  const today = days.includes(wd);
+  const min = (hm) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3));
+  const nowM = min(j.hm);
+  const inWin = !c.writingWindows.length || c.writingWindows.some(w => nowM >= min(w.start) && nowM < min(w.end) + grace);
+  return { testToday: today, testNow: today && inWin, classDays: label, windows };
 }
 const PASS = 100;
 const POINTS = (attempt) => attempt <= 1 ? 5 : attempt === 2 ? 4 : 3;
@@ -112,8 +125,8 @@ async function grade(user, unit, mode, buf) {
     if (!readOk) return { error: '先に、この単元の音読テストに合格してね' };
     if (mode === 'test' && !status(user.id, unit.id).practicePassed) return { error: '先に、書く練習で100点を出してね' };
     if (mode === 'test') {
-      const td = testDay(user);
-      if (!td.testToday) return { error: td.classDays ? `📝 ライティングテストは、授業の日（${td.classDays}曜）に受けられるよ` : '📝 ライティングテストは授業の日に受けられます。授業の曜日がまだ登録されていないので、先生に伝えてね' };
+      const td = testDay(user, new Date(), GRACE_MIN);
+      if (!td.testNow) return { error: testDayMessage(td) };
     }
   }
   if (!Buffer.isBuffer(buf) || buf.length < 1000 || !(buf[0] === 0xff && buf[1] === 0xd8)) return { error: '写真が正しくありません（JPEG）' };
@@ -142,4 +155,4 @@ function summary() {
       MAX(w.score) AS best, MAX(CASE WHEN w.mode = 'test' THEN w.passed ELSE 0 END) AS passed, MIN(CASE WHEN w.mode = 'test' AND w.passed = 1 THEN w.attempt END) AS clearedAt, MAX(w.points) AS points, MAX(w.created_at) AS last
     FROM writing_attempts w JOIN users u ON u.id = w.user_id JOIN reading_units r ON r.id = w.unit_id GROUP BY w.user_id, w.unit_id ORDER BY last DESC LIMIT 300`).all().map(r => ({ ...r, passed: !!r.passed }));
 }
-module.exports = { PASS, POINTS, compare, status, grade, testDay, summary, visionReady, ocr };
+module.exports = { PASS, POINTS, compare, status, grade, testDay, testDayMessage, summary, visionReady, ocr };
