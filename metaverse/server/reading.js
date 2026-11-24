@@ -11,6 +11,8 @@ CREATE INDEX IF NOT EXISTS idx_reading_practice_user ON reading_practice(user_id
 CREATE TABLE IF NOT EXISTS reading_tests (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, unit_id INTEGER NOT NULL, attempt INTEGER NOT NULL, score INTEGER NOT NULL, accuracy INTEGER, fluency INTEGER, completeness INTEGER, seconds INTEGER NOT NULL, limit_sec INTEGER NOT NULL, passed INTEGER NOT NULL, points INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_reading_tests_user ON reading_tests(user_id, unit_id);
 `);
+// 練習が「英文を見て」か「訳だけで」か（テストを受けられるのは、訳だけで合格したとき）
+if (!db.prepare('PRAGMA table_info(reading_practice)').all().some(c => c.name === 'ja_only')) db.exec('ALTER TABLE reading_practice ADD COLUMN ja_only INTEGER NOT NULL DEFAULT 0');
 // 本番のテストでクリアしたときのポイント（単元ごとに1回）：1回目 +5／2回目 +4／3回目から +3
 const TEST_POINTS = (attempt) => attempt <= 1 ? 5 : attempt === 2 ? 4 : 3;
 
@@ -105,21 +107,22 @@ function unitsFor(user) {
   const rows = staff ? db.prepare('SELECT * FROM reading_units WHERE active = 1 ORDER BY grade, title, id').all()
     : db.prepare('SELECT * FROM reading_units WHERE active = 1 AND grade = ? ORDER BY title, id').all(user.grade || '');
   return rows.map(u => {
-    const best = db.prepare('SELECT MAX(score) AS best, COUNT(*) AS n, MAX(passed) AS passed FROM reading_practice WHERE user_id = ? AND unit_id = ?').get(user.id, u.id);
+    const best = db.prepare(`SELECT COUNT(*) AS n, MAX(CASE WHEN ja_only = 1 THEN score END) AS best, MAX(CASE WHEN ja_only = 1 THEN passed END) AS passed,
+      MAX(CASE WHEN ja_only = 0 THEN score END) AS enBest, MAX(CASE WHEN ja_only = 0 THEN passed END) AS enPassed FROM reading_practice WHERE user_id = ? AND unit_id = ?`).get(user.id, u.id);
     const t = db.prepare('SELECT MAX(score) AS best, COUNT(*) AS n, MAX(passed) AS passed, MAX(points) AS points FROM reading_tests WHERE user_id = ? AND unit_id = ?').get(user.id, u.id);
-    return { ...view(u, c, staff ? u.grade : user.grade), practice: { count: best.n, best: best.best, passed: !!best.passed },
+    return { ...view(u, c, staff ? u.grade : user.grade), practice: { count: best.n, best: best.best, passed: !!best.passed, enBest: best.enBest, enPassed: !!best.enPassed },
       test: { count: t.n, best: t.best, passed: !!t.passed, points: t.points || 0, nextPoints: t.passed ? 0 : TEST_POINTS(t.n + 1) } };
   });
 }
 /** 練習の結果を記録する（点数・時間は端末で計算したもの）。合格ライン：90点以上・時間内 */
-function recordPractice(user, unitId, score, seconds) {
+function recordPractice(user, unitId, score, seconds, jaOnly = false) {
   const u = db.prepare('SELECT * FROM reading_units WHERE id = ? AND active = 1').get(unitId);
   if (!u) return { error: '単元が見つかりません' };
   const sc = Math.round(Number(score)), sec = Math.round(Number(seconds));
   if (!Number.isFinite(sc) || sc < 0 || sc > 100 || !Number.isFinite(sec) || sec < 1 || sec > 3600) return { error: '結果が正しくありません' };
   const v = view(u, getConfig(), user.role === 'student' ? user.grade : u.grade);
   const passed = sc >= PASS_SCORE && sec <= v.limit;
-  db.prepare('INSERT INTO reading_practice (user_id, unit_id, score, seconds, limit_sec, passed, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(user.id, unitId, sc, sec, v.limit, passed ? 1 : 0, now());
+  db.prepare('INSERT INTO reading_practice (user_id, unit_id, score, seconds, limit_sec, passed, ja_only, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(user.id, unitId, sc, sec, v.limit, passed ? 1 : 0, jaOnly ? 1 : 0, now());
   return { ok: true, passed, limit: v.limit };
 }
 /**
@@ -131,8 +134,8 @@ function recordTest(user, unitId, r) {
   const u = db.prepare('SELECT * FROM reading_units WHERE id = ? AND active = 1').get(unitId);
   if (!u) return { error: '単元が見つかりません' };
   const staff = user.role === 'owner' || user.role === 'teacher';
-  const okPractice = db.prepare('SELECT 1 FROM reading_practice WHERE user_id = ? AND unit_id = ? AND passed = 1').get(user.id, unitId);
-  if (!staff && !okPractice) return { error: '先に練習で90点以上・時間内を出してね' };
+  const okPractice = db.prepare('SELECT 1 FROM reading_practice WHERE user_id = ? AND unit_id = ? AND passed = 1 AND ja_only = 1').get(user.id, unitId);
+  if (!staff && !okPractice) return { error: '先に「訳だけで練習」で90点以上・時間内を出してね' };
   const num = (v) => { const n = Math.round(Number(v)); return Number.isFinite(n) && n >= 0 && n <= 100 ? n : null; };
   const sc = num(r.score), sec = Math.round(Number(r.seconds));
   if (sc === null || !Number.isFinite(sec) || sec < 1 || sec > 3600) return { error: '結果が正しくありません' };
@@ -159,9 +162,9 @@ function testSummary() {
 
 // 先生用：生徒ごと・単元ごとの練習のようす
 function practiceSummary() {
-  return db.prepare(`SELECT p.user_id, u.display_name AS name, u.grade, p.unit_id, r.title, COUNT(*) AS count, MAX(p.score) AS best, MAX(p.passed) AS passed, MAX(p.created_at) AS last
+  return db.prepare(`SELECT p.user_id, u.display_name AS name, u.grade, p.unit_id, r.title, COUNT(*) AS count, MAX(p.score) AS best, MAX(CASE WHEN p.ja_only = 1 THEN p.passed ELSE 0 END) AS passed, MAX(CASE WHEN p.ja_only = 0 THEN p.passed ELSE 0 END) AS enPassed, MAX(p.created_at) AS last
     FROM reading_practice p JOIN users u ON u.id = p.user_id JOIN reading_units r ON r.id = p.unit_id GROUP BY p.user_id, p.unit_id ORDER BY last DESC LIMIT 300`).all()
-    .map(r => ({ ...r, passed: !!r.passed }));
+    .map(r => ({ ...r, passed: !!r.passed, enPassed: !!r.enPassed }));
 }
 
 module.exports = { TEST_POINTS, recordTest, testSummary, DEFAULT_WPM, PASS_SCORE, getConfig, setConfig, parseText, wordsOf, limitSec, addUnit, updateUnit, deleteUnit, listUnits, unitsFor, recordPractice, practiceSummary };

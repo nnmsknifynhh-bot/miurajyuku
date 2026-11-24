@@ -462,3 +462,4 @@ body.is-trial .not-trial { display: none !important; }
 .rd-status { color: #2f7de1 !important; font-weight: 700; }
 .rd-unit-btns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .rd-sub { grid-column: 1 / -1; color: var(--muted); }
+.rd-ja.big { font-size: 17px; color: var(--ink, #1f2a37); font-weight: 700; line-height: 1.6; }

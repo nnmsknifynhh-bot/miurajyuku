@@ -55,29 +55,33 @@
       const body = $('#rd-body'); body.textContent = '';
       if (!SR) body.append(el('p', 'rd-warn', 'この端末（ブラウザ）では英語の聞き取りが使えません。iPad・iPhone は Safari、パソコン・Android は Chrome で開いてください。お手本を聞くことはできます。'));
       if (!st.units.length) { body.append(el('p', 'muted', 'まだ練習できる単元がありません。先生が登録するまで待ってね。')); return; }
-      body.append(el('p', 'muted', '単元をえらんでね。練習で90点以上・時間内を出すと、本番のテストを受けられるよ。'));
+      body.append(el('p', 'muted', '①「英文で練習」→ ②「訳だけで練習」（日本語訳だけを見て英語を言う）→ ③ 本番のテスト（訳だけ）。②で90点以上・時間内を出すと、テストを受けられるよ。'));
       const list = el('div', 'rd-units');
       const staff = getUser().role !== 'student';
       for (const u of st.units) {
         const row = el('div', 'rd-unit');
         const left = el('span'); left.append(el('b', null, u.title), el('small', null, `${staff ? u.grade + '・' : ''}${u.words}語・⏱ ${mmss(u.limit)}`));
         const st2 = el('small', 'rd-status');
-        st2.textContent = (u.test.passed ? `🏅 テストクリア（${u.test.best}点）` : u.practice.passed ? `✅ 練習合格 → テストへ！（クリアで +${u.test.nextPoints}pt）` : u.practice.count ? `練習 ${u.practice.best}点（${u.practice.count}回）` : 'はじめて');
+        st2.textContent = u.test.passed ? `🏅 テストクリア（${u.test.best}点）`
+          : u.practice.passed ? `✅ 訳だけで合格 → テストへ！（クリアで +${u.test.nextPoints}pt）`
+          : u.practice.enPassed ? `✅ 英文で合格 → 次は「訳だけ」で練習（${u.practice.best != null ? u.practice.best + '点' : 'まだ'}）`
+          : u.practice.count ? `英文で練習 ${u.practice.enBest}点（${u.practice.count}回）` : 'はじめて';
         left.append(st2);
         const btns = el('span', 'rd-unit-btns');
-        const p = el('button', 'btn small secondary', '🔁 練習'); p.type = 'button'; p.onclick = () => showUnit(u, 'practice');
+        const p = el('button', 'btn small secondary', '🔤 英文で練習'); p.type = 'button'; p.onclick = () => showUnit(u, 'practice');
+        const j = el('button', 'btn small secondary', '🇯🇵 訳だけで練習'); j.type = 'button'; j.onclick = () => showUnit(u, 'jaPractice');
         const t = el('button', 'btn small', '📝 テスト'); t.type = 'button';
         t.disabled = !(u.practice.passed || staff);
-        t.title = t.disabled ? '練習で90点以上・時間内を出すと受けられるよ' : '';
+        t.title = t.disabled ? '「訳だけで練習」で90点以上・時間内を出すと受けられるよ' : '';
         t.onclick = () => showUnit(u, 'test');
-        btns.append(p, t); row.append(left, btns); list.append(row);
+        btns.append(p, j, t); row.append(left, btns); list.append(row);
       }
       body.append(list);
     }
 
     function showUnit(u, mode = 'practice') {
       st.unit = u; st.result = null; st.showJa = false; st.mode = mode;
-      $('#rd-back').hidden = false; $('#rd-title').textContent = (mode === 'test' ? '📝 テスト：' : '🔁 練習：') + u.title;
+      $('#rd-back').hidden = false; $('#rd-title').textContent = ({ test: '📝 テスト：', jaPractice: '🇯🇵 訳だけで練習：', practice: '🔤 英文で練習：' })[mode] + u.title;
       render();
     }
     function render() {
@@ -87,8 +91,10 @@
       const ja = el('button', 'btn small secondary', st.showJa ? '👀 訳をかくす' : '👀 訳を見る'); ja.type = 'button';
       ja.onclick = () => { st.showJa = !st.showJa; render(); };
       const test = st.mode === 'test';
-      ja.hidden = test; // テストのときは訳をいつも出す
-      const model = el('button', 'btn small secondary', '🔊 お手本'); model.type = 'button'; model.onclick = speakModel; model.hidden = !window.speechSynthesis;
+      const jaOnly = st.mode === 'test' || st.mode === 'jaPractice'; // 日本語訳だけを見て英語を言う（終わったら英文と赤い単語を見せる）
+      const hideEn = jaOnly && !r;
+      ja.hidden = jaOnly;
+      const model = el('button', 'btn small secondary', '🔊 お手本'); model.type = 'button'; model.onclick = speakModel; model.hidden = !window.speechSynthesis || hideEn;
       top.append(timer, ja, model);
       body.append(top);
       const pas = el('div', 'rd-passage');
@@ -104,8 +110,8 @@
           if (clean) { if (r && !r.ok[wi]) { span.className = 'ng'; bad = true; } wi++; }
           en.append(span);
         }
-        row.append(en);
-        if (line.ja && (st.showJa || bad || test)) row.append(el('p', 'rd-ja', line.ja));
+        if (hideEn) row.append(el('p', 'rd-ja big', line.ja || '（この文の訳はまだありません）'));
+        else { row.append(en); if (line.ja && (st.showJa || bad || jaOnly)) row.append(el('p', 'rd-ja', line.ja)); }
         pas.append(row);
       }
       body.append(pas);
@@ -117,10 +123,12 @@
         if (test && r.accuracy != null) res.append(el('small', 'rd-sub', `発音の正確さ ${r.accuracy}・なめらかさ ${r.fluency}・読みもれなし ${r.completeness}`));
         const msg = test
           ? (r.passed ? (r.points ? `🎉 クリア！（${r.attempt}回目） +${r.points}ポイント！` : r.alreadyCleared ? '🎉 クリア！（この単元はもうポイントをもらっているよ）' : '🎉 クリア！') : r.score < 90 ? '赤い単語は発音があやしいところ。練習でたしかめてから、もう一度！' : `点数はOK！ 制限時間（${mmss(u.limit)}）の中で読めるように、もう一度`)
-          : (r.passed ? '🎉 練習合格！ 本番のテストを受けられるよ' : r.score < 90 ? '赤い単語を、お手本を聞いてからもう一度！ 90点まであと少し' : `点数はOK！ 制限時間（${mmss(u.limit)}）の中で読めるように、もう一度`);
+          : st.mode === 'practice' ? (r.passed ? '🎉 英文で合格！ 次は「訳だけ」で言えるか練習しよう' : r.score < 90 ? '赤い単語を、お手本を聞いてからもう一度！ 90点まであと少し' : `点数はOK！ 制限時間（${mmss(u.limit)}）の中で読めるように、もう一度`)
+          : (r.passed ? '🎉 訳だけで合格！ 本番のテストを受けられるよ' : r.score < 90 ? '赤い単語を、お手本を聞いてからもう一度！ 90点まであと少し' : `点数はOK！ 制限時間（${mmss(u.limit)}）の中で読めるように、もう一度`);
         res.append(el('p', null, msg));
         body.append(res);
-        if (!test && r.passed) { const go = el('button', 'btn small', '📝 本番のテストへ'); go.type = 'button'; go.onclick = () => showUnit(u, 'test'); body.append(go); }
+        if (st.mode === 'practice' && r.passed) { const go = el('button', 'btn small', '🇯🇵 訳だけで練習へ'); go.type = 'button'; go.onclick = () => showUnit(u, 'jaPractice'); body.append(go); }
+        if (st.mode === 'jaPractice' && r.passed) { const go = el('button', 'btn small', '📝 本番のテストへ'); go.type = 'button'; go.onclick = () => showUnit(u, 'test'); body.append(go); }
       }
       const btns = el('div', 'rd-btns');
       if (st.recording) { const stop = el('button', 'btn rd-big', '⏹ 読みおわった'); stop.type = 'button'; stop.onclick = () => finish(); btns.append(stop); }
@@ -128,7 +136,8 @@
       else { const go = el('button', 'btn rd-big', r ? '🔁 もう一度読む' : '🎤 読みはじめる'); go.type = 'button'; go.disabled = !SR; go.onclick = startRec; btns.append(go); }
       body.append(btns);
       if (!SR && !test) body.append(el('p', 'rd-warn', 'この端末では聞き取りが使えません（Safari か Chrome で開いてください）'));
-      if (test && !st.recording && !r) body.append(el('p', 'muted', '本番のテストは、Microsoft の音声サービスが発音を採点します。90点以上・時間内でクリア！'));
+      if (test && !st.recording && !r) body.append(el('p', 'muted', '日本語訳を見て、英語で言おう。Microsoft の音声サービスが発音を採点します。90点以上・時間内でクリア！'));
+      if (st.mode === 'jaPractice' && !st.recording && !r) body.append(el('p', 'muted', '本番と同じように、日本語訳だけを見て英語で言おう。終わったら英文と、言えなかった単語が出るよ。'));
     }
 
     function speakModel() {
@@ -196,9 +205,11 @@
       st.interim = '';
       render();
       try {
-        const r = await api('POST', '/api/reading/practice', { unitId: st.unit.id, score: g.score, seconds });
-        st.unit.practice.count++; st.unit.practice.best = Math.max(st.unit.practice.best || 0, g.score);
-        if (r.passed) st.unit.practice.passed = true;
+        const jaOnly = st.mode === 'jaPractice';
+        const r = await api('POST', '/api/reading/practice', { unitId: st.unit.id, score: g.score, seconds, jaOnly });
+        const pr = st.unit.practice; pr.count++;
+        if (jaOnly) { pr.best = Math.max(pr.best || 0, g.score); if (r.passed) pr.passed = true; }
+        else { pr.enBest = Math.max(pr.enBest || 0, g.score); if (r.passed) pr.enPassed = true; }
       } catch (e) { toast(e.message); }
     }
     // ═════ 本番のテスト：Microsoft の発音評価 ═════

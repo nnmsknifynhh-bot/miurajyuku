@@ -49,7 +49,7 @@ test('単元を登録して、生徒は自分の学年の単元を練習でき�
   r = await http('POST', '/api/reading/practice', { unitId: us[0].id, score: 92, seconds: 58 }, sc);
   assert.equal(r.data.passed, true);
   const p = (await http('GET', '/api/reading/units', null, sc)).data.units[0].practice;
-  assert.deepEqual(p, { count: 3, best: 95, passed: true });
+  assert.deepEqual(p, { count: 3, best: null, passed: false, enBest: 95, enPassed: true }, '英文で合格（訳だけはまだ）');
   const adm = (await http('GET', '/api/admin/reading', null, owner)).data;
   assert.equal(adm.units.length, 2); assert.equal(adm.summary[0].count, 3);
   // 1分の語数を変えると、制限時間も変わる
@@ -65,7 +65,9 @@ test('本番のテスト：練習で合格するまで受けられない。ク�
   const a = await mk('tsa'), b = await mk('tsb');
   const unit = (await http('GET', '/api/reading/units', null, a)).data.units[0];
   assert.match((await http('POST', '/api/reading/test', { unitId: unit.id, score: 95, seconds: 50 }, a)).data.error, /練習/);
-  for (const c of [a, b]) await http('POST', '/api/reading/practice', { unitId: unit.id, score: 92, seconds: 50 }, c);
+  for (const c of [a, b]) await http('POST', '/api/reading/practice', { unitId: unit.id, score: 95, seconds: 50 }, c);
+  assert.match((await http('POST', '/api/reading/test', { unitId: unit.id, score: 95, seconds: 50 }, a)).data.error, /訳だけ/, '英文で合格しただけではテストは受けられない');
+  for (const c of [a, b]) await http('POST', '/api/reading/practice', { unitId: unit.id, score: 92, seconds: 50, jaOnly: true }, c);
   // A：1回目でクリア → +5
   let r = (await http('POST', '/api/reading/test', { unitId: unit.id, score: 93, accuracy: 92, fluency: 95, completeness: 100, seconds: 50 }, a)).data;
   assert.equal(r.passed, true); assert.equal(r.points, 5); assert.equal(r.attempt, 1);

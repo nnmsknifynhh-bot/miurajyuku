@@ -86,13 +86,13 @@
     tt.append(tb2); tw2.append(tt);
 
     // ── 練習のようす ──
-    const ps = section('🔁 練習のようす', `生徒ごと・単元ごとの練習の回数といちばんよい点数です。「${d.config.passScore}点以上・時間内」で合格（テストを受けられる）。`);
+    const ps = section('🔁 練習のようす', `生徒ごと・単元ごとの練習の回数といちばんよい点数です。「英文で合格」→「訳だけで合格」（${d.config.passScore}点以上・時間内）になると、本番のテストを受けられます。`);
     const pw = el('div', 'table-wrap'); ps.append(pw);
     const pt = el('table', 'logs'); const ph = el('tr'); ['生徒', '学年', '単元', '回数', 'いちばんよい点', '合格', '最後'].forEach(x => ph.append(el('th', null, x))); pt.append(el('thead')); pt.firstChild.append(ph);
     const pb = el('tbody');
     for (const r of d.summary) {
       const tr = el('tr');
-      [r.name, r.grade || '', r.title, `${r.count}回`, `${r.best}点`, r.passed ? '✅' : '', new Date(r.last).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })].forEach(v => tr.append(el('td', null, v)));
+      [r.name, r.grade || '', r.title, `${r.count}回`, `${r.best}点`, r.passed ? '✅ 訳だけ' : r.enPassed ? '✅ 英文' : '', new Date(r.last).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })].forEach(v => tr.append(el('td', null, v)));
       pb.append(tr);
     }
     if (!d.summary.length) { const tr = el('tr'); const td = el('td', 'empty', 'まだ練習の記録はありません'); td.colSpan = 7; tr.append(td); pb.append(tr); }
