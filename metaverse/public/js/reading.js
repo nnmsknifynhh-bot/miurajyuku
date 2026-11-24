@@ -145,6 +145,7 @@
         const res = el('div', 'rd-result' + (r.passed ? ' ok' : ''));
         res.append(el('b', 'rd-score', `${r.score}点`), el('span', null, `時間 ${mmss(r.seconds)}（制限 ${mmss(u.limit)}）`));
         if (test && r.accuracy != null) res.append(el('small', 'rd-sub', `発音の正確さ ${r.accuracy}・なめらかさ ${r.fluency}・読みもれなし ${r.completeness}`));
+        if (test && r.heard != null) res.append(el('small', 'rd-sub', `🎧 聞き取った英語：${r.heard || '（なし）'}`));
         const msg = test
           ? (r.passed ? (r.points ? `🎉 クリア！（${r.attempt}回目） +${r.points}ポイント！` : r.alreadyCleared ? '🎉 クリア！（この単元はもうポイントをもらっているよ）' : '🎉 クリア！') : r.score < 90 ? '赤い単語は発音があやしいところ。練習でたしかめてから、もう一度！' : `点数はOK！ 制限時間（${mmss(u.limit)}）の中で読めるように、もう一度`)
           : st.mode === 'practice' ? (r.passed ? '🎉 英文で合格！ 次は「訳だけ」で言えるか練習しよう' : r.score < 90 ? '赤い単語を、お手本を聞いてからもう一度！ 90点まであと少し' : `点数はOK！ 制限時間（${mmss(u.limit)}）の中で読めるように、もう一度`)
@@ -270,14 +271,23 @@
       st.rec = { azure: recog };
       st.heardAny = false;
       recog.recognizing = (_s, e) => { st.interim = e.result.text || ''; if (st.interim) st.heardAny = true; const live = $('#rd-live'); if (live) live.textContent = `🎧 ${st.interim.slice(-80)}`; };
+      st.heardText = '';
       recog.recognized = (_s, e) => {
-        if (e.result.reason !== sdk.ResultReason.RecognizedSpeech) return;
-        let detail = null;
+        if (e.result.reason !== sdk.ResultReason.RecognizedSpeech || !e.result.text) return;
+        st.heardAny = true;
+        st.heardText = (st.heardText + ' ' + e.result.text).trim();
+        // 発音の点：① SDK の読み取り ② 返ってきた JSON ③ どちらもないときは文字だけ（点は文の正確さ）
+        let pa = null, detail = null;
+        try { pa = sdk.PronunciationAssessmentResult.fromResult(e.result); } catch (er) {}
         try { detail = JSON.parse(e.result.properties.getProperty(sdk.PropertyId.SpeechServiceResponse_JsonResult)); } catch (er) {}
         const nb = detail && detail.NBest && detail.NBest[0];
-        if (!nb) return;
-        st.heardAny = true;
-        st.segs.push({ words: (nb.Words || []).map(w => ({ word: w.Word, acc: w.PronunciationAssessment ? w.PronunciationAssessment.AccuracyScore : 0, err: w.PronunciationAssessment ? w.PronunciationAssessment.ErrorType : 'None' })), fluency: nb.PronunciationAssessment ? nb.PronunciationAssessment.FluencyScore : (nb.FluencyScore || 0) });
+        const segAcc = pa && pa.accuracyScore != null ? pa.accuracyScore : nb && nb.PronunciationAssessment ? nb.PronunciationAssessment.AccuracyScore : null;
+        const segFlu = pa && pa.fluencyScore != null ? pa.fluencyScore : nb && nb.PronunciationAssessment ? nb.PronunciationAssessment.FluencyScore : (nb && nb.FluencyScore) || null;
+        let rawWords = (pa && pa.detailResult && pa.detailResult.Words) || (nb && nb.Words) || [];
+        let words = rawWords.map(w => { const a = w.PronunciationAssessment || {}; return { word: w.Word, acc: a.AccuracyScore != null ? a.AccuracyScore : (w.AccuracyScore != null ? w.AccuracyScore : segAcc != null ? segAcc : 80), err: a.ErrorType || w.ErrorType || 'None' }; });
+        words = words.filter(w => w.err !== 'Omission'); // 読みもれの印は、こちらで数えるのでのぞく
+        if (!words.length) words = e.result.text.split(/\s+/).filter(Boolean).map(t => ({ word: t, acc: segAcc != null ? segAcc : 80, err: 'None' }));
+        st.segs.push({ words, fluency: segFlu != null ? segFlu : 80 });
         st.lastEnd = (e.result.offset + e.result.duration) / 1e7;
         const g = scoreTest(); if (g.completeness >= 100) setTimeout(() => { if (st.recording) finish(); }, 900);
       };
@@ -338,7 +348,7 @@
       }
       const seconds = Math.max(1, Math.round(st.lastEnd || pressedSec));
       const g = scoreTest();
-      st.result = { ...g, seconds, passed: g.score >= 90 && seconds <= st.unit.limit };
+      st.result = { ...g, seconds, passed: g.score >= 90 && seconds <= st.unit.limit, heard: (st.heardText || '').slice(0, 400) };
       st.interim = '';
       render();
       try {
