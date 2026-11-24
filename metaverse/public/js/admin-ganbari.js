@@ -115,7 +115,7 @@
         wkBox.append(row);
         return () => ({ on: on[1].checked, ...sl.value(), cap: Number(cp.value) });
       });
-      const wkNote = el('p', 'muted', 'チェックをはずした曜日は自習時間を数えません。');
+      const wkNote = el('p', 'muted', 'チェックをはずした曜日は、ポイントがつきません（勉強した時間の記録とメダルの合計には入ります）。中学生・小学生の🔥は、その曜日に休んでも途切れません。');
       // 🎌 祝日・🏖 長い休みは土曜日と同じ（曜日ごとに変えるときだけ）
       const hol = check('🎌 祝日（振替休日もふくむ）は土曜日と同じ数え方にする', src.holidaySat !== false);
       const vac = check('🏖 長い休み（下の「長い休み」で決めた期間）は土曜日と同じ数え方にする', src.vacationSat !== false);
