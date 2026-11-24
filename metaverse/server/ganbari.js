@@ -121,9 +121,10 @@ const ES_GRADES = ['小1', '小2', '小3', '小4', '小5', '小6'];
 const isES = (grade) => ES_GRADES.includes(grade);
 // 数え方のグループ：'hs'＝高校生、'es'＝小学生、null＝中学生
 // 数え方のグループ：'hs3'＝高3（「高3は別」にしたときだけ別の数え方）、'hs'＝高1・高2（と高3）、'es'＝小学生、null＝中学生
-const groupOf = (grade) => grade === '高3' ? 'hs3' : (HS_GRADES.includes(grade) || grade === '大人') ? 'hs' : ES_GRADES.includes(grade) ? 'es' : null;
+// 'ad'＝大人（大人英会話。ポイントになる時間は別。🔥・メダルは高校生と同じ）
+const groupOf = (grade) => grade === '大人' ? 'ad' : grade === '高3' ? 'hs3' : HS_GRADES.includes(grade) ? 'hs' : ES_GRADES.includes(grade) ? 'es' : null;
 // そのグループの数え方の設定（高3は「別にする」がオフなら高校生と同じ）
-const rulesSrc = (c, group) => group === 'hs3' ? (c.hs3 && c.hs3.separate ? c.hs3 : c.hs) : group === 'hs' ? c.hs : group === 'es' ? c.es : c;
+const rulesSrc = (c, group) => group === 'ad' ? c.ad : group === 'hs3' ? (c.hs3 && c.hs3.separate ? c.hs3 : c.hs) : group === 'hs' ? c.hs : group === 'es' ? c.es : c;
 const ES_TREE = { name: '小学生の木', grades: ES_GRADES };
 const ES_STREAK_MIN = 45; // 小学生の🔥・季節のクエストの1日の最低時間
 // 小学生（小学生自習室）のポイントになる時間：朝 6:00〜7:30・夕方 15:00〜18:00
@@ -157,6 +158,8 @@ function defaults(today = jst()) {
     hs: { window: { start: '16:00', end: '23:00' }, window2: null, dailyCap: 360, weekly: null, medals: DEFAULT_MEDALS.map(m => ({ ...m })), lateMinutes: 15, medalsV1: true },
     // 高3（受験生）：separate をオンにすると、高1・高2とは別の数え方（学校がないので日中もポイントなど）
     hs3: { separate: false, window: { start: '08:00', end: '23:00' }, window2: null, dailyCap: 600, weekly: null },
+    // 大人（大人英会話）：昼間（8:00〜15:00）がポイントになる時間
+    ad: { window: { start: '08:00', end: '15:00' }, window2: null, dailyCap: 360, weekly: null },
     stages: [0, 5, 15, 30, 50, 80], // 木の段階（平均時間・時間単位）
     dressup: { mode: 'always', periods: [] }, // 着せかえ期間：always＝いつでも / periods＝決めた期間だけ
     events: Object.fromEntries(EVENTS.map(e => [e.id, true])), // 季節の飾り（オン/オフ）
@@ -233,6 +236,7 @@ function getConfig() {
     dressup: { ...d.dressup, ...(saved.dressup || {}) }, events: { ...d.events, ...(saved.events || {}) },
     hs: { ...d.hs, ...shs, window: { ...d.hs.window, ...(shs.window || {}) } },
     hs3: { ...d.hs3, ...(saved.hs3 || {}) },
+    ad: { ...d.ad, ...(saved.ad || {}) },
     es: { ...d.es, ...(saved.es || {}), window: { ...d.es.window, ...((saved.es || {}).window || {}) } },
     fun: { ...d.fun, ...(saved.fun || {}) },
   };
@@ -364,6 +368,12 @@ function setConfig(patch, actorId) {
   if (p.esItems !== undefined) {
     if (!Array.isArray(p.esItems)) return '小学生ショップのアイテムが正しくありません';
     c.esItems = [...new Set(p.esItems.filter(id => { const it = itemById(id); return it && !it.special; }))];
+  }
+  if (p.ad !== undefined) {
+    const ad = { ...c.ad };
+    err = applyRules(ad, p.ad || {});
+    if (err) return '大人：' + err;
+    c.ad = ad;
   }
   if (p.hs3 !== undefined) {
     const h3 = { ...c.hs3 };
@@ -550,7 +560,7 @@ function dayCounted(userId, day) { const r = db.prepare(`SELECT ${countedExpr} A
 function tick(online, opt = {}) {
   const c = getConfig();
   const t = jst(opt.date || new Date());
-  const rules = { jh: ruleFor(t.day, c), hs: ruleFor(t.day, c, 'hs'), hs3: ruleFor(t.day, c, 'hs3'), es: ruleFor(t.day, c, 'es') };
+  const rules = { jh: ruleFor(t.day, c), hs: ruleFor(t.day, c, 'hs'), hs3: ruleFor(t.day, c, 'hs3'), es: ruleFor(t.day, c, 'es'), ad: ruleFor(t.day, c, 'ad') };
   const open = (r) => r.on && r.windows.some(w => t.hm >= w.start && t.hm < w.end);
   const added = []; // ポイントになる時間に足した生徒
   Object.defineProperty(added, 'counted', { value: [], enumerable: false }); // 勉強時間（全部）に足した生徒（時間帯の外もふくむ）

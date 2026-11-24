@@ -139,6 +139,7 @@
     const h3sep = check('高3は高1・高2とは別の数え方にする', !!h3src.separate);
     { const inner = [...hs3.box.children].slice(2); hs3.box.insertBefore(h3sep[0], hs3.box.children[2] || null);
       const sync = () => { inner.forEach(n => { n.style.display = h3sep[1].checked ? '' : 'none'; }); }; h3sep[1].onchange = sync; sync(); }
+    const ad = ruleBlock(c.ad || { window: { start: '08:00', end: '15:00' }, window2: null, dailyCap: 360, weekly: null }, '🧑‍💼 大人（大人英会話）', '学年「大人」の数え方です（スピーキング・ライティング教室にいる時間）。最初は 8:00〜15:00 です。🔥とメダルは高校生と同じです。');
     const es = ruleBlock(c.es, '🎒 小学生自習室（小学生）', '小学生（小1〜小6）の数え方です。最初は 朝6:00〜7:30・夕方15:00〜18:00 です。');
     // 高校生の週のノルマ
     const MD = [['🥉', 'ブロンズ'], ['🥈', 'シルバー'], ['🥇', 'ゴールド']];
@@ -189,11 +190,12 @@
         requireSeat: seat[1].checked, requireCamera: cam[1].checked,
         es: es.value(),
         hs3: { ...hs3.value(), separate: h3sep[1].checked },
+        ad: ad.value(),
         vacations: vacRows.filter(r => r.st.value && r.en.value).map(r => ({ name: r.nm.value.trim() || '休み', start: r.st.value, end: r.en.value })),
         hs: { ...hs.value(), medals: medalInputs.map(([mi, pi]) => ({ minutes: Number(mi.value), points: Number(pi.value) })), lateMinutes: Number(hsLate.value) },
       }, '数え方を保存しました').then(ok => { if (ok) load(root, ctx).then(() => window.scrollTo(0, y)); });
     };
-    rule.append(jh.box, es.box, hs.box, hs3.box, vacBox, grid, sgBox, seat[0], cam[0], saveRule);
+    rule.append(jh.box, es.box, hs.box, hs3.box, ad.box, vacBox, grid, sgBox, seat[0], cam[0], saveRule);
 
     // ═════ 🎒 小学生ショップ ═════
     {

@@ -239,7 +239,7 @@ test('大人（大人英会話）：テスト教室だけ入れる・毎週の�
   const wr = await fetch(`${base}/api/reading/writing?unitId=${us[0].id}&mode=practice`, { method: 'POST', headers: { 'Content-Type': 'image/jpeg', Cookie: ac }, body: jpg }).then(x => x.json());
   assert.match(wr.error, /ライティングはありません/);
   // 高校生と同じ数え方（週の🔥・メダル）・がんばりの一覧に出る。学年は上がらない
-  assert.equal(G.groupOf('大人'), 'hs'); assert.equal(G.isHS('大人'), true);
+  assert.equal(G.groupOf('大人'), 'ad'); assert.equal(G.isHS('大人'), true);
   assert.ok(G.studentSummary().some(s => s.name === '佐藤' && s.hs));
   assert.equal(G.NEXT_GRADE['大人'], undefined); assert.equal(G.NEXT_GRADE['高3'], '卒業');
   // 入室前：漢字（準2級・2級）→ 英単語
@@ -258,4 +258,24 @@ test('大人（大人英会話）：テスト教室だけ入れる・毎週の�
   assert.equal(a2.more, false);
   assert.equal((await http('GET', '/api/quiz/status', null, ac)).data.required, false, '2問でおわり');
   await http('PATCH', '/api/admin/kanken/config', { enabled: false }, owner);
+});
+
+test('大人のポイントになる時間は別（最初は 8:00〜15:00）。管理画面で変えられる', async () => {
+  const G = require('../server/ganbari.js');
+  const owner = (await http('POST', '/api/login', { loginId: 'owner', password: 'ownerpass1' })).cookie;
+  assert.equal(G.groupOf('大人'), 'ad');
+  const day = '2026-11-25';
+  assert.deepEqual(G.ruleFor(day, G.getConfig(), 'ad').windows, [{ start: '08:00', end: '15:00' }]);
+  assert.notDeepEqual(G.ruleFor(day, G.getConfig(), 'hs').windows, [{ start: '08:00', end: '15:00' }], '高校生はそのまま');
+  const r = await http('PATCH', '/api/admin/ganbari/config', { ad: { window: { start: '09:00', end: '14:00' }, window2: null, dailyCap: 240 } }, owner);
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.deepEqual(G.ruleFor(day, G.getConfig(), 'ad').windows, [{ start: '09:00', end: '14:00' }]);
+  assert.equal(G.ruleFor(day, G.getConfig(), 'ad').cap, 240);
+  // 時間帯の中だけポイントになる
+  const id = (await http('POST', '/api/admin/users', { role: 'student', loginId: 'adultpt', displayName: 'ぽ', grade: '大人', password: 'password123' }, owner)).data.user.id;
+  const fake = { id, room: 'class1', seat: 'x', away: null, user: { id, role: 'student', grade: '大人' } };
+  const at = (hm) => new Date(`${day}T${hm}:00+09:00`);
+  assert.equal(G.tick(new Map([[id, fake]]), { date: at('10:00') }).length, 1, '10時はポイント');
+  assert.equal(G.tick(new Map([[id, fake]]), { date: at('16:00') }).length, 0, '16時はポイントにならない');
+  await http('PATCH', '/api/admin/ganbari/config', { ad: { window: { start: '08:00', end: '15:00' }, window2: null, dailyCap: 360 } }, owner);
 });
