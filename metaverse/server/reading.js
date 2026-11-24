@@ -99,6 +99,7 @@ function deleteUnit(id, actorId) {
   const r = db.prepare('DELETE FROM reading_units WHERE id = ?').run(id);
   db.prepare('DELETE FROM reading_practice WHERE unit_id = ?').run(id);
   db.prepare('DELETE FROM reading_tests WHERE unit_id = ?').run(id);
+  db.prepare('DELETE FROM writing_attempts WHERE unit_id = ?').run(id);
   audit(actorId, 'reading.unit_deleted', String(id), null);
   return r.changes > 0;
 }
@@ -117,7 +118,8 @@ function unitsFor(user) {
       MAX(CASE WHEN ja_only = 0 THEN score END) AS enBest, MAX(CASE WHEN ja_only = 0 THEN passed END) AS enPassed FROM reading_practice WHERE user_id = ? AND unit_id = ?`).get(user.id, u.id);
     const t = db.prepare('SELECT MAX(score) AS best, COUNT(*) AS n, MAX(passed) AS passed, MAX(points) AS points FROM reading_tests WHERE user_id = ? AND unit_id = ?').get(user.id, u.id);
     return { ...view(u, c, staff ? u.grade : user.grade), practice: { count: best.n, best: best.best, passed: !!best.passed, enBest: best.enBest, enPassed: !!best.enPassed },
-      test: { count: t.n, best: t.best, passed: !!t.passed, points: t.points || 0, nextPoints: t.passed ? 0 : TEST_POINTS(t.n + 1) } };
+      test: { count: t.n, best: t.best, passed: !!t.passed, points: t.points || 0, nextPoints: t.passed ? 0 : TEST_POINTS(t.n + 1) },
+      writing: require('./writing').status(user.id, u.id) };
   });
 }
 /** 練習の結果を記録する（点数・時間は端末で計算したもの）。合格ライン：90点以上・時間内 */

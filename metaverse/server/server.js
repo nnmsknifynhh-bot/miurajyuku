@@ -15,6 +15,7 @@ const parents = require('./parents');
 const birthday = require('./birthday');
 const onboard = require('./onboard');
 const reading = require('./reading');
+const writing = require('./writing');
 const referral = require('./referral');
 const myseat = require('./myseat');
 const SchoolMap = require('../public/shared/map.js');
@@ -51,7 +52,7 @@ app.use('/api', (req, res, next) => {
     let sameOrigin = true;
     if (origin) { try { sameOrigin = new URL(origin).host === req.headers.host; } catch { sameOrigin = false; } }
     if (!sameOrigin) return res.status(403).json({ error: '不正なリクエストです' });
-    const isPhoto = (req.path === '/study/photo' || req.path === '/me/start-photo') && req.is('image/jpeg');
+    const isPhoto = (req.path === '/study/photo' || req.path === '/me/start-photo' || req.path === '/reading/writing') && req.is('image/jpeg');
     if (!req.is('application/json') && !isPhoto) return res.status(415).json({ error: '不正なリクエストです' });
   }
   next();
@@ -193,6 +194,16 @@ app.post('/api/reading/test', auth.requireAuth, (req, res) => {
   if (req.user.role === 'parent') return bad(res, '生徒の機能です', 403);
   const r = reading.recordTest(req.user, Number(req.body.unitId), req.body || {});
   if (r.error) return bad(res, r.error);
+  if (r.points) realtime.refreshGanbari(req.user.id);
+  res.json(r);
+});
+// ✍️ ライティング：ノートの写真をおくる（?unitId=&mode=practice|test）。文字を読み取って本文とくらべる
+app.post('/api/reading/writing', express.raw({ type: 'image/jpeg', limit: '4mb' }), auth.requireAuth, async (req, res) => {
+  if (req.user.role === 'parent') return bad(res, '生徒の機能です', 403);
+  const unit = db.prepare('SELECT * FROM reading_units WHERE id = ? AND active = 1').get(Number(req.query.unitId));
+  if (!unit) return bad(res, '単元が見つかりません', 404);
+  const r = await writing.grade(req.user, unit, String(req.query.mode || ''), req.body);
+  if (r.error) return bad(res, r.error, r.code || 400);
   if (r.points) realtime.refreshGanbari(req.user.id);
   res.json(r);
 });
@@ -887,7 +898,7 @@ admin.patch('/ganbari/config', requireOwner, (req, res) => {
   realtime.refreshAllGanbari();
   res.json({ config: ganbari.getConfig() });
 });
-admin.get('/reading', requireOwner, (req, res) => res.json({ units: reading.listUnits(), config: reading.getConfig(), summary: reading.practiceSummary(), tests: reading.testSummary(), grades: ganbari.GRADES, speechReady: !!(process.env.AZURE_SPEECH_KEY && process.env.AZURE_SPEECH_REGION) }));
+admin.get('/reading', requireOwner, (req, res) => res.json({ units: reading.listUnits(), config: reading.getConfig(), summary: reading.practiceSummary(), tests: reading.testSummary(), writing: writing.summary(), visionReady: writing.visionReady(), grades: ganbari.GRADES, speechReady: !!(process.env.AZURE_SPEECH_KEY && process.env.AZURE_SPEECH_REGION) }));
 admin.post('/reading/units', requireOwner, (req, res) => { const r = reading.addUnit(req.body || {}, req.user.id); if (r.error) return bad(res, r.error); res.status(201).json(r); });
 admin.patch('/reading/units/:id', requireOwner, (req, res) => { const r = reading.updateUnit(Number(req.params.id), req.body || {}, req.user.id); if (r.error) return bad(res, r.error); res.json(r); });
 admin.delete('/reading/units/:id', requireOwner, (req, res) => { if (!reading.deleteUnit(Number(req.params.id), req.user.id)) return bad(res, '単元が見つかりません', 404); res.json({ ok: true }); });

@@ -87,6 +87,19 @@
     if (!(d.tests || []).length) { const tr = el('tr'); const td = el('td', 'empty', 'まだテストの記録はありません'); td.colSpan = 8; tr.append(td); tb2.append(tr); }
     tt.append(tb2); tw2.append(tt);
 
+    // ── ✍️ ライティングの結果 ──
+    const wsx = section('✍️ ライティングの結果', `音読テストに合格した単元で受けられます。日本語訳を見てノートに書き、写真を Microsoft が読み取ります。大文字・小文字・記号もふくめて100点で合格（練習で100点 → テスト）。文字の読み取りの準備：${d.visionReady ? '✅ できています' : '⚠️ まだです（Render の Environment に AZURE_VISION_KEY と AZURE_VISION_ENDPOINT を入れてください）'}`);
+    const ww = el('div', 'table-wrap'); wsx.append(ww);
+    const wt = el('table', 'logs'); const wh = el('tr'); ['生徒', '学年', '単元', '練習', 'テスト', 'いちばんよい点', 'クリア', 'ポイント', '最後'].forEach(x => wh.append(el('th', null, x))); wt.append(el('thead')); wt.firstChild.append(wh);
+    const wb = el('tbody');
+    for (const r of d.writing || []) {
+      const tr = el('tr');
+      [r.name, r.grade || '', r.title, `${r.practice}回`, `${r.tests}回`, `${r.best}点`, r.passed ? `✅ ${r.clearedAt}回目` : '', r.points ? `+${r.points}` : '', new Date(r.last).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })].forEach(v => tr.append(el('td', null, v)));
+      wb.append(tr);
+    }
+    if (!(d.writing || []).length) { const tr = el('tr'); const td = el('td', 'empty', 'まだライティングの記録はありません'); td.colSpan = 9; tr.append(td); wb.append(tr); }
+    wt.append(wb); ww.append(wt);
+
     // ── 練習のようす ──
     const ps = section('🔁 練習のようす', `生徒ごと・単元ごとの練習の回数といちばんよい点数です。「英文で合格」→「訳だけで合格」（${d.config.passScore}点以上・時間内）になると、本番のテストを受けられます。`);
     const pw = el('div', 'table-wrap'); ps.append(pw);

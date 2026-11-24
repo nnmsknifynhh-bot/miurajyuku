@@ -98,17 +98,109 @@
         t.disabled = !(u.practice.passed || staff);
         t.title = t.disabled ? `「訳だけで練習」で${PASS}点以上・時間内を出すと受けられるよ` : '';
         t.onclick = () => showUnit(u, 'test');
-        btns.append(p, j, t); row.append(left, btns); list.append(row);
+        btns.append(p, j, t);
+        // ✍️ ライティング（音読テストに合格した単元）
+        if (u.test.passed || staff) {
+          const wr = u.writing || {};
+          const wp = el('button', 'btn small secondary', '✍️ 書く練習'); wp.type = 'button'; wp.onclick = () => showUnit(u, 'wPractice');
+          const wt = el('button', 'btn small', '📝 ライティング'); wt.type = 'button';
+          wt.disabled = !(wr.practicePassed || staff); wt.title = wt.disabled ? '書く練習で100点を出すと受けられるよ' : '';
+          wt.onclick = () => showUnit(u, 'wTest');
+          const br = el('span', 'rd-break'); btns.append(br, wp, wt);
+          const ws = el('small', 'rd-status');
+          ws.textContent = wr.testPassed ? `✍️🏅 ライティングクリア` : wr.practicePassed ? `✍️ 書く練習で100点 → ライティングへ！（クリアで +${wr.nextPoints}pt）` : wr.practiceCount ? `✍️ 書く練習 ${wr.practiceBest}点（${wr.practiceCount}回）` : '✍️ 次はライティング（書く練習から）';
+          left.append(ws);
+        }
+        row.append(left, btns); list.append(row);
       }
       body.append(list);
     }
 
     function showUnit(u, mode = 'practice') {
       st.unit = u; st.result = null; st.showJa = false; st.mode = mode;
+      if (mode === 'wPractice' || mode === 'wTest') { st.wres = null; st.wimg = null; $('#rd-back').hidden = false; $('#rd-title').textContent = (mode === 'wTest' ? '📝 ライティング：' : '✍️ 書く練習：') + u.title; return renderWriting(); }
       if (mode === 'test') prepareTest(); // iPhone・iPad：ボタンを押したその場でマイクを始めるため、合言葉は先にもらっておく
       $('#rd-back').hidden = false; $('#rd-title').textContent = ({ test: '📝 テスト：', jaPractice: '🇯🇵 訳だけで練習：', practice: '🔤 英文で練習：' })[mode] + u.title;
       render();
     }
+    // ═════ ✍️ ライティング：日本語訳を見てノートに書く → 撮る → 文字を読み取ってくらべる ═════
+    const W_LABEL = { case: '大文字・小文字', punct: 'ピリオド・？・アポストロフィなど', spell: 'つづり', missing: '書いていない' };
+    function renderWriting() {
+      const u = st.unit, r = st.wres, body = $('#rd-body'); body.textContent = '';
+      const test = st.mode === 'wTest';
+      body.append(el('p', 'muted', r ? '' : `日本語訳を見て、ノートに英文を書こう（時間は自由）。大文字・小文字、ピリオド・？・アポストロフィ（'）もしっかり。話す人の名前は書かなくていいよ。書けたら「📸 ノートを撮る」。100点で${test ? 'クリア' : '合格'}！`));
+      const pas = el('div', 'rd-passage');
+      let k = 0;
+      for (const line of u.lines) {
+        const row = el('div', 'rd-line');
+        if (line.speaker) row.append(el('span', 'rd-speaker', line.speaker));
+        if (!r) row.append(el('p', 'rd-ja big', line.ja || '（この文の訳はまだありません）'));
+        else {
+          const en = el('p', 'rd-en');
+          for (const tok of String(line.en).split(/\s+/).filter(Boolean)) {
+            const w = r.words[k++] || { status: 'ok' };
+            const span = el('span', w.status === 'ok' ? null : 'w-' + w.status, tok + ' ');
+            if (w.status !== 'ok') span.title = `${W_LABEL[w.status]}${w.got ? `：あなたは「${w.got}」` : ''}`;
+            en.append(span);
+          }
+          row.append(en);
+          if (line.ja) row.append(el('p', 'rd-ja', line.ja));
+        }
+        pas.append(row);
+      }
+      body.append(pas);
+      if (r) {
+        const res = el('div', 'rd-result' + (r.passed ? ' ok' : ''));
+        res.append(el('b', 'rd-score', `${r.score}点`), el('span', null, test ? `ライティング（${r.attempt}回目）` : '書く練習'));
+        const bad = r.words.filter(w => w.status !== 'ok');
+        res.append(el('p', null, r.passed ? (test ? (r.points ? `🎉 クリア！ +${r.points}ポイント！` : r.alreadyCleared ? '🎉 クリア！（この単元はもうポイントをもらっているよ）' : '🎉 クリア！') : '🎉 100点！ ライティングを受けられるよ') : `あと${bad.length + r.extra.length}か所。下をたしかめて、書きなおしてね`));
+        for (const st3 of ['spell', 'missing', 'case', 'punct']) {
+          const list = bad.filter(w => w.status === st3);
+          if (list.length) res.append(el('small', 'rd-sub w-sum-' + st3, `${({ spell: '✏️', missing: '🔇', case: '🔠', punct: '❗' })[st3]} ${W_LABEL[st3]}：${list.slice(0, 10).map(w => w.got ? `${w.got} → ${w.ref}` : w.ref).join('・')}${list.length > 10 ? ' ほか' : ''}`));
+        }
+        if (r.extra.length) res.append(el('small', 'rd-sub', `➕ 本文にない単語：${r.extra.slice(0, 10).join('・')}`));
+        res.append(el('small', 'rd-sub', `📄 読み取った文：${(r.written || []).join(' / ').slice(0, 300)}`));
+        res.append(el('small', 'rd-sub', '字がちゃんと読み取られていないときは、明るいところで、ノートをまっすぐ撮りなおしてね'));
+        body.append(res);
+        if (!test && r.passed) { const go = el('button', 'btn small', '📝 ライティングへ'); go.type = 'button'; go.onclick = () => showUnit(u, 'wTest'); body.append(go); }
+      }
+      if (st.wimg) { const im = el('img', 'w-preview'); im.src = st.wimg.url; im.alt = 'ノートの写真'; body.append(im); }
+      const btns = el('div', 'rd-btns');
+      const file = el('input'); file.type = 'file'; file.accept = 'image/*'; file.setAttribute('capture', 'environment'); file.hidden = true;
+      const shot = el('button', 'btn rd-big' + (st.wimg ? ' secondary' : ''), st.wimg ? '📸 撮りなおす' : r ? '📸 書きなおして撮る' : '📸 ノートを撮る'); shot.type = 'button'; shot.onclick = () => file.click();
+      file.onchange = () => {
+        const f = file.files[0]; if (!f) return;
+        const im = new Image();
+        im.onload = () => {
+          const k2 = Math.min(1, 1800 / Math.max(im.naturalWidth, im.naturalHeight)), cv = document.createElement('canvas');
+          cv.width = Math.round(im.naturalWidth * k2); cv.height = Math.round(im.naturalHeight * k2);
+          cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
+          URL.revokeObjectURL(im.src);
+          cv.toBlob(b => { if (st.wimg) URL.revokeObjectURL(st.wimg.url); st.wimg = { blob: b, url: URL.createObjectURL(b) }; st.wres = null; renderWriting(); }, 'image/jpeg', 0.85);
+        };
+        im.src = URL.createObjectURL(f);
+      };
+      btns.append(file, shot);
+      if (st.wimg) {
+        const send = el('button', 'btn rd-big', st.wsending ? '読み取り中…' : '✅ 採点する'); send.type = 'button'; send.disabled = !!st.wsending;
+        send.onclick = async () => {
+          st.wsending = true; renderWriting();
+          try {
+            const res = await fetch(`/api/reading/writing?unitId=${u.id}&mode=${test ? 'test' : 'practice'}`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'image/jpeg' }, body: st.wimg.blob });
+            const d = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(d.error || '採点できませんでした');
+            st.wres = d; URL.revokeObjectURL(st.wimg.url); st.wimg = null;
+            const wr = u.writing || (u.writing = {});
+            if (test) { wr.testCount = (wr.testCount || 0) + 1; if (d.passed) wr.testPassed = true; if (d.points) toast(`🏅 ライティングクリア！ +${d.points}ポイント`, 6000); }
+            else { wr.practiceCount = (wr.practiceCount || 0) + 1; wr.practiceBest = Math.max(wr.practiceBest || 0, d.score); if (d.passed) wr.practicePassed = true; }
+          } catch (e) { toast(e.message, 6000); }
+          st.wsending = false; renderWriting();
+        };
+        btns.append(send);
+      }
+      body.append(btns);
+    }
+
     function render() {
       const u = st.unit, r = st.result, body = $('#rd-body'); body.textContent = '';
       const top = el('div', 'rd-top');

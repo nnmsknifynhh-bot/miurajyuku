@@ -465,3 +465,11 @@ body.is-trial .not-trial { display: none !important; }
 .rd-ja.big { font-size: 17px; color: var(--ink, #1f2a37); font-weight: 700; line-height: 1.6; }
 .rd-en .weak { color: #e67700; text-decoration: underline dotted; text-underline-offset: 4px; cursor: pointer; }
 .rd-en .ng { cursor: pointer; }
+/* ✍️ ライティングの結果 */
+.rd-en .w-spell, .rd-en .w-missing { color: #e5484d; text-decoration: underline wavy; text-underline-offset: 4px; }
+.rd-en .w-missing { text-decoration: line-through; }
+.rd-en .w-case, .rd-en .w-punct { color: #e67700; text-decoration: underline dotted; text-underline-offset: 4px; }
+.w-preview { max-width: 100%; max-height: 260px; object-fit: contain; border-radius: 12px; border: 2px solid var(--line); justify-self: center; }
+.rd-break { flex-basis: 100%; height: 0; }
+.rd-btns { gap: 8px; flex-wrap: wrap; }
+@media (max-width: 560px) { .rd-unit { flex-direction: column; align-items: stretch; } .rd-unit-btns { justify-content: flex-start; } }

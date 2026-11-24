@@ -87,3 +87,26 @@ test('本番のテスト：練習で合格するまで受けられない。ク�
   assert.equal(adm.speechReady, false, 'キーがないときは準備まだ');
   assert.equal((await http('GET', '/api/reading/speech-token', null, a)).status, 503);
 });
+
+test('ライティング：音読テストに合格した単元だけ。練習で100点 → テスト。大文字・記号もまちがい。1回目+5', async () => {
+  const W = require('../server/writing.js');
+  const owner = (await http('POST', '/api/login', { loginId: 'owner', password: 'ownerpass1' })).cookie;
+  const a = (await http('POST', '/api/login', { loginId: 'tsa', password: 'password123' })).cookie; // 音読テストに合格ずみ
+  const c = (await http('POST', '/api/admin/users', { role: 'student', loginId: 'tsc', displayName: 'tsc', grade: '中3', password: 'password123' }, owner)) && (await http('POST', '/api/login', { loginId: 'tsc', password: 'password123' })).cookie;
+  const unit = (await http('GET', '/api/reading/units', null, a)).data.units[0];
+  const jpg = Buffer.concat([Buffer.from([0xff, 0xd8]), Buffer.alloc(2000, 1)]);
+  const send = (cookie, mode) => fetch(`${base}/api/reading/writing?unitId=${unit.id}&mode=${mode}`, { method: 'POST', headers: { 'Content-Type': 'image/jpeg', Cookie: cookie }, body: jpg }).then(async r => ({ status: r.status, data: await r.json() }));
+  const full = R.parseText(TEXT).map(l => l.en);
+  W.ocr.read = async () => full;
+  assert.match((await send(c, 'practice')).data.error, /音読テスト/);
+  assert.match((await send(a, 'test')).data.error, /書く練習/);
+  W.ocr.read = async () => ["i'm sorry I'm late", ...full.slice(1)];
+  let r = (await send(a, 'practice')).data;
+  assert.equal(r.passed, false); assert.ok(r.words.some(w => w.status === 'case')); assert.ok(r.words.some(w => w.status === 'punct'));
+  W.ocr.read = async () => full;
+  r = (await send(a, 'practice')).data; assert.equal(r.score, 100); assert.equal(r.passed, true);
+  r = (await send(a, 'test')).data; assert.equal(r.passed, true); assert.equal(r.points, 5);
+  r = (await send(a, 'test')).data; assert.equal(r.points, 0, 'ポイントは1回だけ');
+  assert.equal((await http('GET', '/api/reading/units', null, a)).data.units[0].writing.testPassed, true);
+  assert.ok((await http('GET', '/api/admin/reading', null, owner)).data.writing.some(w => w.name === 'tsa' && w.passed));
+});
