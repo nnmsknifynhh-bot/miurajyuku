@@ -44,6 +44,28 @@
     return out;
   }
   const wordsOf = (t) => String(t || '').split(/\s+/).map(w => w.replace(/^[^A-Za-z0-9'’]+|[^A-Za-z0-9'’]+$/g, '')).filter(Boolean);
+  // 人の名前など（文の途中の大文字の単語。例：Tanaka Hana）：英語の聞き取りでは文字にならないことが多いので、
+  // その場所で何か言っていれば（前後の単語のあいだに聞こえた言葉があれば）言えたことにする
+  function nameMask(words) {
+    const cap = (w) => /^[A-Z][a-z]/.test(w) && !/^I('|’|$)/.test(w);
+    const ends = (w) => /[.?!]["'”’]?$/.test(w || '');
+    const m = words.map((w, i) => cap(w) && i > 0 && !ends(words[i - 1]));
+    // 文の頭でも、すぐ後ろが名前ならいっしょに名前（Tanaka Hana is ...）
+    for (let i = words.length - 2; i >= 0; i--) if (!m[i] && cap(words[i]) && m[i + 1] && !ends(words[i])) m[i] = true;
+    return m;
+  }
+  // hitJ[k]：本文の k 番目の音が、聞こえた言葉の何番目と合ったか（-1＝合っていない）
+  function nameFill(words, owner, hitJ, m) {
+    const mask = nameMask(words), filled = new Set();
+    for (let k = 0; k < owner.length; k++) {
+      if (hitJ[k] >= 0 || !mask[owner[k]]) continue;
+      let a = k - 1; while (a >= 0 && hitJ[a] < 0) a--;
+      let b = k + 1; while (b < owner.length && hitJ[b] < 0) b++;
+      const from = a >= 0 ? hitJ[a] : -1, to = b < owner.length ? hitJ[b] : m;
+      if (to - from - 1 >= 1) filled.add(k); // あいだに聞こえた言葉がある
+    }
+    return filled;
+  }
   // 本文の単語のうち、聞き取れたもの（順番どおりにいちばん多く合うところをさがす）
   function grade(words, heard) {
     const P = [], owner = [];
@@ -53,8 +75,9 @@
     const n = P.length, m = H.length;
     const dp = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
     for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) dp[i][j] = P[i] === H[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
-    const hit = new Array(n).fill(false);
-    for (let i = 0, j = 0; i < n && j < m;) { if (P[i] === H[j]) { hit[i] = true; i++; j++; } else if (dp[i + 1][j] >= dp[i][j + 1]) i++; else j++; }
+    const hit = new Array(n).fill(false), hitJ = new Array(n).fill(-1);
+    for (let i = 0, j = 0; i < n && j < m;) { if (P[i] === H[j]) { hit[i] = true; hitJ[i] = j; i++; j++; } else if (dp[i + 1][j] >= dp[i][j + 1]) i++; else j++; }
+    for (const k of nameFill(words, owner, hitJ, m)) hit[k] = true; // 名前は、その場所で何か言っていればOK
     const ok = words.map(() => true);
     hit.forEach((h, k) => { if (!h) ok[owner[k]] = false; });
     const score = words.length ? Math.round(ok.filter(Boolean).length / words.length * 100) : 0;
@@ -426,6 +449,15 @@
       const pa = new sdk.PronunciationAssessmentConfig(ref, sdk.PronunciationAssessmentGradingSystem.HundredMark, sdk.PronunciationAssessmentGranularity.Word, true);
       const recog = new sdk.SpeechRecognizer(cfg, audio);
       pa.applyTo(recog);
+      // ヒント：登録した文の言葉（人の名前など）を、聞き取りに教えておく
+      try {
+        const pl = sdk.PhraseListGrammar.fromRecognizer(recog);
+        const ws = wordsOf(ref), mask = nameMask(ws);
+        for (const l of st.unit.lines) pl.addPhrase(l.en);
+        let run = [];
+        ws.forEach((w, i) => { if (mask[i]) run.push(w.replace(/[^A-Za-z'-]/g, '')); else { if (run.length) pl.addPhrase(run.join(' ')); run = []; } });
+        if (run.length) pl.addPhrase(run.join(' '));
+      } catch (e) { /* ヒントなしで続ける */ }
       st.segs = []; st.result = null; st.interim = ''; st.recording = true; st.startAt = Date.now(); st.lastEnd = 0;
       st.rec = { azure: recog };
       st.heardAny = false;
@@ -478,15 +510,16 @@
       const n = P.length, m = H.length;
       const dp = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
       for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) dp[i][j] = P[i] === H[j].t ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
-      const accOf = new Array(n).fill(null);
+      const accOf = new Array(n).fill(null), hitJ = new Array(n).fill(-1);
       for (let i = 0, j = 0; i < n && j < m;) {
         if (P[i] === H[j].t) {
           // 言い直し：近く（前後4語）で同じ単語を言っていたら、いちばんよい発音の点
           let best = H[j].acc;
           for (let k = Math.max(0, j - 4); k <= Math.min(m - 1, j + 4); k++) if (H[k].t === P[i]) best = Math.max(best, H[k].acc);
-          accOf[i] = best; i++; j++;
+          accOf[i] = best; hitJ[i] = j; i++; j++;
         } else if (dp[i + 1][j] >= dp[i][j + 1]) i++; else j++;
       }
+      for (const k of nameFill(words, owner, hitJ, m)) accOf[k] = 80; // 名前は、その場所で何か言っていればOK
       const wAcc = words.map(() => []);
       accOf.forEach((a, k) => wAcc[owner[k]].push(a));
       const per = wAcc.map(list => list.some(a => a === null) ? null : list.reduce((x, y) => x + y, 0) / list.length);
