@@ -94,8 +94,9 @@ test('ライティング：音読テストに合格した単元だけ。練習�
   const a = (await http('POST', '/api/login', { loginId: 'tsa', password: 'password123' })).cookie; // 音読テストに合格ずみ
   const c = (await http('POST', '/api/admin/users', { role: 'student', loginId: 'tsc', displayName: 'tsc', grade: '中3', password: 'password123' }, owner)) && (await http('POST', '/api/login', { loginId: 'tsc', password: 'password123' })).cookie;
   const unit = (await http('GET', '/api/reading/units', null, a)).data.units[0];
-  const jpg = Buffer.concat([Buffer.from([0xff, 0xd8]), Buffer.alloc(2000, 1)]);
-  const send = (cookie, mode) => fetch(`${base}/api/reading/writing?unitId=${unit.id}&mode=${mode}`, { method: 'POST', headers: { 'Content-Type': 'image/jpeg', Cookie: cookie }, body: jpg }).then(async r => ({ status: r.status, data: await r.json() }));
+  let shot = 0; // 毎回ちがう写真（同じ写真は送れない）
+  const photo = (n) => Buffer.concat([Buffer.from([0xff, 0xd8]), Buffer.alloc(2000, n % 250 + 1), Buffer.from(String(n))]);
+  const send = (cookie, mode, jpg = photo(++shot)) => fetch(`${base}/api/reading/writing?unitId=${unit.id}&mode=${mode}`, { method: 'POST', headers: { 'Content-Type': 'image/jpeg', Cookie: cookie }, body: jpg }).then(async r => ({ status: r.status, data: await r.json() }));
   const full = R.parseText(TEXT).map(l => l.en);
   W.ocr.read = async () => full;
   assert.match((await send(c, 'practice')).data.error, /音読テスト/);
@@ -105,6 +106,21 @@ test('ライティング：音読テストに合格した単元だけ。練習�
   assert.equal(r.passed, false); assert.ok(r.words.some(w => w.status === 'case')); assert.ok(r.words.some(w => w.status === 'punct'));
   W.ocr.read = async () => full;
   r = (await send(a, 'practice')).data; assert.equal(r.score, 100); assert.equal(r.passed, true);
+  // 同じ写真は、もう一度送れない
+  assert.match((await send(a, 'practice', photo(shot))).data.error, /同じ/);
+  // テストは授業の日だけ（授業の曜日が未登録・ちがう曜日 → 受けられない）
+  const { db } = require('../server/db.js');
+  const G = require('../server/ganbari.js');
+  const wd = new Date(G.jst().day + 'T00:00:00Z').getUTCDay();
+  assert.match((await send(a, 'test')).data.error, /授業の日.*先生に伝えて/);
+  db.prepare("UPDATE users SET class_days = ? WHERE login_id = 'tsa'").run(String((wd + 1) % 7));
+  assert.match((await send(a, 'test')).data.error, /授業の日（.曜）/);
+  assert.equal((await http('GET', '/api/reading/units', null, a)).data.units[0].writing.testToday, false);
+  // 設定をオフにすると、いつでも受けられる
+  assert.equal((await http('PATCH', '/api/admin/reading/config', { writingClassDay: false }, owner)).status, 200);
+  assert.equal((await http('GET', '/api/reading/units', null, a)).data.units[0].writing.testToday, true);
+  await http('PATCH', '/api/admin/reading/config', { writingClassDay: true }, owner);
+  db.prepare("UPDATE users SET class_days = ? WHERE login_id = 'tsa'").run(`${wd},${(wd + 3) % 7}`);
   r = (await send(a, 'test')).data; assert.equal(r.passed, true); assert.equal(r.points, 5);
   r = (await send(a, 'test')).data; assert.equal(r.points, 0, 'ポイントは1回だけ');
   assert.equal((await http('GET', '/api/reading/units', null, a)).data.units[0].writing.testPassed, true);

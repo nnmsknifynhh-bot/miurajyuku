@@ -9,6 +9,23 @@ db.exec(`
 CREATE TABLE IF NOT EXISTS writing_attempts (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, unit_id INTEGER NOT NULL, mode TEXT NOT NULL, attempt INTEGER NOT NULL, score INTEGER NOT NULL, passed INTEGER NOT NULL, points INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_writing_user ON writing_attempts(user_id, unit_id);
 `);
+// 送った写真の指紋（同じ写真をもう一度送れないように）
+if (!db.prepare('PRAGMA table_info(writing_attempts)').all().some(c => c.name === 'photo_hash')) db.exec('ALTER TABLE writing_attempts ADD COLUMN photo_hash TEXT');
+const crypto = require('node:crypto');
+const G = require('./ganbari');
+const WD = ['日', '月', '火', '水', '木', '金', '土'];
+/**
+ * ライティングテストを今日受けられるか（「授業の日だけ」の設定がオンなら、その生徒の授業の曜日だけ）
+ * @returns {{ testToday: boolean, classDays: string|null }}  classDays は「火・金」のような表示用
+ */
+function testDay(user, date = new Date()) {
+  const staff = user.role === 'owner' || user.role === 'teacher';
+  const days = String(user.class_days || '').split(',').filter(Boolean).map(Number);
+  const label = days.length ? days.map(d => WD[d]).join('・') : null;
+  if (staff || !require('./reading').getConfig().writingClassDay) return { testToday: true, classDays: label };
+  const wd = new Date(G.jst(date).day + 'T00:00:00Z').getUTCDay();
+  return { testToday: days.includes(wd), classDays: label };
+}
 const PASS = 100;
 const POINTS = (attempt) => attempt <= 1 ? 5 : attempt === 2 ? 4 : 3;
 
@@ -94,8 +111,14 @@ async function grade(user, unit, mode, buf) {
     const readOk = db.prepare('SELECT 1 FROM reading_tests WHERE user_id = ? AND unit_id = ? AND passed = 1').get(user.id, unit.id);
     if (!readOk) return { error: '先に、この単元の音読テストに合格してね' };
     if (mode === 'test' && !status(user.id, unit.id).practicePassed) return { error: '先に、書く練習で100点を出してね' };
+    if (mode === 'test') {
+      const td = testDay(user);
+      if (!td.testToday) return { error: td.classDays ? `📝 ライティングテストは、授業の日（${td.classDays}曜）に受けられるよ` : '📝 ライティングテストは授業の日に受けられます。授業の曜日がまだ登録されていないので、先生に伝えてね' };
+    }
   }
   if (!Buffer.isBuffer(buf) || buf.length < 1000 || !(buf[0] === 0xff && buf[1] === 0xd8)) return { error: '写真が正しくありません（JPEG）' };
+  const hash = crypto.createHash('sha256').update(buf).digest('hex');
+  if (!staff && db.prepare('SELECT 1 FROM writing_attempts WHERE user_id = ? AND photo_hash = ?').get(user.id, hash)) return { error: '前に送った写真と同じです。新しく書いて、撮りなおしてね' };
   if (!visionReady() && ocr.read === azureRead) return { error: '文字の読み取りの準備がまだできていません（先生に伝えてね）', code: 503 };
   let written;
   try { written = await ocr.read(buf); } catch (e) { console.error('文字の読み取りに失敗:', e.message); return { error: '文字を読み取れませんでした。明るいところで、ノートがまっすぐ写るように撮りなおしてね', code: 502 }; }
@@ -110,7 +133,7 @@ async function grade(user, unit, mode, buf) {
     points = POINTS(attempt);
     if (!db.prepare('INSERT OR IGNORE INTO bonus_points (user_id, reason, points, created_at) VALUES (?, ?, ?, ?)').run(user.id, `writing:${unit.id}`, points, now()).changes) points = 0;
   }
-  db.prepare('INSERT INTO writing_attempts (user_id, unit_id, mode, attempt, score, passed, points, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(user.id, unit.id, mode, attempt, c.score, passed ? 1 : 0, points, now());
+  db.prepare('INSERT INTO writing_attempts (user_id, unit_id, mode, attempt, score, passed, points, created_at, photo_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(user.id, unit.id, mode, attempt, c.score, passed ? 1 : 0, points, now(), hash);
   return { ok: true, ...c, passed, points, attempt, alreadyCleared: mode === 'test' && before.testPassed, written };
 }
 function summary() {
@@ -119,4 +142,4 @@ function summary() {
       MAX(w.score) AS best, MAX(CASE WHEN w.mode = 'test' THEN w.passed ELSE 0 END) AS passed, MIN(CASE WHEN w.mode = 'test' AND w.passed = 1 THEN w.attempt END) AS clearedAt, MAX(w.points) AS points, MAX(w.created_at) AS last
     FROM writing_attempts w JOIN users u ON u.id = w.user_id JOIN reading_units r ON r.id = w.unit_id GROUP BY w.user_id, w.unit_id ORDER BY last DESC LIMIT 300`).all().map(r => ({ ...r, passed: !!r.passed }));
 }
-module.exports = { PASS, POINTS, compare, status, grade, summary, visionReady, ocr };
+module.exports = { PASS, POINTS, compare, status, grade, testDay, summary, visionReady, ocr };

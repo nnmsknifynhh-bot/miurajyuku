@@ -70,9 +70,11 @@
     for (const g of d.grades) { const i = el('input'); i.type = 'number'; i.min = 10; i.max = 300; i.value = d.config.wpm[g]; i.style.width = '70px'; winputs[g] = i; const one = el('span', 'gb-row'); one.style.flexWrap = 'nowrap'; one.append(el('span', null, g), i); wrow.append(one); }
     const pi = el('input'); pi.type = 'number'; pi.min = 50; pi.max = 100; pi.value = d.config.passScore; pi.style.width = '80px';
     const prow = el('div', 'gb-row'); prow.append(el('b', null, '🎯 合格ライン（練習・テスト共通）'), pi, el('span', null, '点以上・時間内'));
+    const cdl = el('label', 'gb-row'); const cd = el('input'); cd.type = 'checkbox'; cd.checked = d.config.writingClassDay !== false;
+    cdl.append(cd, el('span', null, '📝 ライティングテストは「授業の日」だけ受けられる（生徒ごとの授業の曜日は、ユーザー管理で登録。練習はいつでもOK）'));
     const wsave = el('button', 'btn', '保存する');
-    wsave.onclick = async () => { try { await api('PATCH', '/api/admin/reading/config', { passScore: Number(pi.value), wpm: Object.fromEntries(Object.entries(winputs).map(([g, i]) => [g, Number(i.value)])) }); toast('保存しました'); load(root, { api, toast }); } catch (e) { toast(e.message); } };
-    ws.append(wrow, prow, wsave);
+    wsave.onclick = async () => { try { await api('PATCH', '/api/admin/reading/config', { writingClassDay: cd.checked, passScore: Number(pi.value), wpm: Object.fromEntries(Object.entries(winputs).map(([g, i]) => [g, Number(i.value)])) }); toast('保存しました'); load(root, { api, toast }); } catch (e) { toast(e.message); } };
+    ws.append(wrow, prow, cdl, wsave);
 
     // ── 本番のテストの結果 ──
     const ts = section('📝 本番のテストの結果', `Microsoft の音声サービスが採点します。${d.config.passScore}点以上・時間内でクリア（単元ごとに1回：1回目+5／2回目+4／3回目から+3ポイント）。採点の準備：${d.speechReady ? '✅ できています' : '⚠️ まだです（Render の Environment に AZURE_SPEECH_KEY と AZURE_SPEECH_REGION を入れてください）'}`);

@@ -25,7 +25,7 @@ const PASS_SCORE = 90; // 合格ライン（管理画面で変えられる）
 function getConfig() {
   let saved = {};
   try { saved = JSON.parse(getSetting('reading', '{}')); } catch (e) { saved = {}; }
-  return { wpm: { ...DEFAULT_WPM, ...(saved.wpm || {}) }, passScore: Number.isInteger(saved.passScore) ? saved.passScore : PASS_SCORE };
+  return { wpm: { ...DEFAULT_WPM, ...(saved.wpm || {}) }, passScore: Number.isInteger(saved.passScore) ? saved.passScore : PASS_SCORE, writingClassDay: saved.writingClassDay !== false };
 }
 function setConfig(p, actorId) {
   const c = getConfig();
@@ -40,7 +40,8 @@ function setConfig(p, actorId) {
     if (!Number.isInteger(p.passScore) || p.passScore < 50 || p.passScore > 100) return '合格ラインは50〜100点にしてください';
     c.passScore = p.passScore;
   }
-  setSetting('reading', JSON.stringify({ wpm: c.wpm, passScore: c.passScore }));
+  if (p.writingClassDay !== undefined) c.writingClassDay = !!p.writingClassDay; // ライティングテストは授業の日だけ
+  setSetting('reading', JSON.stringify({ wpm: c.wpm, passScore: c.passScore, writingClassDay: c.writingClassDay }));
   audit(actorId, 'reading.config', null, null);
   return null;
 }
@@ -122,7 +123,7 @@ function unitsFor(user) {
     const t = db.prepare('SELECT MAX(score) AS best, COUNT(*) AS n, MAX(passed) AS passed, MAX(points) AS points FROM reading_tests WHERE user_id = ? AND unit_id = ?').get(user.id, u.id);
     return { ...view(u, c, staff ? u.grade : user.grade), practice: { count: best.n, best: best.best, passed: !!best.passed, enBest: best.enBest, enPassed: !!best.enPassed },
       test: { count: t.n, best: t.best, passed: !!t.passed, points: t.points || 0, nextPoints: t.passed ? 0 : TEST_POINTS(t.n + 1) },
-      writing: require('./writing').status(user.id, u.id) };
+      writing: { ...require('./writing').status(user.id, u.id), ...require('./writing').testDay(user) } };
   });
 }
 /** 練習の結果を記録する（点数・時間は端末で計算したもの）。合格ライン：90点以上・時間内 */
