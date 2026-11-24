@@ -11,12 +11,35 @@
 
   // ── 単語をそろえる（大文字小文字・記号・短縮形） ──
   const CONTR = { "i'm": 'i am', "can't": 'can not', "cannot": 'can not', "won't": 'will not', "let's": 'let us', "it's": 'it is', "that's": 'that is', "what's": 'what is', "where's": 'where is', "there's": 'there is', "here's": 'here is', "he's": 'he is', "she's": 'she is', "who's": 'who is', "how's": 'how is' };
+  // 数字は英語のつづりにそろえる（「10」と「ten」を同じにする。音声の機械は数字で書くことが多いため）
+  const ONES = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+  const TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+  const ORD = { one: 'first', two: 'second', three: 'third', five: 'fifth', eight: 'eighth', nine: 'ninth', twelve: 'twelfth' };
+  function numWords(n) {
+    if (n < 20) return [ONES[n]];
+    if (n < 100) return [TENS[Math.floor(n / 10)], ...(n % 10 ? [ONES[n % 10]] : [])];
+    if (n < 1000) return [ONES[Math.floor(n / 100)], 'hundred', ...(n % 100 ? numWords(n % 100) : [])];
+    // 年（1100〜1999・2010〜2099）は「nineteen ninety」「twenty twenty six」の読み方
+    if ((n >= 1100 && n <= 1999) || (n >= 2010 && n <= 2099)) return [...numWords(Math.floor(n / 100)), ...(n % 100 ? (n % 100 < 10 ? ['oh', ONES[n % 100]] : numWords(n % 100)) : ['hundred'])];
+    if (n < 1000000) return [...numWords(Math.floor(n / 1000)), 'thousand', ...(n % 1000 ? numWords(n % 1000) : [])];
+    return String(n).split('').map(d => ONES[Number(d)]);
+  }
+  const ordWords = (n) => { const w = numWords(n), last = w[w.length - 1]; w[w.length - 1] = ORD[last] || (last.endsWith('y') ? last.slice(0, -1) + 'ieth' : last + 'th'); return w; };
   function toks(word) {
-    let w = String(word).toLowerCase().replace(/[’‘]/g, "'").replace(/-/g, '').replace(/[^a-z0-9']/g, '');
-    if (!w) return [];
-    if (CONTR[w]) return CONTR[w].split(' ');
-    w = w.replace(/n't$/, ' not').replace(/'re$/, ' are').replace(/'ve$/, ' have').replace(/'ll$/, ' will').replace(/'d$/, ' would').replace(/'m$/, ' am').replace(/'s$/, 's').replace(/'/g, '');
-    return w.split(' ').filter(Boolean);
+    // ハイフン・コロン・数字と文字のさかい目で分ける（twenty-six → twenty six、3-D → 3 d、7:30 → 7 30）
+    const parts = String(word).toLowerCase().replace(/[’‘]/g, "'").replace(/[-:\/]/g, ' ').replace(/(\d)(?=[a-z])(?!(st|nd|rd|th)\b)/g, '$1 ').replace(/([a-z])(?=\d)/g, '$1 ').split(/\s+/);
+    const out = [];
+    for (const p of parts) {
+      let w = p.replace(/[^a-z0-9']/g, '');
+      if (!w) continue;
+      const ord = w.match(/^(\d+)(st|nd|rd|th)$/);
+      if (ord) { out.push(...ordWords(Number(ord[1]))); continue; }
+      if (/^\d+$/.test(w)) { out.push(...numWords(Number(w))); continue; }
+      if (CONTR[w]) { out.push(...CONTR[w].split(' ')); continue; }
+      w = w.replace(/n't$/, ' not').replace(/'re$/, ' are').replace(/'ve$/, ' have').replace(/'ll$/, ' will').replace(/'d$/, ' would').replace(/'m$/, ' am').replace(/'s$/, 's').replace(/'/g, '');
+      out.push(...w.split(' ').filter(Boolean));
+    }
+    return out;
   }
   const wordsOf = (t) => String(t || '').split(/\s+/).map(w => w.replace(/^[^A-Za-z0-9'’]+|[^A-Za-z0-9'’]+$/g, '')).filter(Boolean);
   // 本文の単語のうち、聞き取れたもの（順番どおりにいちばん多く合うところをさがす）
