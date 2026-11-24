@@ -116,7 +116,8 @@
       const staff = getUser().role !== 'student';
       for (const u of st.units) {
         const row = el('div', 'rd-unit');
-        const left = el('span'); left.append(el('b', null, u.title), el('small', null, `${staff ? u.grade + '・' : ''}${u.words}語・⏱ ${mmss(u.limit)}`));
+        const showGrade = staff || u.grade !== getUser().grade; // 小学生が中1の単元をえらぶとき、学年を出す
+        const left = el('span'); left.append(el('b', null, (showGrade && !staff ? `【${u.grade}】` : '') + u.title), el('small', null, `${staff ? u.grade + '・' : ''}${u.words}語・⏱ ${mmss(u.limit)}`));
         const st2 = el('small', 'rd-status');
         st2.textContent = u.test.passed ? `🏅 テストクリア（${u.test.best}点）`
           : u.practice.passed ? `✅ 訳だけで合格 → テストへ！（クリアで +${u.test.nextPoints}pt）`

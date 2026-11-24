@@ -122,3 +122,14 @@ test('スピーキング：聞き取れなかった単語が3つ以上なら、�
   assert.equal(r.passed, false); assert.equal(r.points, 0);
   assert.equal((await http('POST', '/api/reading/test', { unitId: unit.id, score: 96, seconds: 40, missing: 0 }, m)).data.points, 4, '2回目でクリア → +4');
 });
+
+test('小学生は、自分の学年の単元と中1の単元をえらべる（時間は小学生の語数で計算）', async () => {
+  const owner = (await http('POST', '/api/login', { loginId: 'owner', password: 'ownerpass1' })).cookie;
+  await http('POST', '/api/admin/users', { role: 'student', loginId: 'es5', displayName: 'es5', grade: '小5', password: 'password123' }, owner);
+  await http('POST', '/api/admin/reading/units', { grade: '小5', title: 'Hello', text: 'Hello. Nice to meet you.\nこんにちは。' }, owner);
+  const e = (await http('POST', '/api/login', { loginId: 'es5', password: 'password123' })).cookie;
+  const us = (await http('GET', '/api/reading/units', null, e)).data.units;
+  assert.deepEqual(us.map(u => u.grade), ['小5', '中1'], '自分の学年が先、つぎに中1（中3はなし）');
+  const ken = us.find(u => u.grade === '中1');
+  assert.equal(ken.limit, R.limitSec(ken.words, '小5'), '時間は小学生の語数で');
+});

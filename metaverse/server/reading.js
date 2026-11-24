@@ -113,7 +113,9 @@ function unitsFor(user) {
   const c = getConfig();
   const staff = user.role === 'owner' || user.role === 'teacher';
   const rows = staff ? db.prepare('SELECT * FROM reading_units WHERE active = 1 ORDER BY grade, title, id').all()
-    : db.prepare('SELECT * FROM reading_units WHERE active = 1 AND grade = ? ORDER BY title, id').all(user.grade || '');
+    : /^小[1-6]$/.test(user.grade || '') // 小学生は、自分の学年の単元と「中1」の単元をえらべる
+      ? db.prepare("SELECT * FROM reading_units WHERE active = 1 AND grade IN (?, '中1') ORDER BY CASE WHEN grade = ? THEN 0 ELSE 1 END, title, id").all(user.grade, user.grade)
+      : db.prepare('SELECT * FROM reading_units WHERE active = 1 AND grade = ? ORDER BY title, id').all(user.grade || '');
   return rows.map(u => {
     const best = db.prepare(`SELECT COUNT(*) AS n, MAX(CASE WHEN ja_only = 1 THEN score END) AS best, MAX(CASE WHEN ja_only = 1 THEN passed END) AS passed,
       MAX(CASE WHEN ja_only = 0 THEN score END) AS enBest, MAX(CASE WHEN ja_only = 0 THEN passed END) AS enPassed FROM reading_practice WHERE user_id = ? AND unit_id = ?`).get(user.id, u.id);

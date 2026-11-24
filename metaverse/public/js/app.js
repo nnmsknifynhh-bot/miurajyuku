@@ -939,7 +939,8 @@
       const pos = q.queue.findIndex(x => x.id === me.id);
       const booth = q.booths.find(b => b.userId === me.id);
       $('#btn-test').hidden = !inTest;
-      $('#btn-read').hidden = !inTest || !!state.user.trialUntil; // 🔁 音読の練習はテスト教室で
+      const kidRoom = me.room === 'class2' && /^小[1-6]$/.test(state.user.grade || ''); // 小学生は小学生自習室で（テスト教室に入れないため）
+      $('#btn-read').hidden = !(inTest || kidRoom) || !!state.user.trialUntil; // 🔔 先生を呼ぶ：テスト教室（小学生は小学生自習室）
       $('#test-label').textContent = booth ? 'テスト中' : pos >= 0 ? `${pos + 1}番目` : 'テストに並ぶ';
       $('#btn-test').classList.toggle('on', pos >= 0 || !!booth);
       $('#btn-test').disabled = !!booth;
@@ -1780,7 +1781,8 @@
     earlyautumn: { head: '🍂', hand: '☕' }, tsukimi: { head: '🐰', hand: '🍡' }, halloween: { head: '🎃', hand: '🍬' }, koyo: { head: '🍁', hand: '🍠' },
     harvest: { head: '🌰', hand: '🧺' }, christmas: { head: '🎅', hand: '🎁' }, prenewyear: { head: '🎍', hand: '🧹' },
   };
-  const MIURA_DOOR = { x: 4, y: 1 }; // テスト教室の後ろ（上）の壁の扉
+  const MIURA_DOORS = { class1: { x: 4, y: 1 }, class2: { x: 21, y: 1 } }; // 後ろ（上）の壁の扉：テスト教室・小学生自習室
+  let MIURA_DOOR = MIURA_DOORS.class1;
   const miura = { on: false, path: [], t0: 0, leaving: false, arrived: false, x: 0, y: 0, dir: 'down', moving: false, say: null };
   function miuraUser() {
     const ev = state.gb && state.gb.forest && state.gb.forest.event, c = (ev && MIURA_COSTUME[ev.id]) || {};
@@ -1792,6 +1794,7 @@
     if (miura.on && miura.arrived && !miura.leaving) { state.reading.open(); return; }
     if (miura.on) return;
     const me = state.me, mx = Math.floor(me.x / T), my = Math.floor(me.y / T);
+    MIURA_DOOR = MIURA_DOORS[me.room] || MIURA_DOORS.class1; miura.room = me.room;
     let target = null, best = Infinity;
     for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
       const x = mx + dx, y = my + dy;
@@ -1822,7 +1825,7 @@
         setTimeout(() => { if (miura.on && !miura.leaving) state.reading.open(); }, 1300);
       }
     }
-    if (miura.on && !miura.leaving && state.me && state.me.room !== 'class1') { miura.on = false; state.reading.close(); } // 教室を出たら帰る
+    if (miura.on && !miura.leaving && state.me && state.me.room !== miura.room) { miura.on = false; state.reading.close(); } // 教室を出たら帰る
   }
   $('#btn-read').onclick = () => summonMiura();
   $('#menu-reading').onclick = () => { $('#me-menu').hidden = true; if (state.reading) state.reading.open(); };
