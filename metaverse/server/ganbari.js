@@ -13,8 +13,11 @@ const SM = require('../public/shared/map.js');
 const { isHoliday } = require('./holidays');
 
 const TZ = 'Asia/Tokyo';
-const GRADES = ['小1', '小2', '小3', '小4', '小5', '小6', '中1', '中2', '中3', '高1', '高2', '高3'];
-const NEXT_GRADE = Object.fromEntries(GRADES.map((g, i) => [g, GRADES[i + 1] || '卒業']));
+// 「大人」＝大人英会話の生徒（スピーキング・ライティング教室だけ。自習の記録・ポイントなし。学年は上がらない）
+const GRADES = ['小1', '小2', '小3', '小4', '小5', '小6', '中1', '中2', '中3', '高1', '高2', '高3', '大人'];
+const ADULT = '大人';
+const isAdult = (grade) => grade === ADULT;
+const NEXT_GRADE = Object.fromEntries(GRADES.filter(g => g !== ADULT).map((g, i, a) => [g, a[i + 1] || '卒業']));
 const STAGE_NAMES = ['芽', '若葉', '若木', '大きな木', '花', '実り'];
 
 db.exec(`
@@ -555,7 +558,7 @@ function tick(online, opt = {}) {
   db.exec('BEGIN');
   try {
     for (const p of online.values()) {
-      if (p.user.role !== 'student' || p.user.trial_until || !SM.isStudyRoom(p.room) || p.away) continue; // 体験中の子は記録しない
+      if (p.user.role !== 'student' || p.user.trial_until || isAdult(p.user.grade) || !SM.isStudyRoom(p.room) || p.away) continue; // 体験中の子・大人は記録しない
       if (c.requireSeat && !p.seat) continue;
       if (c.requireCamera && opt.photosOn && !p.studyCam) continue;
       const r = rules[groupOf(p.user.grade) || 'jh'];
@@ -893,7 +896,7 @@ function studentSummary(date = new Date()) {
   const c = getConfig();
   const today = jst(date).day;
   const term = termOf(today, c);
-  return db.prepare("SELECT id, display_name AS name, grade FROM users WHERE role = 'student' AND is_active = 1 AND trial_until IS NULL ORDER BY grade, display_name").all().map(s => {
+  return db.prepare("SELECT id, display_name AS name, grade FROM users WHERE role = 'student' AND is_active = 1 AND trial_until IS NULL AND COALESCE(grade, '') != '大人' ORDER BY grade, display_name").all().map(s => {
     const pt = points(s.id, date);
     return {
       ...s, today: dayTotal(s.id, today), todayAll: dayAll(s.id, today), term: term ? minutesBetween(s.id, term.start, term.end) : 0,
@@ -1102,7 +1105,7 @@ module.exports = {
   streakMinFor,
   ruleFor, WEEKDAYS, groupOf, rulesSrc, isES, ES_GRADES, esBoughtThisMonth, esPrice,
   SLOTS, EVENTS, currentEvent, dressupOpen, dressupInfo,
-  GRADES, NEXT_GRADE, STAGE_NAMES, SHOP, jst, addDays, getConfig, setConfig, termOf, allTerms, dayTotal, dayAll, allBetween, minutesBetween, daysBetween, setManual, setAdjust, tick,
+  GRADES, NEXT_GRADE, ADULT, isAdult, STAGE_NAMES, SHOP, jst, addDays, getConfig, setConfig, termOf, allTerms, dayTotal, dayAll, allBetween, minutesBetween, daysBetween, setManual, setAdjust, tick,
   streak, points, owned, getEquip, buy, equip, shopFor, setGoal, goalOf, listGoals, reviewGoal, forest, studentSummary, studyDetail, newYear,
   createReport, reportData,
 };

@@ -67,13 +67,13 @@ function ensureToday() {
 const enabledNow = () => getSetting('start_photo', process.env.NODE_TEST_CONTEXT ? '0' : '1') === '1';
 /** 今日まだ撮っていない生徒か（体験中の子・生徒以外は不要） */
 function required(user) {
-  if (!enabledNow() || !user || user.role !== 'student' || user.trial_until) return false;
+  if (!enabledNow() || !user || user.role !== 'student' || user.trial_until || user.grade === '大人') return false;
   ensureToday();
   if (!todaySet.loaded) return false; // 読みこみ中（起動直後の数秒）は止めない
   return !todaySet.ids.has(user.id);
 }
 async function requiredAsync(user) {
-  if (!enabledNow() || !user || user.role !== 'student' || user.trial_until) return false;
+  if (!enabledNow() || !user || user.role !== 'student' || user.trial_until || user.grade === '大人') return false;
   ensureToday(); await loadToday();
   return !todaySet.ids.has(user.id);
 }

@@ -581,7 +581,7 @@ admin.delete('/users/:id', requireOwner, async (req, res) => {
   res.json({ ok: true });
 });
 // 🎓 生徒全員の学年を1つ上げる（4月）。前の学年をとっておき、元に戻せる
-const promoteTargets = () => db.prepare("SELECT id, grade FROM users WHERE role = 'student' AND grade IS NOT NULL AND grade != '卒業' AND trial_until IS NULL").all();
+const promoteTargets = () => db.prepare("SELECT id, grade FROM users WHERE role = 'student' AND grade IS NOT NULL AND grade NOT IN ('卒業', '大人') AND trial_until IS NULL").all();
 admin.get('/grades/promote', requireOwner, (req, res) => {
   let undo = null; try { undo = JSON.parse(getSetting('grade_promote_undo', 'null')); } catch (e) {}
   res.json({ count: promoteTargets().length, undo: undo ? { at: undo.at, count: Object.keys(undo.grades).length } : null });

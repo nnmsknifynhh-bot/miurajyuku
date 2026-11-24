@@ -815,7 +815,7 @@
   }
   let funBusy = false, lastFunAt = 0;
   async function refreshFun(force) {
-    if (!state.user || state.user.role !== 'student') { $('#fun-chip').hidden = true; return; }
+    if (!state.user || state.user.role !== 'student' || state.user.grade === '大人') { $('#fun-chip').hidden = true; return; } // 大人英会話は季節のクエストなし
     if (funBusy || (!force && Date.now() - lastFunAt < 50_000)) return;
     funBusy = true; lastFunAt = Date.now();
     try {
@@ -1150,7 +1150,7 @@
   }
 
   // ── 左上：生徒・保護者は今のポイント（🎁 120pt ⬆/⏸）。先生・オーナーは自習室ぜんぶの生徒数 ──
-  const ptsMode = () => !!(state.user && (state.user.role === 'student' || state.user.role === 'parent') && !state.user.trialUntil);
+  const ptsMode = () => !!(state.user && (state.user.role === 'student' || state.user.role === 'parent') && !state.user.trialUntil && state.user.grade !== '大人'); // 大人英会話はポイントなし
   let earningUntil = 0;
   function renderPts() {
     const chip = $('#pts-chip'), on = ptsMode() && state.pts;

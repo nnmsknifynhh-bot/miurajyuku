@@ -19,7 +19,7 @@ if (getSetting('reading_clean0', '') !== '1') { db.prepare('DELETE FROM reading_
 const TEST_POINTS = (attempt) => attempt <= 1 ? 5 : attempt === 2 ? 4 : 3;
 
 // 学年ごとの「1分に読む語数」（中3の本文52語を1分 → 52語。ほかは目安。管理画面で変えられる）
-const DEFAULT_WPM = { '小1': 30, '小2': 30, '小3': 30, '小4': 30, '小5': 30, '小6': 30, '中1': 40, '中2': 45, '中3': 52, '高1': 60, '高2': 70, '高3': 70 };
+const DEFAULT_WPM = { '小1': 30, '小2': 30, '小3': 30, '小4': 30, '小5': 30, '小6': 30, '中1': 40, '中2': 45, '中3': 52, '高1': 60, '高2': 70, '高3': 70, '大人': 70 };
 const MAX_MISSING = 3; // スピーキング：聞き取れなかった単語が3つ以上なら、点数が足りていても再テスト
 const PASS_SCORE = 90; // 合格ライン（管理画面で変えられる）
 // ライティングテストを受けられる時間（授業の日の、授業の前・後）
@@ -82,7 +82,9 @@ function view(u, c = getConfig(), grade = u.grade) {
 
 function addUnit(p, actorId) {
   if (!G.GRADES.includes(p.grade)) return { error: '学年をえらんでください' };
-  const title = clean(p.title, 60);
+  // 大人英会話：名前が空なら「11/24の週」（毎週の3文）
+  const j = G.jst();
+  const title = clean(p.title, 60) || (p.grade === '大人' ? `${Number(j.day.slice(5, 7))}/${Number(j.day.slice(8))}の週` : '');
   if (!title) return { error: '単元の名前を入れてください（例：Unit 1 Part 1）' };
   const lines = parseText(p.text);
   if (!lines.length) return { error: '英語の本文を入れてください' };
@@ -124,7 +126,9 @@ function unitsFor(user) {
   const rows = staff ? db.prepare('SELECT * FROM reading_units WHERE active = 1 ORDER BY grade, title, id').all()
     : /^小[1-6]$/.test(user.grade || '') // 小学生は、自分の学年の単元と「中1」の単元をえらべる
       ? db.prepare("SELECT * FROM reading_units WHERE active = 1 AND grade IN (?, '中1') ORDER BY CASE WHEN grade = ? THEN 0 ELSE 1 END, title, id").all(user.grade, user.grade)
-      : db.prepare('SELECT * FROM reading_units WHERE active = 1 AND grade = ? ORDER BY title, id').all(user.grade || '');
+      : user.grade === '大人' // 大人：毎週の文。新しい週が上
+        ? db.prepare("SELECT * FROM reading_units WHERE active = 1 AND grade = '大人' ORDER BY id DESC").all()
+        : db.prepare('SELECT * FROM reading_units WHERE active = 1 AND grade = ? ORDER BY title, id').all(user.grade || '');
   return rows.map(u => {
     const best = db.prepare(`SELECT COUNT(*) AS n, MAX(CASE WHEN ja_only = 1 THEN score END) AS best, MAX(CASE WHEN ja_only = 1 THEN passed END) AS passed,
       MAX(CASE WHEN ja_only = 0 THEN score END) AS enBest, MAX(CASE WHEN ja_only = 0 THEN passed END) AS enPassed FROM reading_practice WHERE user_id = ? AND unit_id = ?`).get(user.id, u.id);
@@ -166,7 +170,7 @@ function recordTest(user, unitId, r) {
   const miss = Math.max(0, Math.round(Number(r.missing)) || 0);
   const passed = sc >= getConfig().passScore && sec <= v.limit && miss < MAX_MISSING;
   let points = 0;
-  if (passed && !before.p && user.role === 'student' && !user.trial_until) {
+  if (passed && !before.p && user.role === 'student' && !user.trial_until && user.grade !== '大人') { // 大人はポイントなし
     points = TEST_POINTS(attempt);
     const ins = db.prepare('INSERT OR IGNORE INTO bonus_points (user_id, reason, points, created_at) VALUES (?, ?, ?, ?)').run(user.id, `reading:${unitId}`, points, now());
     if (!ins.changes) points = 0;

@@ -25,7 +25,7 @@
     // ── 単元を追加・直す ──
     const fs = section('📖 単元を登録する', '英語の行のすぐ下に、その日本語訳の行を書いてください。行の頭の「Jin:」のような話す人の名前は、読まない・数えない部分になります。教科書の本文は塾の中だけで使ってください。');
     const gsel = el('select'); d.grades.forEach(g => { const o = el('option', null, g); o.value = g; gsel.append(o); }); gsel.value = '中3';
-    const title = el('input'); title.placeholder = '単元の名前（例：Unit 1 Part 1）'; title.maxLength = 60;
+    const title = el('input'); title.placeholder = '単元の名前（例：Unit 1 Part 1）。大人は空なら「11/24の週」'; title.maxLength = 60;
     const ta = el('textarea', 'gb-out'); ta.rows = 12; ta.placeholder = "Jin: I'm sorry I'm late.\n遅れてごめんなさい。\nSho: Don't worry. We've just arrived, too.\n気にしないで。ぼくたちもちょうど着いたところだよ。";
     const pv = el('p', 'muted');
     const upd = () => { const ls = parse(ta.value), w = ls.reduce((n, l) => n + wordsOf(l.en).length, 0); pv.textContent = ls.length ? `${ls.length}行・${w}語 → ${gsel.value}の制限時間 ${mmss(limitOf(w, gsel.value))}${ls.some(l => !l.ja) ? '（訳がない行があります）' : ''}` : ''; };

@@ -142,7 +142,7 @@ async function grade(user, unit, mode, buf) {
   const before = status(user.id, unit.id);
   const attempt = mode === 'test' ? before.testCount + 1 : before.practiceCount + 1;
   let points = 0;
-  if (mode === 'test' && passed && !before.testPassed && user.role === 'student' && !user.trial_until) {
+  if (mode === 'test' && passed && !before.testPassed && user.role === 'student' && !user.trial_until && user.grade !== '大人') {
     points = POINTS(attempt);
     if (!db.prepare('INSERT OR IGNORE INTO bonus_points (user_id, reason, points, created_at) VALUES (?, ?, ?, ?)').run(user.id, `writing:${unit.id}`, points, now()).changes) points = 0;
   }

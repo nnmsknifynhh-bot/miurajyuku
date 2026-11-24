@@ -13,7 +13,7 @@
 
     const wanted = () => {
       const st = getState();
-      return !!(st.studyPhotos && st.user && st.user.role === 'student' && st.me && window.SchoolMap.isStudyRoom(st.me.room));
+      return !!(st.studyPhotos && st.user && st.user.role === 'student' && st.user.grade !== '大人' && st.me && window.SchoolMap.isStudyRoom(st.me.room));
     };
 
     function sync() {

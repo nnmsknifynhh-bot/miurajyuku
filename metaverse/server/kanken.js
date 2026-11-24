@@ -189,7 +189,7 @@ function hasQuestions(levels) {
 }
 /** この生徒は、入室の前にテストが必要か */
 function required(user, { quickRejoin = false } = {}) {
-  if (!user || user.role !== 'student' || user.trial_until) return false; // 体験中の子はテストなし
+  if (!user || user.role !== 'student' || user.trial_until || user.grade === '大人') return false; // 体験中の子・大人はテストなし
   const c = getConfig();
   if (!c.enabled || quickRejoin) return false;
   if (!hasQuestions(levelsFor(user.grade, c))) return false; // 対象の学年でない・問題がない

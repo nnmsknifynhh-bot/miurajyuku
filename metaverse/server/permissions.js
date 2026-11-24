@@ -54,6 +54,8 @@ function canEnterRoom(user, room) {
   if (room.type === 'study') {
     // 生徒：高校生は高校生自習室（class3）、それ以外の生徒は自習室（study）。先生・オーナーはどちらにも入れる
     if (user.role !== 'student') return true;
+    // 大人（大人英会話）は、スピーキング・ライティング教室（class1）だけ
+    if (user.grade === '大人') return room.id === 'class1';
     // 小学生は小学生自習室（class2）だけ。小学生自習室は小学生だけ
     if (/^小[1-6]$/.test(user.grade || '')) return room.id === 'class2';
     if (room.id === 'class2') return false;
