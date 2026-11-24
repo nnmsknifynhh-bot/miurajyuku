@@ -1768,7 +1768,7 @@
   const miura = { on: false, path: [], t0: 0, leaving: false, arrived: false, x: 0, y: 0, dir: 'down', moving: false, say: null };
   function miuraUser() {
     const ev = state.gb && state.gb.forest && state.gb.forest.event, c = (ev && MIURA_COSTUME[ev.id]) || {};
-    return { id: -1, name: 'Ms. Miura', role: 'teacher', color: '#7c5cf0', dir: miura.dir, moving: miura.moving, seat: null, topic: miura.say, equip: { hair: 'bob', head: c.head || null, hand: c.hand || null, clothes: c.clothes || null } };
+    return { id: -1, name: 'Ms. Miura', role: 'teacher', hideRole: true, color: '#7c5cf0', dir: miura.dir, moving: miura.moving, seat: null, topic: miura.say, equip: { hair: 'bob', head: c.head || null, hand: c.hand || null, clothes: c.clothes || null } };
   }
   function miuraPathTo(fromX, fromY, toX, toY) { return [{ x: fromX, y: fromY }, ...(SM.findPath(fromX, fromY, toX, toY) || [])]; }
   function summonMiura() {

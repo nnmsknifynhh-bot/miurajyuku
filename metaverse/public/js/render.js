@@ -578,7 +578,7 @@
     const byTag = by - ((u.equip && u.equip.head && !(u.equip.costume)) || (u.equip && u.equip.costume) ? 12 : (hair && TALL_HAIR.has(hair) ? 8 : 0));
     if (opts.noTag) return; // 招待カードなど：アバターだけ
     // 名札（連続自習の日数🔥つき）
-    const tag = ROLE_TAG[u.role];
+    const tag = u.hideRole ? null : ROLE_TAG[u.role]; // Ms. Miura は「先生」をつけない
     // 高校生：称号を名前の前に、🔥は「週」で数える
     const fire = u.hs ? (u.streak >= 1 ? ` 🔥${u.streak}週` : '') : (u.streak >= 1 ? ` 🔥${u.streak}` : '');
     const label = (u.myChild ? '💗 ' : '') + (u.bday ? (u.cakes && u.cakes.n ? `🎂×${u.cakes.n}${u.cakes.gold ? '🌟' : ''} ` : '🎂 ') : '') + (tag ? tag + ' ' : '') + (u.title ? `【${u.title}】` : '') + u.name + fire + (u.asa ? ' 🌅' : '') + (u.goalDone ? ' ✅' : '');
