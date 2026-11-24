@@ -458,6 +458,7 @@
     // ═════ 🌸 家族の木：だれが押したか ═════
     if (isOwner) {
       const chSec = section('🌸 家族の木の花（見たよスタンプ）', '保護者が「見たよ」スタンプを送ると、ロビーの家族の木に🌸が1つ咲きます。だれがだれに送ったかの一覧です（最近60日・新しい順）。');
+      root.insertBefore(chSec, goalSec); // 「目標の確認」の前に
       const chBox = el('div', 'table-wrap'); chSec.append(chBox);
       (async () => {
         let d; try { d = await api('GET', '/api/admin/parents/cheers?days=60'); } catch (e) { chBox.textContent = e.message; return; }

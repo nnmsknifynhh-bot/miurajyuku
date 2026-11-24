@@ -89,7 +89,11 @@ const canViewStudyPhotos = (u) => !!u && u.is_active && (u.role === 'owner' || (
 function notifyStudyViewers(payload) {
   for (const s of online.values()) if (canViewStudyPhotos(s.user)) s.socket.emit('study-photo', payload);
 }
+// 見守り写真の、さいきんの3枚（新しい順）。自習室を出る・切断すると消える（データベースには保存しない）
+const PHOTO_KEEP = 3;
+const studyPhotoHistory = new Map(); // userId -> [{ buf, at, reason, dark }]
 function clearStudyPhoto(p) {
+  studyPhotoHistory.delete(p.id);
   const had = studyPhotos.delete(p.id);
   if (p.studyCam) { p.studyCam = false; if (io) io.emit('user-updated', { id: p.id, studyCam: false }); }
   if (had) notifyStudyViewers({ id: p.id, at: null });
@@ -1336,14 +1340,22 @@ function storeStudyPhoto(userId, buf, meta = {}) {
     if (by) by.socket.emit('study-photo-result', { id: p.id, name: p.user.display_name, ok: true });
   }
   studyPhotos.set(p.id, { buf, at, hash, fp, still, reason, dark: brightness !== null && brightness < 25 });
+  const hist = studyPhotoHistory.get(p.id) || [];
+  hist.unshift({ buf, at, reason, dark: brightness !== null && brightness < 25 });
+  studyPhotoHistory.set(p.id, hist.slice(0, PHOTO_KEEP));
   if (!p.studyCam) { p.studyCam = true; io.emit('user-updated', { id: p.id, studyCam: true }); }
   notifyStudyViewers({ id: p.id, at });
   return null;
 }
-function getStudyPhoto(userId) { return studyPhotos.get(Number(userId)) || null; }
+// i：0＝いちばん新しい写真、1・2＝その前
+function getStudyPhoto(userId, i = 0) {
+  const h = studyPhotoHistory.get(Number(userId));
+  if (h && h[i]) return h[i];
+  return i === 0 ? studyPhotos.get(Number(userId)) || null : null;
+}
 function studyPhotoTimes() {
   const o = {};
-  for (const [id, v] of studyPhotos) o[id] = { at: v.at, dark: v.dark, still: v.still, reason: v.reason };
+  for (const [id, v] of studyPhotos) o[id] = { at: v.at, dark: v.dark, still: v.still, reason: v.reason, past: (studyPhotoHistory.get(id) || []).map(h => ({ at: h.at, reason: h.reason, dark: h.dark })) };
   return o;
 }
 

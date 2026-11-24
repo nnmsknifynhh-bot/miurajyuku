@@ -479,7 +479,7 @@ app.post('/api/study/photo', express.raw({ type: 'image/jpeg', limit: '300kb' })
 // 見られるのはオーナーと「生徒への個別対応」の権限がある先生だけ
 app.get('/api/study/photo/:id', auth.requireAuth, (req, res) => {
   if (!realtime.canViewStudyPhotos(req.user)) return bad(res, 'この写真を見る権限がありません', 403);
-  const ph = realtime.getStudyPhoto(req.params.id);
+  const ph = realtime.getStudyPhoto(req.params.id, Math.max(0, Math.min(2, Number(req.query.i) || 0)));
   if (!ph) return bad(res, '写真はありません', 404);
   res.setHeader('Content-Type', 'image/jpeg');
   res.setHeader('Cache-Control', 'no-store');

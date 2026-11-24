@@ -1286,7 +1286,7 @@
       let thumb;
       if (meta) {
         thumb = el('img'); thumb.src = `/api/study/photo/${u.id}?t=${meta.at}`; thumb.alt = u.name + 'さんの写真';
-        thumb.onclick = () => { $('#sc-photo-title').textContent = `${u.name}さん（${ago(meta.at)}）`; $('#sc-photo-big').src = thumb.src; $('#sc-photo-dialog').showModal(); };
+        thumb.onclick = () => openStudyPhoto(u, meta, 0);
       } else thumb = el('div', 'noimg', u.studyCam ? '撮影待ち' : '写真なし');
       const info = el('div');
       info.append(el('b', null, u.name));
@@ -1316,9 +1316,25 @@
       card.append(thumb, info);
       box.append(card);
     }
-    box.append(el('p', 'panel-note', '写真は7〜13分おきのランダムな時間に届きます（生徒には撮影の時間は分かりません）。写真は最新の1枚だけで、生徒が自習室を出ると消えます。'));
+    box.append(el('p', 'panel-note', '写真は7〜13分おきのランダムな時間に届きます（生徒には撮影の時間は分かりません）。写真はさいきんの3枚まで見返せます（写真をタップ →「◀ 前の写真」）。生徒が自習室を出ると消えます。'));
   }
   $('#sc-photo-close').onclick = () => $('#sc-photo-dialog').close();
+  // 見守り写真：さいきんの3枚を見返す（0＝いちばん新しい）
+  let photoView = null;
+  function openStudyPhoto(u, meta, i) {
+    const past = (meta.past && meta.past.length) ? meta.past : [{ at: meta.at, reason: meta.reason, dark: meta.dark }];
+    i = Math.max(0, Math.min(past.length - 1, i));
+    photoView = { u, meta, i };
+    const p = past[i];
+    $('#sc-photo-title').textContent = `${u.name}さん（${ago(p.at)}${p.reason === 'request' ? '・今すぐ撮影' : ''}${p.dark ? '・⚫ 真っ暗' : ''}）`;
+    $('#sc-photo-big').src = `/api/study/photo/${u.id}?i=${i}&t=${p.at}`;
+    $('#sc-photo-pos').textContent = past.length > 1 ? `${i + 1} / ${past.length}（${i === 0 ? 'いちばん新しい' : i + '枚前'}）` : '';
+    $('#sc-photo-older').disabled = i >= past.length - 1; $('#sc-photo-newer').disabled = i <= 0;
+    $('#sc-photo-older').hidden = $('#sc-photo-newer').hidden = past.length <= 1;
+    if (!$('#sc-photo-dialog').open) $('#sc-photo-dialog').showModal();
+  }
+  $('#sc-photo-older').onclick = () => photoView && openStudyPhoto(photoView.u, photoView.meta, photoView.i + 1);
+  $('#sc-photo-newer').onclick = () => photoView && openStudyPhoto(photoView.u, photoView.meta, photoView.i - 1);
   const photoWait = {};
 
   function renderPanel() {

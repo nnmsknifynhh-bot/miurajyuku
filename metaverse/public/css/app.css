@@ -473,3 +473,4 @@ body.is-trial .not-trial { display: none !important; }
 .rd-break { flex-basis: 100%; height: 0; }
 .rd-btns { gap: 8px; flex-wrap: wrap; }
 @media (max-width: 560px) { .rd-unit { flex-direction: column; align-items: stretch; } .rd-unit-btns { justify-content: flex-start; } }
+.sc-photo-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; font-size: 13px; color: var(--muted); }

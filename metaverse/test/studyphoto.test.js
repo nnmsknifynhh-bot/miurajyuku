@@ -113,6 +113,18 @@ test('ずる対策：真っ暗な写真・30分以上ほとんど動きがない
   assert.equal(meta2.dark, false); assert.equal(meta2.still, 0);
 });
 
+test('さいきんの3枚まで見返せる（?i=0・1・2）', async () => {
+  const sent = [];
+  for (let i = 0; i < 4; i++) { await sleep(350); const b = jpeg(); sent.push(b); assert.equal((await up(U.stu1.cookie, b, { b: 120, fp: 'aaaaaaaaaaaaaa0' + i })).status, 200); }
+  const meta = (await http('GET', '/api/study/photos', null, U.tch1.cookie)).data.times[U.stu1.id];
+  assert.equal(meta.past.length, 3, '3枚まで');
+  for (let i = 0; i < 3; i++) {
+    const r = await http('GET', `/api/study/photo/${U.stu1.id}?i=${i}`, null, owner);
+    assert.equal(r.status, 200); assert.ok(Buffer.compare(r.data, sent[3 - i]) === 0, `${i}枚前`);
+  }
+  assert.equal((await http('GET', `/api/study/photo/${U.stu1.id}?i=3`, null, owner)).status, 200, '3より大きいときは2枚前まで');
+});
+
 test('ずる対策：先生の「今すぐ撮る」は生徒の端末に届く（権限のない先生は不可）', async () => {
   U.stu1.c.s.emit('study-camera', { on: true }); await sleep(80);
   assert.equal((await ask(U.tch2.c, 'study-photo-request', { studentId: U.stu1.id })).ok, false);
