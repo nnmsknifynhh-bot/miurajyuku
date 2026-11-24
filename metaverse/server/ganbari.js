@@ -613,7 +613,8 @@ function streak(userId, date = new Date()) {
   const cu = db.prepare('SELECT class_days FROM users WHERE id = ?').get(userId);
   const classDays = new Set(cu && cu.class_days ? cu.class_days.split(',').map(Number) : []);
   // 保護者会の日・その生徒の授業の曜日も、とばしてつなげる
-  const off = (d) => !ruleFor(d, c).on || md.has(d) || classDays.has(weekdayOf(d));
+  // 祝日も、とばしてつなげる（休んでも🔥は消えない。勉強した日は1日に数える）
+  const off = (d) => !ruleFor(d, c).on || md.has(d) || classDays.has(weekdayOf(d)) || isHoliday(d);
   let day = today;
   if (!ok.has(day)) day = addDays(day, -1);
   let n = 0;

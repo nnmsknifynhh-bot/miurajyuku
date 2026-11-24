@@ -62,3 +62,16 @@ test('高3は高1・高2とは別の数え方にできる（オフなら高校�
   assert.equal(G.ruleFor(day, G.getConfig(), 'hs3').cap, 600);
   assert.deepEqual(G.ruleFor(day, G.getConfig(), 'hs').windows, [{ start: '16:00', end: '23:00' }], '高1・高2はそのまま');
 });
+
+test('祝日は、休んでも🔥がとぎれない（勉強した祝日は1日に数える）', async () => {
+  const owner = (await http('POST', '/api/login', { loginId: 'owner', password: 'ownerpass1' })).cookie;
+  const r = await http('POST', '/api/admin/users', { role: 'student', loginId: 'fire', displayName: 'ひ', grade: '中1', password: 'password123' }, owner);
+  const id = r.data.user.id;
+  const { db } = require('../server/db.js');
+  const put = (day, m) => db.prepare('INSERT INTO study_days (user_id, day, auto_min, all_min) VALUES (?, ?, ?, ?) ON CONFLICT (user_id, day) DO UPDATE SET auto_min = excluded.auto_min, all_min = excluded.all_min').run(id, day, m, m);
+  put('2026-11-21', 69); put('2026-11-22', 45); // 23日（勤労感謝の日）は0分
+  assert.equal(G.streak(id, new Date('2026-11-24T12:00:00+09:00')), 2);
+  put('2026-11-23', 50);
+  assert.equal(G.streak(id, new Date('2026-11-24T12:00:00+09:00')), 3, '祝日に勉強すれば1日ふえる');
+  assert.equal(G.streak(id, new Date('2026-11-21T23:00:00+09:00')), 1);
+});

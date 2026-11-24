@@ -201,7 +201,7 @@ test('連続自習🔥の最低時間は学年別（中1:45分・中2:60分・�
 });
 
 test('曜日ごとの数え方：数える曜日・時間帯・上限を曜日で変えられる。お休みの曜日は🔥が途切れない', () => {
-  const base = G.addDays(C().terms[2], 40);
+  const base = G.addDays(C().terms[2], 50); // 祝日（2/11など）をさけた日
   const wd = (d) => new Date(d + 'T00:00:00Z').getUTCDay();
   const day = base, offDay = G.addDays(base, 1); // 曜日のちがう2日
   const weekly = Array.from({ length: 7 }, () => ({ on: true, start: '00:00', end: '24:00', cap: 300 }));
