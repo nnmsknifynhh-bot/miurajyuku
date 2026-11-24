@@ -20,11 +20,11 @@ const TEST_POINTS = (attempt) => attempt <= 1 ? 5 : attempt === 2 ? 4 : 3;
 
 // 学年ごとの「1分に読む語数」（中3の本文52語を1分 → 52語。ほかは目安。管理画面で変えられる）
 const DEFAULT_WPM = { '小1': 30, '小2': 30, '小3': 30, '小4': 30, '小5': 30, '小6': 30, '中1': 40, '中2': 45, '中3': 52, '高1': 60, '高2': 70, '高3': 70 };
-const PASS_SCORE = 90;
+const PASS_SCORE = 80; // 合格ラインのはじめの値（管理画面で変えられる。はじめは90だったが、やさしく80に）
 function getConfig() {
   let saved = {};
   try { saved = JSON.parse(getSetting('reading', '{}')); } catch (e) { saved = {}; }
-  return { wpm: { ...DEFAULT_WPM, ...(saved.wpm || {}) }, passScore: PASS_SCORE };
+  return { wpm: { ...DEFAULT_WPM, ...(saved.wpm || {}) }, passScore: Number.isInteger(saved.passScore) ? saved.passScore : PASS_SCORE };
 }
 function setConfig(p, actorId) {
   const c = getConfig();
@@ -35,7 +35,11 @@ function setConfig(p, actorId) {
       c.wpm[g] = v;
     }
   }
-  setSetting('reading', JSON.stringify({ wpm: c.wpm }));
+  if (p.passScore !== undefined) {
+    if (!Number.isInteger(p.passScore) || p.passScore < 50 || p.passScore > 100) return '合格ラインは50〜100点にしてください';
+    c.passScore = p.passScore;
+  }
+  setSetting('reading', JSON.stringify({ wpm: c.wpm, passScore: c.passScore }));
   audit(actorId, 'reading.config', null, null);
   return null;
 }
@@ -123,7 +127,7 @@ function recordPractice(user, unitId, score, seconds, jaOnly = false) {
   const sc = Math.round(Number(score)), sec = Math.round(Number(seconds));
   if (!Number.isFinite(sc) || sc < 0 || sc > 100 || !Number.isFinite(sec) || sec < 1 || sec > 3600) return { error: '結果が正しくありません' };
   const v = view(u, getConfig(), user.role === 'student' ? user.grade : u.grade);
-  const passed = sc >= PASS_SCORE && sec <= v.limit;
+  const passed = sc >= getConfig().passScore && sec <= v.limit;
   db.prepare('INSERT INTO reading_practice (user_id, unit_id, score, seconds, limit_sec, passed, ja_only, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(user.id, unitId, sc, sec, v.limit, passed ? 1 : 0, jaOnly ? 1 : 0, now());
   return { ok: true, passed, limit: v.limit };
 }
@@ -144,7 +148,7 @@ function recordTest(user, unitId, r) {
   const v = view(u, getConfig(), staff ? u.grade : user.grade);
   const before = db.prepare('SELECT COUNT(*) AS n, MAX(passed) AS p FROM reading_tests WHERE user_id = ? AND unit_id = ?').get(user.id, unitId);
   const attempt = before.n + 1;
-  const passed = sc >= PASS_SCORE && sec <= v.limit;
+  const passed = sc >= getConfig().passScore && sec <= v.limit;
   let points = 0;
   if (passed && !before.p && user.role === 'student' && !user.trial_until) {
     points = TEST_POINTS(attempt);

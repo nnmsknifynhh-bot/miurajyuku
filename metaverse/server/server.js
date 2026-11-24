@@ -166,7 +166,7 @@ app.get('/api/me', auth.requireAuth, (req, res) => {
 // ═════ 英語の音読（練習） ═════
 app.get('/api/reading/units', auth.requireAuth, (req, res) => {
   if (req.user.role === 'parent') return bad(res, '生徒の機能です', 403);
-  res.json({ units: reading.unitsFor(req.user), passScore: reading.PASS_SCORE });
+  res.json({ units: reading.unitsFor(req.user), passScore: reading.getConfig().passScore });
 });
 app.post('/api/reading/practice', auth.requireAuth, (req, res) => {
   if (req.user.role === 'parent') return bad(res, '生徒の機能です', 403);

@@ -8,6 +8,7 @@
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let PASS = 90; // 合格ライン（サーバーの設定でかわる）
 
   // ── 単語をそろえる（大文字小文字・記号・短縮形） ──
   const CONTR = { "i'm": 'i am', "can't": 'can not', "cannot": 'can not', "won't": 'will not', "let's": 'let us', "it's": 'it is', "that's": 'that is', "what's": 'what is', "where's": 'where is', "there's": 'there is', "here's": 'here is', "he's": 'he is', "she's": 'she is', "who's": 'who is', "how's": 'how is' };
@@ -66,7 +67,7 @@
     async function open() {
       root.hidden = false;
       showList();
-      try { const d = await api('GET', '/api/reading/units'); st.units = d.units; showList(); } catch (e) { toast(e.message); }
+      try { const d = await api('GET', '/api/reading/units'); st.units = d.units; PASS = d.passScore || 90; showList(); } catch (e) { toast(e.message); }
     }
     function close() { stopRec(true); root.hidden = true; if (window.speechSynthesis) speechSynthesis.cancel(); if (onClose) onClose(); }
     $('#rd-close').onclick = close;
@@ -78,7 +79,7 @@
       const body = $('#rd-body'); body.textContent = '';
       if (!SR) body.append(el('p', 'rd-warn', 'この端末（ブラウザ）では英語の聞き取りが使えません。iPad・iPhone は Safari、パソコン・Android は Chrome で開いてください。お手本を聞くことはできます。'));
       if (!st.units.length) { body.append(el('p', 'muted', 'まだ練習できる単元がありません。先生が登録するまで待ってね。')); return; }
-      body.append(el('p', 'muted', '①「英文で練習」→ ②「訳だけで練習」（日本語訳だけを見て英語を言う）→ ③ 本番のテスト（訳だけ）。②で90点以上・時間内を出すと、テストを受けられるよ。'));
+      body.append(el('p', 'muted', `①「英文で練習」→ ②「訳だけで練習」（日本語訳だけを見て英語を言う）→ ③ 本番のテスト（訳だけ）。②で${PASS}点以上・時間内を出すと、テストを受けられるよ。`));
       const list = el('div', 'rd-units');
       const staff = getUser().role !== 'student';
       for (const u of st.units) {
@@ -95,7 +96,7 @@
         const j = el('button', 'btn small secondary', '🇯🇵 訳だけで練習'); j.type = 'button'; j.onclick = () => showUnit(u, 'jaPractice');
         const t = el('button', 'btn small', '📝 テスト'); t.type = 'button';
         t.disabled = !(u.practice.passed || staff);
-        t.title = t.disabled ? '「訳だけで練習」で90点以上・時間内を出すと受けられるよ' : '';
+        t.title = t.disabled ? `「訳だけで練習」で${PASS}点以上・時間内を出すと受けられるよ` : '';
         t.onclick = () => showUnit(u, 'test');
         btns.append(p, j, t); row.append(left, btns); list.append(row);
       }
@@ -131,7 +132,16 @@
         for (const w of String(line.en).split(/\s+/).filter(Boolean)) {
           const clean = w.replace(/^[^A-Za-z0-9'’]+|[^A-Za-z0-9'’]+$/g, '');
           const span = el('span', null, w + ' ');
-          if (clean) { if (r && !r.ok[wi]) { span.className = 'ng'; bad = true; } wi++; }
+          if (clean) {
+            if (r && !r.ok[wi]) {
+              const a = r.acc ? r.acc[wi] : null;
+              const weak = a !== null && a !== undefined; // 言えたが発音があやしい（テストだけわかる）
+              span.className = weak ? 'weak' : 'ng'; bad = true;
+              span.title = weak ? `発音 ${a}点（押すとお手本）` : '言えていない・聞き取れなかった（押すとお手本）';
+              span.onclick = () => { speakWord(clean); toast(weak ? `「${clean}」発音 ${a}点` : `「${clean}」は聞き取れなかったよ`, 2500); };
+            }
+            wi++;
+          }
           en.append(span);
         }
         if (hideEn) row.append(el('p', 'rd-ja big', line.ja || '（この文の訳はまだありません）'));
@@ -147,10 +157,18 @@
         if (test && r.accuracy != null) res.append(el('small', 'rd-sub', `発音の正確さ ${r.accuracy}・なめらかさ ${r.fluency}・読みもれなし ${r.completeness}`));
         if (test && r.heard != null) res.append(el('small', 'rd-sub', `🎧 聞き取った英語：${r.heard || '（なし）'}`));
         const msg = test
-          ? (r.passed ? (r.points ? `🎉 クリア！（${r.attempt}回目） +${r.points}ポイント！` : r.alreadyCleared ? '🎉 クリア！（この単元はもうポイントをもらっているよ）' : '🎉 クリア！') : r.score < 90 ? '赤い単語は発音があやしいところ。練習でたしかめてから、もう一度！' : `点数はOK！ 制限時間（${mmss(u.limit)}）の中で読めるように、もう一度`)
-          : st.mode === 'practice' ? (r.passed ? '🎉 英文で合格！ 次は「訳だけ」で言えるか練習しよう' : r.score < 90 ? '赤い単語を、お手本を聞いてからもう一度！ 90点まであと少し' : `点数はOK！ 制限時間（${mmss(u.limit)}）の中で読めるように、もう一度`)
-          : (r.passed ? '🎉 訳だけで合格！ 本番のテストを受けられるよ' : r.score < 90 ? '赤い単語を、お手本を聞いてからもう一度！ 90点まであと少し' : `点数はOK！ 制限時間（${mmss(u.limit)}）の中で読めるように、もう一度`);
+          ? (r.passed ? (r.points ? `🎉 クリア！（${r.attempt}回目） +${r.points}ポイント！` : r.alreadyCleared ? '🎉 クリア！（この単元はもうポイントをもらっているよ）' : '🎉 クリア！') : r.score < PASS ? '下の「言えていない単語」「発音をもう少し」をたしかめてから、もう一度！' : `点数はOK！ 制限時間（${mmss(u.limit)}）の中で読めるように、もう一度`)
+          : st.mode === 'practice' ? (r.passed ? '🎉 英文で合格！ 次は「訳だけ」で言えるか練習しよう' : r.score < PASS ? `赤い単語を、お手本を聞いてからもう一度！ ${PASS}点まであと少し` : `点数はOK！ 制限時間（${mmss(u.limit)}）の中で読めるように、もう一度`)
+          : (r.passed ? '🎉 訳だけで合格！ 本番のテストを受けられるよ' : r.score < PASS ? `赤い単語を、お手本を聞いてからもう一度！ ${PASS}点まであと少し` : `点数はOK！ 制限時間（${mmss(u.limit)}）の中で読めるように、もう一度`);
         res.append(el('p', null, msg));
+        // 何がいけなかったか：言えていない単語・発音をもう少しの単語
+        const words = wordsOf(u.lines.map(l => l.en).join(' '));
+        const miss = [], weak = [];
+        words.forEach((w, i) => { if (r.ok[i]) return; const a = r.acc ? r.acc[i] : null; if (a !== null && a !== undefined) weak.push(`${w}（${a}点）`); else miss.push(w); });
+        if (miss.length) res.append(el('small', 'rd-sub', `🔇 言えていない・聞き取れなかった単語（赤）：${miss.length}語 … ${miss.slice(0, 12).join('・')}${miss.length > 12 ? ' ほか' : ''}`));
+        if (weak.length) res.append(el('small', 'rd-sub', `🗣 発音をもう少し（オレンジ）：${weak.slice(0, 10).join('・')}${weak.length > 10 ? ' ほか' : ''}`));
+        if (r.seconds > u.limit) res.append(el('small', 'rd-sub', `⏱ 時間が ${r.seconds - u.limit}秒 オーバー`));
+        if (miss.length || weak.length) res.append(el('small', 'rd-sub', '色のついた単語を押すと、お手本の発音が聞けるよ'));
         body.append(res);
         if (st.mode === 'practice' && r.passed) { const go = el('button', 'btn small', '🇯🇵 訳だけで練習へ'); go.type = 'button'; go.onclick = () => showUnit(u, 'jaPractice'); body.append(go); }
         if (st.mode === 'jaPractice' && r.passed) { const go = el('button', 'btn small', '📝 本番のテストへ'); go.type = 'button'; go.onclick = () => showUnit(u, 'test'); body.append(go); }
@@ -162,10 +180,17 @@
       else { const go = el('button', 'btn rd-big', r ? '🔁 もう一度読む' : '🎤 読みはじめる'); go.type = 'button'; go.disabled = !SR; go.onclick = startRec; btns.append(go); }
       body.append(btns);
       if (!SR && !test) body.append(el('p', 'rd-warn', 'この端末では聞き取りが使えません（Safari か Chrome で開いてください）'));
-      if (test && !st.recording && !r) body.append(el('p', 'muted', '日本語訳を見て、英語で言おう。Microsoft の音声サービスが発音を採点します。90点以上・時間内でクリア！'));
+      if (test && !st.recording && !r) body.append(el('p', 'muted', `日本語訳を見て、英語で言おう。Microsoft の音声サービスが発音を採点します。${PASS}点以上・時間内でクリア！`));
       if (st.mode === 'jaPractice' && !st.recording && !r) body.append(el('p', 'muted', '本番と同じように、日本語訳だけを見て英語で言おう。終わったら英文と、言えなかった単語が出るよ。'));
     }
 
+    function speakWord(w) {
+      if (!window.speechSynthesis) return;
+      speechSynthesis.cancel();
+      const ut = new SpeechSynthesisUtterance(w); ut.lang = 'en-US'; ut.rate = 0.8;
+      const v = speechSynthesis.getVoices().find(x => /^en(-|_)US/i.test(x.lang)); if (v) ut.voice = v;
+      speechSynthesis.speak(ut);
+    }
     function speakModel() {
       if (!window.speechSynthesis) return;
       speechSynthesis.cancel();
@@ -226,7 +251,7 @@
       stopRec(false);
       const g = grade(wordsOf(st.unit.lines.map(l => l.en).join(' ')), heard);
       const seconds = Math.max(1, Math.round((end - st.startAt) / 1000));
-      const passed = g.score >= 90 && seconds <= st.unit.limit;
+      const passed = g.score >= PASS && seconds <= st.unit.limit;
       st.result = { ...g, seconds, passed };
       st.interim = '';
       render();
@@ -327,7 +352,7 @@
       const fluency = fw ? Math.round(fs / fw) : 0;
       const sorted = [accuracy, fluency, completeness].sort((a, b) => a - b);
       const score = Math.round(sorted[0] * 0.6 + sorted[1] * 0.2 + sorted[2] * 0.2);
-      return { score, accuracy, fluency, completeness, ok: per.map(a => a !== null && a >= 60) };
+      return { score, accuracy, fluency, completeness, ok: per.map(a => a !== null && a >= 60), acc: per.map(a => a === null ? null : Math.round(a)) };
     }
     async function finishTest() {
       const pressedSec = (Date.now() - st.startAt) / 1000;
@@ -336,8 +361,10 @@
       // 最後の部分の採点がとどくのを待ってから計算する
       await new Promise((res) => {
         let done = false; const end = () => { if (!done) { done = true; setTimeout(res, 600); } };
-        try { rec.azure.stopContinuousRecognitionAsync(() => { end(); }, () => end()); } catch (e) { end(); }
-        setTimeout(end, 4000);
+        // セッションが終わったとき（最後の結果のあと）まで待つ。来なければ最大7秒
+        try { rec.azure.sessionStopped = () => end(); } catch (e) {}
+        try { rec.azure.stopContinuousRecognitionAsync(() => { setTimeout(end, 1500); }, () => end()); } catch (e) { end(); }
+        setTimeout(end, 7000);
       });
       try { rec.azure.close(); } catch (e) {}
       st.scoring = false;
@@ -348,7 +375,7 @@
       }
       const seconds = Math.max(1, Math.round(st.lastEnd || pressedSec));
       const g = scoreTest();
-      st.result = { ...g, seconds, passed: g.score >= 90 && seconds <= st.unit.limit, heard: (st.heardText || '').slice(0, 400) };
+      st.result = { ...g, seconds, passed: g.score >= PASS && seconds <= st.unit.limit, heard: (st.heardText || '').slice(0, 400) };
       st.interim = '';
       render();
       try {

@@ -35,6 +35,8 @@ test('本文の分け方：名前は数えない・訳はすぐ下の行', () =>
 
 test('単元を登録して、生徒は自分の学年の単元を練習できる。90点以上・時間内で合格', async () => {
   const owner = (await http('POST', '/api/setup', { displayName: '三浦', loginId: 'owner', password: 'ownerpass1' })).cookie;
+  assert.equal((await http('PATCH', '/api/admin/reading/config', { passScore: 90 }, owner)).status, 200, '合格ラインを90点に');
+  assert.equal((await http('PATCH', '/api/admin/reading/config', { passScore: 30 }, owner)).status, 400);
   assert.equal((await http('POST', '/api/admin/reading/units', { grade: '中3', title: 'Unit 1 Part 1', text: TEXT }, owner)).status, 201);
   assert.equal((await http('POST', '/api/admin/reading/units', { grade: '中1', title: 'Unit 1', text: 'Hello. I am Ken.\nこんにちは。' }, owner)).status, 201);
   assert.equal((await http('POST', '/api/admin/reading/units', { grade: '中3', title: '', text: TEXT }, owner)).status, 400);

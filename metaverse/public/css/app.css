@@ -463,3 +463,5 @@ body.is-trial .not-trial { display: none !important; }
 .rd-unit-btns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .rd-sub { grid-column: 1 / -1; color: var(--muted); }
 .rd-ja.big { font-size: 17px; color: var(--ink, #1f2a37); font-weight: 700; line-height: 1.6; }
+.rd-en .weak { color: #e67700; text-decoration: underline dotted; text-underline-offset: 4px; cursor: pointer; }
+.rd-en .ng { cursor: pointer; }
