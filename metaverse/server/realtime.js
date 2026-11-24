@@ -566,6 +566,7 @@ function attach(httpServer) {
     if (user.role === 'student') { const st = parents.takeCheers(p.id); if (st.length) socket.emit('cheer', { stamps: st }); }
     // 誕生日を「先生だけ」に見せる生徒：先生・オーナーにだけ🎂を知らせる
     if (p.bday && !p.bday.public) socket.to('staff').emit('user-updated', { id: p.id, bday: true, cakes: p.cakes && p.cakes.n ? p.cakes : null });
+    if (isStaff(p)) for (const o of online.values()) if (o !== p && o.activity) socket.emit('user-updated', { id: o.id, activity: o.activity });
     if (isStaff(p)) for (const o of online.values()) if (o !== p && o.bday && !o.bday.public) socket.emit('user-updated', { id: o.id, bday: true, cakes: o.cakes && o.cakes.n ? o.cakes : null });
     // おうちの人の誕生日：まだプレゼントしていなければカード
     if (user.role === 'student' && !user.trial_until) setTimeout(() => offerParentGift(p), 2500);
@@ -927,6 +928,16 @@ function attach(httpServer) {
       io.emit('user-updated', { id: t.id, topic: null });
       t.socket.emit('topic-cleared', { by: `${p.user.display_name}先生` });
       ack({ ok: true });
+    });
+
+    // ── いま音読・ライティングをしている（先生・オーナーにだけ知らせる） ──
+    socket.on('activity', (d) => {
+      const kind = d && ACTIVITY_KINDS.includes(d.kind) ? d.kind : null;
+      const act = kind && p.user.role === 'student' ? { kind, title: String((d && d.title) || '').slice(0, 60), at: Date.now() } : null;
+      if (!act && !p.activity) return;
+      if (act && p.activity && act.kind === p.activity.kind && act.title === p.activity.title) return;
+      p.activity = act;
+      socket.to('staff').emit('user-updated', { id: p.id, activity: act });
     });
 
     // ── 離席（アプリを閉じた・別のアプリに切り替えた） ──
@@ -1295,6 +1306,13 @@ function isQuickRejoin(userId) {
 }
 
 // 着せかえ・自習時間の修正などのあとに、表示を更新する
+// 音読・ライティングの種類（先生・オーナーの画面に出す）
+const ACTIVITY_KINDS = ['rd-list', 'rd-practice', 'rd-ja', 'rd-test', 'w-practice', 'w-test'];
+// テストの結果を、先生・オーナーにお知らせ
+function activityResult(user, text) {
+  if (!io || user.role !== 'student') return;
+  io.to('staff').emit('activity-result', { id: user.id, name: user.display_name, text });
+}
 function refreshGanbari(userId) {
   const p = online.get(Number(userId));
   if (!p) return;
@@ -1457,6 +1475,6 @@ function refreshMoms() { if (io) io.emit('moms-updated', parents.momsTree()); }
 
 module.exports = {
   shownToday, refreshMoms, parentMeetingChanged, mendanChanged, referralRewarded, broadcastMySeats, blackboardChanged,
-  isQuickRejoin, forgetUser, patrolOn, _patrolPos: (t) => patrolPos(t), refreshGanbari, refreshBirthday, refreshAllGanbari, _online: online,
+  isQuickRejoin, forgetUser, activityResult, patrolOn, _patrolPos: (t) => patrolPos(t), refreshGanbari, refreshBirthday, refreshAllGanbari, _online: online,
   storeStudyPhoto, getStudyPhoto, studyPhotoTimes, canViewStudyPhotos, setStudyPhotosFeature, studyPhotosEnabled,
   attach, kick, refreshUser, refreshRooms, presence, roomCounts, classState, endClass, endCallOf, REACTIONS, _reset };

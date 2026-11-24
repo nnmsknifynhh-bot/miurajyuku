@@ -133,3 +133,39 @@ test('小学生は、自分の学年の単元と中1の単元をえらべる（�
   const ken = us.find(u => u.grade === '中1');
   assert.equal(ken.limit, R.limitSec(ken.words, '小5'), '時間は小学生の語数で');
 });
+
+test('先生・オーナーの画面：生徒がいま音読・ライティングをしているのがわかる。テストの結果もお知らせ（生徒には届かない）', async () => {
+  const { io: ioc } = require('socket.io-client');
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const owner = (await http('POST', '/api/login', { loginId: 'owner', password: 'ownerpass1' })).cookie;
+  await http('PATCH', '/api/admin/kanken/config', { enabled: false }, owner);
+  const mk = async (id) => { await http('POST', '/api/admin/users', { role: 'student', loginId: id, displayName: id, grade: '中3', password: 'password123' }, owner); return (await http('POST', '/api/login', { loginId: id, password: 'password123' })).cookie; };
+  const a = await mk('acta'), b = await mk('actb');
+  const conns = [];
+  const connect = (cookie) => new Promise((resolve, reject) => {
+    const s = ioc(base, { transports: ['websocket'], extraHeaders: { Cookie: cookie }, reconnection: false, forceNew: true });
+    const c = { s, events: [] }; conns.push(s);
+    s.onAny((ev, d) => c.events.push({ ev, d })); s.on('init', (d) => { c.me = d.me; resolve(c); }); s.on('connect_error', reject);
+  });
+  const sa = await connect(a), so = await connect(owner), sb = await connect(b);
+  const unit = (await http('GET', '/api/reading/units', null, a)).data.units[0];
+  sa.s.emit('activity', { kind: 'rd-test', title: unit.title });
+  await sleep(150);
+  const upd = (c) => c.events.filter(e => e.ev === 'user-updated' && e.d.id === sa.me.id && 'activity' in e.d).map(e => e.d.activity);
+  assert.deepEqual(upd(so).at(-1) && upd(so).at(-1).kind, 'rd-test');
+  assert.equal(upd(sb).length, 0, 'ほかの生徒には届かない');
+  // 入りなおした先生にも届く（同じ人は前の接続が切れる）
+  const so2 = await connect(owner); await sleep(150);
+  assert.equal(upd(so2).at(-1).kind, 'rd-test');
+  // テストの結果のお知らせ
+  for (const ja of [false, true]) await http('POST', '/api/reading/practice', { unitId: unit.id, score: 95, seconds: 50, jaOnly: ja }, a);
+  await http('POST', '/api/reading/test', { unitId: unit.id, score: 80, seconds: 50 }, a);
+  await sleep(150);
+  const res = so2.events.filter(e => e.ev === 'activity-result').map(e => e.d);
+  assert.ok(res.some(d => d.name === 'acta' && /スピーキングテスト.*80点.*再テスト/.test(d.text)), JSON.stringify(res));
+  assert.ok(!sb.events.some(e => e.ev === 'activity-result'), '生徒には届かない');
+  // とじると消える・まちがった種類は消える扱い
+  sa.s.emit('activity', { kind: null }); await sleep(150);
+  assert.equal(upd(so2).at(-1), null);
+  conns.forEach(s => s.disconnect());
+});

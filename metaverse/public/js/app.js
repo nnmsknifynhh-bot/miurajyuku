@@ -324,6 +324,8 @@
         if (u) { u.x = x; u.y = y; u.dir = DIRS[dir] || u.dir; u.moving = !!moving; }
       }
     });
+    // 生徒がテストを終えた（先生・オーナーだけに届く）
+    socket.on('activity-result', (d) => { if (d && d.text) toast(`${d.name}さん：${d.text}`, 6000); });
     socket.on('user-updated', (d) => {
       const u = d.id === state.me.id ? state.me : state.others.get(d.id);
       if (!u) return;
@@ -1244,6 +1246,9 @@
     if (opening) { const warn = chatWarning(); if (warn) toast(warn, 6000); }
   };
 
+  // 音読・ライティングのようす（先生・オーナーの画面）
+  const ACT_LABEL = { 'rd-list': '📖 音読の単元をえらび中', 'rd-practice': '🔤 音読の練習中（英文）', 'rd-ja': '🇯🇵 音読の練習中（訳だけ）', 'rd-test': '🎤 スピーキングテスト中', 'w-practice': '✍️ 書く練習中', 'w-test': '📝 ライティングテスト中' };
+  const activityText = (a) => (ACT_LABEL[a.kind] || '') + (a.title ? `「${a.title}」` : '');
   // ───────── 先生用パネル（挙手一覧・入室者一覧） ─────────
   function openPanel(tab) {
     state.panelTab = tab;
@@ -1382,6 +1387,7 @@
         const dot = el('span', 'dot'); dot.style.background = u.color;
         li.append(dot, el('span', null, (u.role !== 'student' ? ROLE_LABEL[u.role] + ' ' : '') + u.name + (u === state.me ? '（自分）' : '')));
         li.append(el('span', 'tag', (u.away ? '💤 ' : '') + (u.inPrivate ? '🎧 ' : '') + (u.hand ? '✋ ' : '') + (u.seat ? '着席' : '')));
+        if (u.activity) li.append(el('span', 'tag act' + (/test/.test(u.activity.kind) ? ' act-test' : ''), activityText(u.activity)));
         if (u !== state.me && u.role === 'student' && canPrivate() && handleableRoom(u.room) && !u.inPrivate) {
           const b = el('button', 'btn small', '🎧'); b.title = '個別通話'; b.onclick = () => state.pc.invite(u); li.append(b);
         }
@@ -1771,7 +1777,7 @@
     window.Tour.start(tourKind(), { onDone: () => api('POST', '/api/me/tour-seen').catch(() => {}) });
   }
   // 🔁 英語の音読：テスト教室で「先生を呼ぶ」→ 後ろの扉から Ms. Miura が出てくる（自分の画面だけ）→ 練習・テスト
-  state.reading = window.Reading ? window.Reading.create({ api, toast, getUser: () => state.user, onClose: () => miuraLeave() }) : null;
+  state.reading = window.Reading ? window.Reading.create({ api, toast, getUser: () => state.user, onClose: () => miuraLeave(), onActivity: (kind, title) => state.socket && state.socket.emit('activity', { kind, title }) }) : null;
   // 季節のイベント（教室のかざり）に合わせた衣装：head＝頭、hand＝手に持つもの、clothes＝服
   const MIURA_COSTUME = {
     newyear: { clothes: 'kimono', hand: '🎍' }, winter: { head: '❄️', hand: '☃️' }, setsubun: { head: '👹', hand: '🫘' }, valentine: { head: '💝', hand: '🍫' },

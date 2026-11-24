@@ -164,7 +164,7 @@ function recordTest(user, unitId, r) {
   }
   db.prepare('INSERT INTO reading_tests (user_id, unit_id, attempt, score, accuracy, fluency, completeness, seconds, limit_sec, passed, points, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
     .run(user.id, unitId, attempt, sc, num(r.accuracy), num(r.fluency), num(r.completeness), sec, v.limit, passed ? 1 : 0, points, now());
-  return { ok: true, passed, points, attempt, limit: v.limit, alreadyCleared: !!before.p };
+  return { ok: true, passed, points, attempt, limit: v.limit, alreadyCleared: !!before.p, score: sc, seconds: sec, missing: miss, title: u.title };
 }
 function testSummary() {
   return db.prepare(`SELECT t.user_id, u.display_name AS name, u.grade, t.unit_id, r.title, COUNT(*) AS count, MAX(t.score) AS best, MAX(t.passed) AS passed, MAX(t.points) AS points,

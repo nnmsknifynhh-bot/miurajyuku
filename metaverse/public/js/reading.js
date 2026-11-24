@@ -92,7 +92,9 @@
     })(t0);
   }
 
-  function create({ api, toast, getUser, onClose }) {
+  function create({ api, toast, getUser, onClose, onActivity }) {
+    // いま何をしているか（先生・オーナーの画面に出す）
+    const act = (kind, title) => { if (onActivity) onActivity(kind, title || ''); };
     const st = { units: [], unit: null, rec: null, recording: false, finals: [], interim: '', startAt: 0, lastAt: 0, timer: null, showJa: false, result: null };
     const root = $('#reading');
 
@@ -101,12 +103,12 @@
       showList();
       try { const d = await api('GET', '/api/reading/units'); st.units = d.units; PASS = d.passScore || 90; showList(); } catch (e) { toast(e.message); }
     }
-    function close() { stopRec(true); root.hidden = true; if (window.speechSynthesis) speechSynthesis.cancel(); if (onClose) onClose(); }
+    function close() { stopRec(true); root.hidden = true; act(null); if (window.speechSynthesis) speechSynthesis.cancel(); if (onClose) onClose(); }
     $('#rd-close').onclick = close;
     $('#rd-back').onclick = () => { stopRec(true); showList(); };
 
     function showList() {
-      st.unit = null;
+      st.unit = null; act('rd-list');
       $('#rd-back').hidden = true; $('#rd-title').textContent = '🔁 音読の練習';
       const body = $('#rd-body'); body.textContent = '';
       if (!SR) body.append(el('p', 'rd-warn', 'この端末（ブラウザ）では英語の聞き取りが使えません。iPad・iPhone は Safari、パソコン・Android は Chrome で開いてください。お手本を聞くことはできます。'));
@@ -151,6 +153,7 @@
 
     function showUnit(u, mode = 'practice') {
       st.unit = u; st.result = null; st.showJa = false; st.mode = mode;
+      act(({ practice: 'rd-practice', jaPractice: 'rd-ja', test: 'rd-test', wPractice: 'w-practice', wTest: 'w-test' })[mode], u.title);
       if (mode === 'wPractice' || mode === 'wTest') { st.wres = null; st.wimg = null; $('#rd-back').hidden = false; $('#rd-title').textContent = (mode === 'wTest' ? '📝 ライティング：' : '✍️ 書く練習：') + u.title; return renderWriting(); }
       if (mode === 'test') prepareTest(); // iPhone・iPad：ボタンを押したその場でマイクを始めるため、合言葉は先にもらっておく
       $('#rd-back').hidden = false; $('#rd-title').textContent = ({ test: '📝 テスト：', jaPractice: '🇯🇵 訳だけで練習：', practice: '🔤 英文で練習：' })[mode] + u.title;

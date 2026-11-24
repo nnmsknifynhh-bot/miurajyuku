@@ -195,6 +195,7 @@ app.post('/api/reading/test', auth.requireAuth, (req, res) => {
   const r = reading.recordTest(req.user, Number(req.body.unitId), req.body || {});
   if (r.error) return bad(res, r.error);
   if (r.points) realtime.refreshGanbari(req.user.id);
+  realtime.activityResult(req.user, `🎤 スピーキングテスト「${r.title}」${r.score}点 → ${r.passed ? '🏅 合格' + (r.points ? `（+${r.points}pt）` : '') : '再テスト' + (r.missing >= reading.MAX_MISSING ? `（読めていない単語 ${r.missing}個）` : r.seconds > r.limit ? '（時間オーバー）' : '')}`);
   res.json(r);
 });
 // ✍️ ライティング：ノートの写真をおくる（?unitId=&mode=practice|test）。文字を読み取って本文とくらべる
@@ -205,6 +206,7 @@ app.post('/api/reading/writing', express.raw({ type: 'image/jpeg', limit: '4mb' 
   const r = await writing.grade(req.user, unit, String(req.query.mode || ''), req.body);
   if (r.error) return bad(res, r.error, r.code || 400);
   if (r.points) realtime.refreshGanbari(req.user.id);
+  if (req.query.mode === 'test') realtime.activityResult(req.user, `✍️ ライティングテスト「${unit.title}」${r.score}点 → ${r.passed ? '🏅 合格' + (r.points ? `（+${r.points}pt）` : '') : '再テスト'}`);
   res.json(r);
 });
 app.post('/api/me/tour-seen', auth.requireAuth, (req, res) => { onboard.markTour(req.user.id); res.json({ ok: true }); });

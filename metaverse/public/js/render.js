@@ -604,6 +604,14 @@
       ctx.font = '18px sans-serif';
       ctx.fillText('💤', x - tw / 2 - 12, byTag - 33);
     }
+    // 音読・ライティング中（先生・オーナーの画面だけに届く）：名札の右に 🎤 / ✍️
+    if (u.activity && !u.inPrivate) {
+      const k = u.activity.kind, ic = k === 'rd-test' ? '🎤' : k === 'w-test' ? '📝' : k === 'w-practice' ? '✍️' : '📖';
+      ctx.font = '13px sans-serif';
+      ctx.fillStyle = /test/.test(k) ? 'rgba(220,53,69,.95)' : 'rgba(40,140,90,.95)';
+      ctx.beginPath(); ctx.roundRect(x + tw / 2 - 2, byTag - 43, 24, 19, 9); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.fillText(ic, x + tw / 2 + 10, byTag - 33);
+    }
     // 個別通話中
     if (u.inPrivate) {
       ctx.font = '16px sans-serif';
