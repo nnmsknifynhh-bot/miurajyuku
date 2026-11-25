@@ -1183,11 +1183,19 @@
     const up = state.user.role === 'student' && Date.now() < earningUntil;
     $('#pts-state').textContent = state.user.role === 'student' ? (up ? '⬆' : '⏸') : '';
     $('#pts-state').classList.toggle('up', up);
+    // メニューの「ポイントと着せかえ」に🔒。ポイントアップ時間が始まったら、開いていた着せかえも閉じる
+    if (state.user.role === 'student') { $('#menu-shop').textContent = up ? '🔒 ポイントと着せかえ（ポイントアップ時間中）' : '🎁 ポイントと着せかえ'; $('#menu-shop').classList.toggle('locked', up); if (up && $('#shop-dialog').open) { $('#shop-dialog').close(); toast('📚 ポイントアップ時間になったので、着せかえを閉じました。勉強に集中しよう！', 5000); } }
     chip.title = up ? 'いまポイントがふえています' : state.user.role === 'student' ? 'いまはポイントがふえていません（時間帯の外・自習室の外など）' : '';
     if (Number.isFinite(prev) && state.pts.balance > prev) { chip.classList.remove('sparkle'); void chip.offsetWidth; chip.classList.add('sparkle'); }
   }
   setInterval(() => { if (ptsMode() && state.pts) renderPts(); }, 5000); // ⬆ → ⏸ にもどす
-  $('#pts-chip').onclick = () => { if (state.gb) state.gb.openShop(); };
+  // ポイントアップ時間（⬆）のあいだは、着せかえは見られない（勉強に集中）。保護者はいつでも
+  const shopLocked = () => !!(state.user && state.user.role === 'student' && Date.now() < earningUntil);
+  function openShopIfFree() {
+    if (shopLocked()) { toast('📚 いまはポイントアップ時間（⬆）です。着せかえは、ポイントアップ時間の外で見られるよ。勉強に集中しよう！', 6000); return; }
+    if (state.gb) state.gb.openShop();
+  }
+  $('#pts-chip').onclick = openShopIfFree;
   async function refreshPts() {
     if (!ptsMode()) return;
     try { const g = await api('GET', '/api/me/ganbari'); state.pts = { ...(state.pts || {}), balance: g.points.balance }; renderPts(); } catch (e) { /* 次の機会に */ }
@@ -2020,7 +2028,7 @@
     }, 'image/png');
   };
 
-  $('#menu-shop').onclick = () => { $('#me-menu').hidden = true; state.gb.openShop(); };
+  $('#menu-shop').onclick = () => { $('#me-menu').hidden = true; openShopIfFree(); };
   $('#menu-goal').onclick = () => { $('#me-menu').hidden = true; state.gb.openGoal(); };
   // 📊 成績（中学生・高校生）
   $('#menu-scores').onclick = () => { $('#me-menu').hidden = true; window.Scores.mount($('#scores-box'), { api, toast }); $('#scores-dialog').showModal(); };
