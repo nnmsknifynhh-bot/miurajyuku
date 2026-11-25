@@ -216,8 +216,14 @@ app.get('/api/scores', auth.requireAuth, (req, res) => {
   if (!scores.canSee(req.user, id)) return bad(res, '自分（自分のお子さん）の成績だけ見られます', 403);
   const st = scores.target(id);
   if (!st) return bad(res, '生徒が見つかりません', 404);
-  res.json({ student: { id: st.id, name: st.name, grade: st.grade }, canEdit: scores.canEdit(req.user, st), canConfirm: req.user.role === 'owner' || req.user.role === 'teacher', records: scores.listFor(id), grades: scores.GRADES, termName: scores.TERM_NAME, moshiTypes: scores.getTypes() });
+  res.json({ student: { id: st.id, name: st.name, grade: st.grade }, canEdit: scores.canEdit(req.user, st), canConfirm: req.user.role === 'owner' || req.user.role === 'teacher', records: scores.listFor(id), grades: scores.GRADES, termName: scores.TERM_NAME, moshiTypes: scores.getTypes(), testDates: scores.testDates(id) });
 });
+app.put('/api/scores/test-date', auth.requireAuth, (req, res) => {
+  const r = scores.setTestDate(req.user, req.body.userId ? Number(req.body.userId) : req.user.id, req.body || {});
+  if (r.error) return bad(res, r.error, r.code || 400);
+  res.json(r);
+});
+app.get('/api/scores/reminder', auth.requireAuth, (req, res) => res.json(scores.reminder(req.user, ganbari.jst().day)));
 app.post('/api/scores', auth.requireAuth, (req, res) => {
   const r = scores.save(req.user, req.body.userId ? Number(req.body.userId) : req.user.id, req.body || {});
   if (r.error) return bad(res, r.error, r.code || 400);

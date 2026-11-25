@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS score_records (
   updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_score_user ON score_records(user_id, kind);
+-- 定期テストの日（生徒が入れる）：カウントダウンと、入れ忘れのお知らせに使う
+CREATE TABLE IF NOT EXISTS score_test_dates (user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, grade TEXT NOT NULL, term TEXT NOT NULL, start_day TEXT NOT NULL, end_day TEXT, PRIMARY KEY (user_id, grade, term));
 `);
 
 const GRADES = ['中1', '中2', '中3', '高1', '高2', '高3'];
@@ -252,4 +254,46 @@ function overview() {
   for (const r of recs) { const s = by.get(r.userId); if (!s) continue; s.count++; if (!r.confirmed) s.unconfirmed++; if (!s.last) s.last = r; }
   return { students: [...by.values()], records: recs.filter(r => by.has(r.userId)).map(r => ({ ...r, name: by.get(r.userId).name, nowGrade: by.get(r.userId).grade })) };
 }
-module.exports = { getTypes, setTypes, judgeOf, DEFAULT_LEVELS, GRADES, TERMS, TERM_NAME, JUDGES, normalize, summarize, listFor, canSee, canEdit, target, save, remove, confirm, overview, isTarget };
+// ───────── テストの日：カウントダウン・入れ忘れのお知らせ ─────────
+const COUNTDOWN_DAYS = 60;   // 何日前からカウントダウンを出すか
+const REMIND_AFTER = 14;     // テストが終わって何日たったら「成績を入れてね」
+const dayNum = (d) => Math.round(Date.parse(d + 'T00:00:00Z') / 86400e3);
+function testDates(userId) {
+  return db.prepare('SELECT grade, term, start_day AS start, end_day AS end FROM score_test_dates WHERE user_id = ?').all(userId)
+    .map(r => ({ ...r, termName: TERM_NAME[r.term] })).sort((a, b) => a.start.localeCompare(b.start));
+}
+function setTestDate(actor, studentId, b) {
+  const st = target(studentId);
+  if (!st) return { error: '生徒が見つかりません', code: 404 };
+  if (!canEdit(actor, st)) return { error: '自分のテストの日だけ入れられます', code: 403 };
+  const grade = b.grade || st.grade, term = String(b.term || '');
+  if (!isTarget(grade)) return { error: '学年をえらんでください' };
+  if (!TERMS.teiki.includes(term)) return { error: 'どのテストかえらんでください' };
+  if (!b.start) { db.prepare('DELETE FROM score_test_dates WHERE user_id = ? AND grade = ? AND term = ?').run(st.id, grade, term); return { ok: true }; }
+  if (!RE_DAY.test(b.start) || (b.end && !RE_DAY.test(b.end))) return { error: '日付が正しくありません' };
+  const end = b.end && b.end !== b.start ? b.end : null;
+  if (end && end < b.start) return { error: '最後の日は、はじめの日より後にしてください' };
+  db.prepare('INSERT INTO score_test_dates (user_id, grade, term, start_day, end_day) VALUES (?, ?, ?, ?, ?) ON CONFLICT (user_id, grade, term) DO UPDATE SET start_day = excluded.start_day, end_day = excluded.end_day')
+    .run(st.id, grade, term, b.start, end);
+  return { ok: true };
+}
+/**
+ * 生徒の画面の左上に出すもの
+ * - countdown：次のテストまであと何日（60日前から）・テスト中
+ * - missing：テストが終わって2週間たっても成績を入れていないテスト
+ */
+function reminder(user, today) {
+  if (user.role !== 'student' || user.trial_until || !isTarget(user.grade)) return { countdown: null, missing: [] };
+  const t = dayNum(today), dates = testDates(user.id);
+  let countdown = null;
+  for (const d of dates) {
+    const s = dayNum(d.start), e = dayNum(d.end || d.start);
+    if (t >= s && t <= e) { countdown = { term: d.term, termName: d.termName, grade: d.grade, days: 0, during: true, first: t === s }; break; }
+    if (s > t && s - t <= COUNTDOWN_DAYS) { countdown = { term: d.term, termName: d.termName, grade: d.grade, days: s - t, during: false }; break; }
+  }
+  const has = new Set(db.prepare("SELECT grade || '|' || term AS k FROM score_records WHERE user_id = ? AND kind = 'teiki'").all(user.id).map(r => r.k));
+  const missing = dates.filter(d => t - dayNum(d.end || d.start) >= REMIND_AFTER && !has.has(`${d.grade}|${d.term}`))
+    .map(d => ({ grade: d.grade, term: d.term, termName: d.termName }));
+  return { countdown, missing };
+}
+module.exports = { testDates, setTestDate, reminder, COUNTDOWN_DAYS, REMIND_AFTER, getTypes, setTypes, judgeOf, DEFAULT_LEVELS, GRADES, TERMS, TERM_NAME, JUDGES, normalize, summarize, listFor, canSee, canEdit, target, save, remove, confirm, overview, isTarget };

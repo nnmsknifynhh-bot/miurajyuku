@@ -130,6 +130,10 @@ dialog::backdrop { background: rgba(30, 25, 40, .45); }
 .sr-rows.nomax .sr-max { display: none; }
 .sr-type { border: 2px solid #eee3d3; border-radius: 12px; padding: 8px 12px; margin-bottom: 8px; display: grid; gap: 8px; }
 .sr-type summary { font-weight: 700; cursor: pointer; }
+.sr-dates { border: 2px solid #e2dbff; border-radius: 12px; padding: 8px 12px; background: #faf8ff; display: grid; gap: 6px; }
+.sr-dates summary { font-weight: 700; cursor: pointer; }
+.sr-date-row b { min-width: 6.5em; }
+.sr-date-row input { min-width: 0; }
 .sr-judges { display: grid; gap: 6px; }
 .sr-judge-out { color: #2f5f9e; font-size: 15px; }
 .sr-row-h { font-size: 12px; color: #7a6a5a; font-weight: 700; }

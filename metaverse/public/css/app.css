@@ -375,6 +375,8 @@ body.is-trial .not-trial { display: none !important; }
 .sp-goal-btns button { min-width: 54px; min-height: 40px; border-radius: 12px; border: 2px solid #9ccbff; background: #fff; font-weight: 800; font-size: 15px; }
 .sp-goal-btns button.on { background: #2f7de1; border-color: #2f7de1; color: #fff; }
 .goal-chip { background: #eef7ff !important; border-color: #9ccbff !important; }
+.test-chip { pointer-events: auto; cursor: pointer; text-align: left; font-family: inherit; background: #f3f0ff !important; border-color: #b9a8ff !important; color: #47308f !important; }
+.test-chip.urgent { background: #fff0f0 !important; border-color: #ff9a9a !important; color: #a32020 !important; }
 .shop-item.locked { opacity: .55; }
 
 /* 🎂 誕生日の子へケーキを渡す */

@@ -112,3 +112,29 @@ test('模試の種類（オーナーが登録）：生徒はえらぶだけ。�
   assert.match((await http('POST', '/api/scores', { kind: 'moshi', grade: '中2', typeId: t.id, totalDev: 50, subjects: S5, schools: ['ない高校'] }, stu)).data.error, /一覧にありません/);
   assert.match((await http('POST', '/api/scores', { kind: 'moshi', grade: '中2', typeId: 'mxxx', subjects: S5 }, stu)).data.error, /見つかりません/);
 });
+
+test('テストの日：生徒が入れる → 左上に「あと○日」・テスト中。終わって2週間たっても成績がないと「入れてね」', async () => {
+  const SC = require('../server/scores.js');
+  const { db } = require('../server/db.js');
+  const u = db.prepare("SELECT * FROM users WHERE login_id = 'chu3'").get(); // 中3（まだ成績なし）
+  const c3 = (await http('POST', '/api/login', { loginId: 'chu3', password: 'password123' })).cookie;
+  assert.match((await http('PUT', '/api/scores/test-date', { grade: '中3', term: '2end', start: '2026-12-03', end: '2026-12-01' }, c3)).data.error, /後に/);
+  assert.equal((await http('PUT', '/api/scores/test-date', { grade: '中3', term: '2end', start: '2026-12-03', end: '2026-12-04' }, c3)).status, 200);
+  assert.equal((await http('PUT', '/api/scores/test-date', { grade: '中3', term: '2mid', start: '2026-10-14' }, c3)).status, 200);
+  assert.equal((await http('PUT', '/api/scores/test-date', { userId: u.id, grade: '中3', term: '2end', start: '2026-12-03' }, stu)).status, 403, 'ほかの生徒のは入れられない');
+  let r = SC.reminder(u, '2026-11-19');
+  assert.deepEqual(r.countdown, { term: '2end', termName: '2学期期末', grade: '中3', days: 14, during: false });
+  assert.deepEqual(r.missing.map(m => m.term), ['2mid'], '2学期中間が終わって2週間以上・成績なし');
+  assert.equal(SC.reminder(u, '2026-10-27').missing.length, 0, 'まだ2週間たっていない');
+  assert.equal(SC.reminder(u, '2026-12-03').countdown.first, true);
+  assert.equal(SC.reminder(u, '2026-12-04').countdown.during, true);
+  assert.equal(SC.reminder(u, '2026-12-05').countdown, null);
+  assert.equal(SC.reminder(u, '2026-09-01').countdown.term, '2mid', '60日以内のいちばん近いテスト');
+  // 成績を入れると、お知らせは消える
+  await http('POST', '/api/scores', { kind: 'teiki', grade: '中3', term: '2mid', subjects: [{ name: '国語', score: 80 }] }, c3);
+  assert.equal(SC.reminder(u, '2026-11-19').missing.length, 0);
+  // 消す
+  assert.equal((await http('PUT', '/api/scores/test-date', { grade: '中3', term: '2end', start: null }, c3)).status, 200);
+  assert.equal(SC.reminder(u, '2026-11-19').countdown, null);
+  assert.equal((await http('GET', '/api/scores/reminder', null, kid)).data.countdown, null, '小学生は出ない');
+});

@@ -258,7 +258,7 @@
       state.mySeats = d.mySeats || [];
       cakeGiven.clear(); for (const id of (d.me.cakeGiven || [])) cakeGiven.add(id);
       state.pts = d.me.pts || null;
-      loadBoard(); loadMorning(); refreshGoal();
+      loadBoard(); loadMorning(); refreshGoal(); refreshTestChip();
       if (state.user.role === 'student') setTimeout(goMySeat, 1800);
       { const mine = state.testQueue && state.testQueue.booths.find(b => b.userId === d.me.id); state.testBooth = mine ? mine.seat : null; }
       buildReactions(); updateAll(); refreshWeek(true); refreshFun(true); renderTest();
@@ -1689,6 +1689,24 @@
   $('#menu-invite').onclick = openInvite;
   // ───── 📝 先生の黒板 ─────
   const boardKey = () => 'juku-board-seen-' + (state.user ? state.user.id : '');
+  // 📅 テストのカウントダウン・成績の入れ忘れ（中学生・高校生。テストの日は生徒が成績の画面で入れる）
+  let remindShown = '';
+  async function refreshTestChip() {
+    const chip = $('#test-chip');
+    if (!state.user || state.user.role !== 'student' || !/^[中高][1-3]$/.test(state.user.grade || '')) { chip.hidden = true; return; }
+    let r; try { r = await api('GET', '/api/scores/reminder'); } catch (e) { return; }
+    const lines = [], c = r.countdown;
+    if (c) lines.push(c.during ? (c.first ? `📝 今日から${c.termName}テスト！がんばって！` : `📝 ${c.termName}テスト中！がんばって！`) : c.days === 1 ? `📅 ${c.termName}テストは明日！` : `📅 ${c.termName}テストまで あと${c.days}日`);
+    if (r.missing.length) lines.push(`✏️ ${r.missing.map(m => m.termName).join('・')}の成績を入れてね`);
+    chip.textContent = lines.join('\n'); chip.style.whiteSpace = 'pre-line'; chip.hidden = !lines.length;
+    chip.classList.toggle('urgent', !!(c && (c.during || c.days <= 7)));
+    // 入れ忘れは、1日1回お知らせも出す
+    const key = r.missing.map(m => m.grade + m.term).join(',') + '|' + new Date().toDateString();
+    if (r.missing.length && remindShown !== key) { remindShown = key; setTimeout(() => toast(`✏️ ${r.missing.map(m => m.termName).join('・')}テストの成績を入れてね（右上のメニュー →「📊 成績」）`, 7000), 4000); }
+  }
+  setInterval(refreshTestChip, 30 * 60_000);
+  if (window.Scores) window.Scores.onChange = refreshTestChip;
+  $('#test-chip').onclick = () => { window.Scores.mount($('#scores-box'), { api, toast }); $('#scores-dialog').showModal(); };
   // 🎯 小学生：今日の目標時間（あと何分かは自分にだけ見える）
   async function refreshGoal() {
     if (!state.user || state.user.role !== 'student') return;
@@ -1994,7 +2012,7 @@
   $('#menu-goal').onclick = () => { $('#me-menu').hidden = true; state.gb.openGoal(); };
   // 📊 成績（中学生・高校生）
   $('#menu-scores').onclick = () => { $('#me-menu').hidden = true; window.Scores.mount($('#scores-box'), { api, toast }); $('#scores-dialog').showModal(); };
-  $('#scores-close').onclick = () => $('#scores-dialog').close();
+  $('#scores-close').onclick = () => { $('#scores-dialog').close(); refreshTestChip(); };
   $('#menu-forest').onclick = () => { $('#me-menu').hidden = true; state.gb.openForest(null); };
   setInterval(() => { if (state.gb && document.visibilityState === 'visible') state.gb.refreshForest(); }, 60000);
   const treePos = (i) => { const f = SM.FOREST[i]; return { x: (f.x + 1) * T, y: (f.y + 1) * T - 6 }; };

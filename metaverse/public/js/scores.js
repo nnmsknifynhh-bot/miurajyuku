@@ -10,6 +10,7 @@
   const SUB4 = ['音楽', '美術', '保健体育', '技術家庭'];
   const NINE = ['国語', '社会', '数学', '理科', '英語', ...SUB4];
   const isJH = (g) => /^中/.test(g || '');
+  const GRADES_JHHS = /^[中高][1-3]$/;
   // 志望校の判定の表示（例：〇〇高校 A判定（80%））
   const judgeText = (j) => `${j.school} ${j.judge ? `${j.judge}判定${j.pct != null ? `（${j.pct}%）` : ''}` : j.below != null ? `判定なし（${j.below}%未満）` : '–'}`;
   // 合計の偏差値から判定（サーバーと同じ決め方。入れている途中に見せる）
@@ -77,6 +78,7 @@
         add.onclick = () => { editing = { kind: tab }; render(); };
         box.append(add);
       }
+      if (tab === 'teiki' && GRADES_JHHS.test(data.student.grade || '')) box.append(datesPanel());
       if (tab === 'moshi' && data.records.some(r => r.kind === 'moshi' && r.past)) {
         const l = el('label', 'sr-check'); const c = el('input'); c.type = 'checkbox'; c.checked = showPast; c.onchange = () => { showPast = c.checked; render(); };
         l.append(c, document.createTextNode(' 過去問も表示する')); box.append(l);
@@ -91,6 +93,31 @@
       // 新しいものが上
       const prevOf = (r) => { const i = recs.indexOf(r); for (let k = i - 1; k >= 0; k--) if (recs[k].kind === r.kind && (r.kind !== 'moshi' || recs[k].past === r.past)) return recs[k]; return null; };
       for (const r of [...recs].reverse()) box.append(card(r, prevOf(r)));
+    }
+    // 📅 テストの日（今の学年）：入れておくと、左上に「あと○日」が出る。終わって2週間たっても成績がないと「入れてね」
+    function datesPanel() {
+      const g = data.student.grade, dates = data.testDates || [];
+      const p = el('details', 'sr-dates');
+      const next = dates.filter(d => d.grade === g && (d.end || d.start) >= new Date().toISOString().slice(0, 10))[0];
+      p.open = data.canEdit && !dates.some(d => d.grade === g);
+      p.append(el('summary', null, `📅 テストの日（${g}）${next ? `：次は ${next.termName}（${Number(next.start.slice(5, 7))}/${Number(next.start.slice(8))}〜）` : ''}`));
+      if (data.canEdit) p.append(el('small', 'muted', '学校のテストの日を入れておくと、画面の左上に「〇〇まであと○日」が出ます。テストが終わって2週間たっても成績を入れていないと、「成績を入れてね」と出ます。'));
+      for (const [term, name] of TEIKI) {
+        const d = dates.find(x => x.grade === g && x.term === term) || {};
+        const row = el('div', 'gb-row sr-date-row');
+        row.append(el('b', null, name));
+        if (!data.canEdit) { row.append(el('span', null, d.start ? `${d.start.slice(5).replace('-', '/')}${d.end ? `〜${d.end.slice(5).replace('-', '/')}` : ''}` : '–')); p.append(row); continue; }
+        const s = el('input'); s.type = 'date'; s.value = d.start || ''; s.setAttribute('aria-label', name + 'のはじめの日');
+        const e = el('input'); e.type = 'date'; e.value = d.end || ''; e.setAttribute('aria-label', name + 'の最後の日');
+        const sv = el('button', 'btn small', '保存'); sv.type = 'button';
+        sv.onclick = async () => {
+          try { await api('PUT', '/api/scores/test-date', { ...(userId ? { userId } : {}), grade: g, term, start: s.value || null, end: e.value || null }); toast(s.value ? `${name}の日を保存しました` : `${name}の日を消しました`); if (window.Scores.onChange) window.Scores.onChange(); load(); }
+          catch (er) { toast(er.message); }
+        };
+        row.append(s, el('span', null, '〜'), e, sv); p.append(row);
+      }
+      if (data.canEdit) p.append(el('small', 'muted', '1日だけのテストは、右の日付は空のままでOK。ない学校のテスト（1学期中間など）は空のままにしてください。'));
+      return p;
     }
     function card(r, prev) {
       const c = el('div', 'sr-card');
