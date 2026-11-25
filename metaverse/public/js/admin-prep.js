@@ -42,8 +42,10 @@
     // ── ② 学校のテスト日程 ──
     const ss = section('🏫 学校のテスト日程（学校×学年×テスト）', '学校ごとに「テスト初日」を入れると、その学校の生徒に自動でスケジュールが出ます（生徒の画面には「塾で設定」と出ます）。学校名は「👥 ユーザー」で生徒ごとに入れます。スピーキング・ライティングの課題は「Unit6-1　Unit6-2」のように、改行・「、」・スペース2つで区切ります。音読に登録した単元と同じ名前にすると、テスト教室で合格したときに自動で✅がつきます。');
     const form = el('div', 'pp-form');
-    const school = el('input'); school.placeholder = '学校名'; school.maxLength = 30; school.setAttribute('list', 'pp-schools');
-    const dl = el('datalist'); dl.id = 'pp-schools'; d.schools.forEach(s => dl.append(new Option(`${s.name}`, s.name)));
+    // 学校は「🏫 教室の設定」で作ったものからえらぶ
+    const school = el('select'); school.append(new Option('学校をえらぶ', ''));
+    [...new Set([...(d.schoolList || []), ...d.schoolTests.map(t => t.school)])].forEach(n => school.append(new Option(n, n)));
+    const dl = el('span');
     const grade = el('select'); ['中1', '中2', '中3'].forEach(g => grade.append(new Option(g, g)));
     const term = el('select'); TERMS.forEach(([v, n]) => term.append(new Option(n, v)));
     const start = el('input'); start.type = 'date'; const end = el('input'); end.type = 'date';
@@ -65,7 +67,7 @@
       form.scrollIntoView({ behavior: 'smooth' });
     };
     const body = () => ({ school: school.value, grade: grade.value, term: term.value, start: start.value || null, end: end.value || null, speaking: spk.value, writing: wrt.value, ranges: Object.fromEntries(Object.entries(rangeIn).map(([k, i]) => [k, i.value])) });
-    save.onclick = async () => { if (!start.value) return toast('テスト初日を入れてください'); try { await api('PUT', '/api/admin/prep/school-test', body()); toast('保存しました'); reload(); } catch (e) { toast(e.message); } };
+    save.onclick = async () => { if (!school.value) return toast('学校をえらんでください（学校は「🏫 教室の設定」で作れます）'); if (!start.value) return toast('テスト初日を入れてください'); try { await api('PUT', '/api/admin/prep/school-test', body()); toast('保存しました'); reload(); } catch (e) { toast(e.message); } };
     del.onclick = async () => { if (!confirm(`${school.value} ${grade.value} の日程を消しますか？`)) return; try { await api('PUT', '/api/admin/prep/school-test', { ...body(), start: null }); toast('消しました'); reload(); } catch (e) { toast(e.message); } };
     // 登録ずみの日程と、生徒ごとの Unit チェック表
     const lw = el('div', 'table-wrap'); ss.append(lw);

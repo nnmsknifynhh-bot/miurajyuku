@@ -245,4 +245,50 @@ function overview(today) {
     .map(r => scheduleFor(r.id, today)).filter(Boolean)
     .map(s => ({ ...s.student, test: s.test, counts: s.counts || { total: 0, done: 0, late: 0 } }));
 }
-module.exports = { swTable, DEFAULT_TEMPLATE, GRADES, TERMS, TERM_NAME, parseTemplate, parseUnits, templateText, setTemplate, schoolTests, setSchoolTest, datesFor, jukuHas, stagesOf, scheduleFor, setCheck, overview };
+// ───────── 学校名の一覧（教室の設定で作る。ユーザーの編集でプルダウンに出る） ─────────
+const normSchool = (s) => clean(s, 30).replace(/\s+/g, ' ');
+function schoolList() {
+  let list = null; try { list = JSON.parse(getSetting('schools', 'null')); } catch (e) { list = null; }
+  if (!Array.isArray(list)) { // はじめて：生徒に入っている学校名・日程の学校名から作る
+    list = [...new Set([...db.prepare("SELECT DISTINCT school AS s FROM users WHERE school IS NOT NULL").all(), ...db.prepare('SELECT DISTINCT school AS s FROM prep_school_tests').all()].map(r => r.s))].sort();
+  }
+  const count = new Map(db.prepare("SELECT school, COUNT(*) AS n FROM users WHERE role = 'student' AND is_active = 1 AND school IS NOT NULL GROUP BY school").all().map(r => [r.school, r.n]));
+  return list.map(name => ({ name, students: count.get(name) || 0 }));
+}
+function addSchool(name, actorId) {
+  const n = normSchool(name); if (!n) return { error: '学校名を入れてください' };
+  const list = schoolList().map(s => s.name);
+  if (list.includes(n)) return { error: `「${n}」はもうあります` };
+  if (list.length >= 200) return { error: '学校は200校までです' };
+  setSetting('schools', JSON.stringify([...list, n].sort((a, b) => a.localeCompare(b, 'ja'))));
+  audit(actorId, 'school.added', n, null);
+  return { ok: true };
+}
+/** 名前を変える：生徒の学校名・学校の日程もいっしょに変える */
+function renameSchool(from, to, actorId) {
+  const a = normSchool(from), b = normSchool(to);
+  if (!b) return { error: '新しい学校名を入れてください' };
+  const list = schoolList().map(s => s.name);
+  if (!list.includes(a)) return { error: '学校が見つかりません' };
+  if (a !== b && list.includes(b)) return { error: `「${b}」はもうあります` };
+  db.exec('BEGIN');
+  try {
+    db.prepare('UPDATE users SET school = ? WHERE school = ?').run(b, a);
+    db.prepare('UPDATE prep_school_tests SET school = ? WHERE school = ?').run(b, a);
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
+  setSetting('schools', JSON.stringify(list.map(x => x === a ? b : x).sort((x, y) => x.localeCompare(y, 'ja'))));
+  audit(actorId, 'school.renamed', a, { to: b });
+  return { ok: true };
+}
+/** 一覧から消す（その学校の生徒がいるときは消せない） */
+function removeSchool(name, actorId) {
+  const n = normSchool(name), list = schoolList();
+  const s = list.find(x => x.name === n);
+  if (!s) return { error: '学校が見つかりません' };
+  if (s.students) return { error: `この学校の生徒が${s.students}人います。先に生徒の学校名を変えてください` };
+  setSetting('schools', JSON.stringify(list.map(x => x.name).filter(x => x !== n)));
+  audit(actorId, 'school.removed', n, null);
+  return { ok: true };
+}
+module.exports = { schoolList, addSchool, renameSchool, removeSchool, swTable, DEFAULT_TEMPLATE, GRADES, TERMS, TERM_NAME, parseTemplate, parseUnits, templateText, setTemplate, schoolTests, setSchoolTest, datesFor, jukuHas, stagesOf, scheduleFor, setCheck, overview };

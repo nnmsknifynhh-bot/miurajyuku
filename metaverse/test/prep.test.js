@@ -112,3 +112,18 @@ test('学校の日程がない生徒は、自分で入れた日でスケジュ�
   assert.equal((await http('PUT', '/api/admin/prep/template', { text: '2週間前｜数学｜ワーク\n前日｜英語｜単語' }, owner)).status, 200);
   assert.deepEqual(P.scheduleFor(id, '2026-12-05').stages.map(x => x.when), ['2週間前', '前日']);
 });
+
+test('🏫 学校名：教室の設定で作る・名前を変える（生徒と日程もいっしょ）・生徒がいる学校は消せない', async () => {
+  let r = (await http('GET', '/api/admin/schools', null, owner)).data.schools;
+  assert.deepEqual(r.map(s => s.name), ['〇〇中'], 'はじめは生徒・日程の学校名から');
+  assert.equal((await http('POST', '/api/admin/schools', { name: '△△中' }, stu)).status, 403);
+  assert.equal((await http('POST', '/api/admin/schools', { name: '△△中' }, owner)).status, 200);
+  assert.match((await http('POST', '/api/admin/schools', { name: '△△中' }, owner)).data.error, /もうあります/);
+  r = (await http('POST', '/api/admin/schools', { action: 'rename', from: '〇〇中', to: '〇〇中学校' }, owner)).data.schools;
+  assert.deepEqual(r.map(s => `${s.name}:${s.students}`), ['△△中:0', '〇〇中学校:1']);
+  assert.equal(db.prepare('SELECT school FROM users WHERE id = ?').get(stuId).school, '〇〇中学校');
+  assert.ok(P.schoolTests().every(t => t.school === '〇〇中学校'), '日程の学校名も変わる');
+  assert.match((await http('POST', '/api/admin/schools', { action: 'remove', name: '〇〇中学校' }, owner)).data.error, /生徒が1人/);
+  assert.equal((await http('POST', '/api/admin/schools', { action: 'remove', name: '△△中' }, owner)).status, 200);
+  assert.deepEqual((await http('GET', '/api/admin/prep', null, owner)).data.schoolList, ['〇〇中学校']);
+});

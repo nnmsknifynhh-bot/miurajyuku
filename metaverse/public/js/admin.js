@@ -195,9 +195,10 @@
       lab.append(cb, document.createTextNode(w)); vbox.append(lab);
     });
     $('#f-vtime').value = u && u.visitTime ? u.visitTime : '';
-    // 学校名（ほかの生徒の学校名から選べる）
-    $('#f-school').value = u && u.school ? u.school : '';
-    { const dl = $('#school-list'); dl.textContent = ''; [...new Set((window.__users || []).map(x => x.school).filter(Boolean))].sort().forEach(n => dl.append(new Option(n, n))); }
+    // 学校名（教室の設定で作った学校からえらぶ）
+    { const sel = $('#f-school'), cur = u && u.school ? u.school : '';
+      const fill = (names) => { sel.textContent = ''; sel.append(new Option('（未設定）', '')); [...new Set([...names, ...(cur ? [cur] : [])])].forEach(n => sel.append(new Option(n, n))); sel.value = cur; };
+      fill([]); api('GET', '/api/admin/schools').then(r => fill(r.schools.map(s => s.name))).catch(() => {}); }
     // 授業の曜日
     const cbox = $('#f-cdays'); cbox.textContent = '';
     ['日', '月', '火', '水', '木', '金', '土'].forEach((w, i) => {
@@ -263,7 +264,7 @@
       body.birthday = m ? `${m}-${d}` : null;
       body.birthdayPublic = $('#f-bpublic').checked;
       body.classDays = [...document.querySelectorAll('#f-cdays input:checked')].map(cb => Number(cb.value));
-      body.school = $('#f-school').value.trim() || null;
+      body.school = $('#f-school').value || null;
       if (/^高[123]$/.test(body.grade || '')) {
         const days = [...document.querySelectorAll('#f-vdays input:checked')].map(cb => Number(cb.value));
         const t = $('#f-vtime').value;
@@ -393,7 +394,33 @@
   }
 
   // ═════════ 教室の設定 ═════════
+  // 🏫 学校名の一覧（ユーザーの編集でプルダウンに出る）
+  async function loadSchools() {
+    const box = $('#school-sec'); box.textContent = '';
+    let list = [];
+    try { list = (await api('GET', '/api/admin/schools')).schools; } catch (e) { return; }
+    box.append(el('h3', 'sec', '🏫 学校名'), el('p', 'muted', 'ここで作った学校が、「👥 ユーザー」の生徒の編集でプルダウンに出ます（テスト対策の学校ごとの日程に使います）。名前を変えると、生徒の学校名と学校の日程もいっしょに変わります。'));
+    const add = el('div', 'gb-row'); const inp = el('input'); inp.placeholder = '学校名（例：〇〇中学校）'; inp.maxLength = 30;
+    const ab = el('button', 'btn small', '＋ 追加'); ab.type = 'button';
+    const post = async (b, msg) => { try { await api('POST', '/api/admin/schools', b); toast(msg); loadSchools(); } catch (e) { toast(e.message); } };
+    ab.onclick = () => { if (inp.value.trim()) post({ name: inp.value }, '追加しました'); };
+    inp.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); ab.click(); } };
+    add.append(inp, ab); box.append(add);
+    const ul = el('div', 'school-list');
+    for (const s of list) {
+      const row = el('div', 'gb-row school-row');
+      const nm = el('input'); nm.value = s.name; nm.maxLength = 30;
+      const rb = el('button', 'btn small secondary', '名前を変える'); rb.type = 'button';
+      rb.onclick = () => { if (nm.value.trim() && nm.value.trim() !== s.name) post({ action: 'rename', from: s.name, to: nm.value }, '名前を変えました'); };
+      const db2 = el('button', 'btn small danger', '消す'); db2.type = 'button'; db2.disabled = s.students > 0; db2.title = s.students ? '生徒がいる学校は消せません' : '';
+      db2.onclick = () => { if (confirm(`「${s.name}」を消しますか？`)) post({ action: 'remove', name: s.name }, '消しました'); };
+      row.append(nm, el('small', 'muted', `生徒 ${s.students}人`), rb, db2); ul.append(row);
+    }
+    if (!list.length) ul.append(el('p', 'muted', 'まだ学校がありません。上から追加してください。'));
+    box.append(ul);
+  }
   async function loadRooms() {
+    loadSchools();
     let rooms;
     try { rooms = (await api('GET', '/api/admin/rooms')).rooms; } catch (e) { return toast(e.message); }
     const box = $('#room-list'); box.textContent = '';

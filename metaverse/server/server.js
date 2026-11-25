@@ -241,12 +241,21 @@ app.post('/api/prep/check', auth.requireAuth, (req, res) => {
   if (r.error) return bad(res, r.error, r.code || 400);
   res.json(r);
 });
+// 🏫 学校名の一覧（教室の設定）
+app.get('/api/admin/schools', auth.requireAuth, (req, res) => { if (!staffOnly(req, res)) return; res.json({ schools: prep.schoolList() }); });
+app.post('/api/admin/schools', auth.requireAuth, (req, res) => {
+  if (!can(req.user, 'manage_classroom') && req.user.role !== 'owner') return bad(res, '教室の設定の権限がありません', 403);
+  const b = req.body || {};
+  const r = b.action === 'rename' ? prep.renameSchool(b.from, b.to, req.user.id) : b.action === 'remove' ? prep.removeSchool(b.name, req.user.id) : prep.addSchool(b.name, req.user.id);
+  if (r.error) return bad(res, r.error);
+  res.json({ ...r, schools: prep.schoolList() });
+});
 app.get('/api/admin/prep', auth.requireAuth, (req, res) => {
   if (!staffOnly(req, res)) return;
   const today = ganbari.jst().day;
   res.json({
     template: prep.templateText(), items: prep.parseTemplate(prep.templateText()).items, schoolTests: prep.schoolTests(), overview: prep.overview(today), today,
-    schools: db.prepare("SELECT school AS name, COUNT(*) AS n FROM users WHERE role = 'student' AND is_active = 1 AND school IS NOT NULL AND grade IN ('中1', '中2', '中3') GROUP BY school ORDER BY school").all(),
+    schools: db.prepare("SELECT school AS name, COUNT(*) AS n FROM users WHERE role = 'student' AND is_active = 1 AND school IS NOT NULL AND grade IN ('中1', '中2', '中3') GROUP BY school ORDER BY school").all(), schoolList: prep.schoolList().map(s => s.name),
     units: db.prepare("SELECT DISTINCT title FROM reading_units WHERE active = 1 AND grade IN ('中1', '中2', '中3') ORDER BY title").all().map(r => r.title),
     subjects: [...new Set(prep.parseTemplate(prep.templateText()).items.map(i => i.subject))], terms: prep.TERM_NAME, defaultTemplate: prep.DEFAULT_TEMPLATE,
   });
