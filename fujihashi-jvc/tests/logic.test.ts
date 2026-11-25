@@ -9,7 +9,7 @@ import { prepGroups, settlePrep, settleSelfPaid } from '../src/lib/expense';
 import { rosterPeople, parseRoster } from '../src/lib/roster';
 import { holidayName, isWeekendOrHoliday } from '../src/lib/holidays';
 import { ledgerCsv, transportCsv } from '../src/lib/csv';
-import { emptyData } from '../src/lib/defaults';
+import { emptyData, migrate } from '../src/lib/defaults';
 import { monthEnd, uid } from '../src/lib/util';
 
 const BASE = '2026-11-15';
@@ -177,5 +177,12 @@ describe('出納帳', () => {
     expect(() => voidTx(d, t.id, 'x')).toThrow(/締め/);
     expect(ledgerCsv(d, '2000-01-01', '2100-01-01').startsWith('﻿日付')).toBe(true);
     expect(transportCsv(d)).toContain('選手');
+  });
+});
+
+describe('旧版からの引き継ぎ', () => {
+  it('部員名簿を家庭単位に変換', () => {
+    const d = migrate({ version: 1, members: [{ name: '田中 はな', guardian: '田中母', monthlyFee: 2000, active: true }, { name: '田中 こころ', guardian: '田中母', monthlyFee: 2000, active: true }, { name: '林 みゆ', monthlyFee: 0, active: true }], txs: [] });
+    expect(d.households.map((h) => `${h.name}:${h.children.length}:${h.monthlyFee}`)).toEqual(['田中家:2:4000', '林家:1:null']);
   });
 });
