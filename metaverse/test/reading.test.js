@@ -293,3 +293,16 @@ test('大人の週のメダルは別に決められる（最初は高校生と�
   assert.deepEqual(G.hsWeeks(id).medals.map(m => m.minutes), [60, 120, 180]);
   assert.deepEqual(G.getConfig().hs.medals.map(m => m.minutes), hsM, '高校生はそのまま');
 });
+
+test('単元のならび：名前の数字の順（Unit1-2 → Unit1-10 → Unit2-1）。先生が↑↓で変えられ、生徒の画面もその順', async () => {
+  const owner = (await http('POST', '/api/login', { loginId: 'owner', password: 'ownerpass1' })).cookie;
+  for (const t of ['Unit2-1', 'Unit1-10', 'Unit1-2', 'Talk1']) await http('POST', '/api/admin/reading/units', { grade: '高1', title: t, text: 'Hello.\nこんにちは。' }, owner);
+  const names = async () => (await http('GET', '/api/admin/reading', null, owner)).data.units.filter(u => u.grade === '高1').map(u => u.title);
+  assert.deepEqual(await names(), ['Talk1', 'Unit1-2', 'Unit1-10', 'Unit2-1']);
+  const id = (await http('GET', '/api/admin/reading', null, owner)).data.units.find(u => u.title === 'Talk1').id;
+  for (let i = 0; i < 3; i++) assert.equal((await http('POST', `/api/admin/reading/units/${id}/move`, { dir: 'down' }, owner)).status, 200);
+  assert.deepEqual(await names(), ['Unit1-2', 'Unit1-10', 'Unit2-1', 'Talk1'], 'Talk1 を下へ');
+  await http('POST', '/api/admin/users', { role: 'student', loginId: 'kou1', displayName: 'k', grade: '高1', password: 'password123' }, owner);
+  const kc = (await http('POST', '/api/login', { loginId: 'kou1', password: 'password123' })).cookie;
+  assert.deepEqual((await http('GET', '/api/reading/units', null, kc)).data.units.map(u => u.title), ['Unit1-2', 'Unit1-10', 'Unit2-1', 'Talk1']);
+});

@@ -274,7 +274,9 @@
       const hideEn = jaOnly && !r;
       ja.hidden = jaOnly;
       const model = el('button', 'btn small secondary', '🔊 お手本'); model.type = 'button'; model.onclick = speakModel; model.hidden = !window.speechSynthesis || hideEn;
-      top.append(timer, ja, model);
+      const rateSel = el('select', 'rd-rate'); rateSel.setAttribute('aria-label', 'お手本の速さ'); RATES.forEach(([n, r]) => rateSel.append(new Option(n, String(r)))); rateSel.value = String(modelRate); rateSel.hidden = model.hidden;
+      rateSel.onchange = () => { modelRate = Number(rateSel.value); try { localStorage.setItem('juku-model-rate', String(modelRate)); } catch (e) {} };
+      top.append(timer, ja, model, rateSel);
       body.append(top);
       const pas = el('div', 'rd-passage');
       let wi = 0;
@@ -342,19 +344,24 @@
     function speakWord(w) {
       if (!window.speechSynthesis) return;
       speechSynthesis.cancel();
-      const ut = new SpeechSynthesisUtterance(w); ut.lang = 'en-US'; ut.rate = 0.8;
+      const ut = new SpeechSynthesisUtterance(w); ut.lang = 'en-US'; ut.rate = Math.min(0.75, modelRate);
       const v = speechSynthesis.getVoices().find(x => /^en(-|_)US/i.test(x.lang)); if (v) ut.voice = v;
       speechSynthesis.speak(ut);
     }
+    // お手本の速さ（🐢 ゆっくり 0.6 ／ ふつう 0.75 ／ 🐇 はやめ 0.9）。端末に覚えておく
+    const RATES = [['🐢 ゆっくり', 0.6], ['ふつう', 0.75], ['🐇 はやめ', 0.9]];
+    let modelRate = 0.75; try { const v = Number(localStorage.getItem('juku-model-rate')); if (v) modelRate = v; } catch (e) {}
     function speakModel() {
       if (!window.speechSynthesis) return;
       speechSynthesis.cancel();
-      const text = st.unit.lines.map(l => l.en).join(' ');
-      const ut = new SpeechSynthesisUtterance(text);
-      ut.lang = 'en-US'; ut.rate = 0.9;
       const v = speechSynthesis.getVoices().find(x => /^en(-|_)US/i.test(x.lang)) || speechSynthesis.getVoices().find(x => /^en/i.test(x.lang));
-      if (v) ut.voice = v;
-      speechSynthesis.speak(ut);
+      // 1文ずつ読む（文と文のあいだに少し間があく）
+      for (const l of st.unit.lines) {
+        const ut = new SpeechSynthesisUtterance(l.en);
+        ut.lang = 'en-US'; ut.rate = modelRate;
+        if (v) ut.voice = v;
+        speechSynthesis.speak(ut);
+      }
     }
 
     function startRec() {

@@ -509,3 +509,4 @@ body.is-parent #btn-family, body.is-parent #btn-pquiz { display: none !important
 #plabel-dialog .dialog-body { box-sizing: border-box; }
 #plabel-dialog .btn { min-width: 0; width: 100%; padding-left: 6px; padding-right: 6px; }
 #plabel-dialog .dialog-actions .btn { width: auto; }
+.rd-rate { font-size: 13px; padding: 4px 6px; border-radius: 10px; }

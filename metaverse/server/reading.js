@@ -13,6 +13,8 @@ CREATE INDEX IF NOT EXISTS idx_reading_tests_user ON reading_tests(user_id, unit
 `);
 // 大人英会話：その人だけの文（user_id があれば、その人だけに見える）
 if (!db.prepare('PRAGMA table_info(reading_units)').all().some(c => c.name === 'user_id')) db.exec('ALTER TABLE reading_units ADD COLUMN user_id INTEGER');
+// 単元のならび順（先生が ↑↓ で決める。決めていない単元は、名前の数字の順：Unit1-2 → Unit1-10 → Unit2-1）
+if (!db.prepare('PRAGMA table_info(reading_units)').all().some(c => c.name === 'sort_order')) db.exec('ALTER TABLE reading_units ADD COLUMN sort_order INTEGER');
 // 練習が「英文を見て」か「訳だけで」か（テストを受けられるのは、訳だけで合格したとき）
 if (!db.prepare('PRAGMA table_info(reading_practice)').all().some(c => c.name === 'ja_only')) db.exec('ALTER TABLE reading_practice ADD COLUMN ja_only INTEGER NOT NULL DEFAULT 0');
 // 声がとどかずに0点で記録されたテスト（読みもれなし0）は、回数に数えないので消す（1回だけ）
@@ -127,20 +129,38 @@ function deleteUnit(id, actorId) {
   audit(actorId, 'reading.unit_deleted', String(id), null);
   return r.changes > 0;
 }
+const natural = new Intl.Collator('ja', { numeric: true, sensitivity: 'base' });
+// 同じ学年の中のならび：先生が決めた順 → 名前（数字は数の大きさ順）
+const byOrder = (a, b) => ((a.sort_order ?? 1e9) - (b.sort_order ?? 1e9)) || natural.compare(a.title, b.title) || a.id - b.id;
+const GRADE_ORDER = (g) => { const i = G.GRADES.indexOf(g); return i < 0 ? 99 : i; };
+function sortUnits(rows) { return rows.sort((a, b) => (GRADE_ORDER(a.grade) - GRADE_ORDER(b.grade)) || (a.grade === '大人' ? b.id - a.id : byOrder(a, b))); }
 function listUnits(c = getConfig()) {
-  return db.prepare('SELECT r.*, u.display_name AS user_name FROM reading_units r LEFT JOIN users u ON u.id = r.user_id ORDER BY r.grade, CASE WHEN r.grade = \'大人\' THEN -r.id ELSE 0 END, r.title, r.id').all().map(u => view(u, c));
+  return sortUnits(db.prepare('SELECT r.*, u.display_name AS user_name FROM reading_units r LEFT JOIN users u ON u.id = r.user_id').all()).map(u => view(u, c));
+}
+/** 先生が単元を ↑↓ で動かす（同じ学年の中で、となりと入れかえる） */
+function moveUnit(id, dir, actorId) {
+  const u = db.prepare('SELECT * FROM reading_units WHERE id = ?').get(id);
+  if (!u) return { error: '単元が見つかりません' };
+  const list = db.prepare('SELECT * FROM reading_units WHERE grade = ?').all(u.grade).sort(byOrder);
+  const i = list.findIndex(x => x.id === id), j = i + (dir === 'up' ? -1 : 1);
+  if (j < 0 || j >= list.length) return { ok: true };
+  [list[i], list[j]] = [list[j], list[i]];
+  const up = db.prepare('UPDATE reading_units SET sort_order = ? WHERE id = ?');
+  db.exec('BEGIN'); try { list.forEach((x, k) => up.run(k + 1, x.id)); db.exec('COMMIT'); } catch (e) { db.exec('ROLLBACK'); throw e; }
+  audit(actorId, 'reading.unit_moved', u.title, { dir });
+  return { ok: true };
 }
 
 // 生徒の単元の一覧（自分の学年。先生・オーナーは全部）。練習の記録つき
 function unitsFor(user) {
   const c = getConfig();
   const staff = user.role === 'owner' || user.role === 'teacher';
-  const rows = staff ? db.prepare('SELECT * FROM reading_units WHERE active = 1 ORDER BY grade, title, id').all()
+  const rows = staff ? sortUnits(db.prepare('SELECT * FROM reading_units WHERE active = 1').all())
     : /^小[1-6]$/.test(user.grade || '') // 小学生は、自分の学年の単元と「中1」の単元をえらべる
-      ? db.prepare("SELECT * FROM reading_units WHERE active = 1 AND grade IN (?, '中1') ORDER BY CASE WHEN grade = ? THEN 0 ELSE 1 END, title, id").all(user.grade, user.grade)
+      ? db.prepare("SELECT * FROM reading_units WHERE active = 1 AND grade IN (?, '中1')").all(user.grade).sort((a, b) => ((a.grade === user.grade ? 0 : 1) - (b.grade === user.grade ? 0 : 1)) || byOrder(a, b))
       : user.grade === '大人' // 大人：自分の文（と大人みんなの文）。新しいものが上
         ? db.prepare("SELECT * FROM reading_units WHERE active = 1 AND grade = '大人' AND (user_id IS NULL OR user_id = ?) ORDER BY id DESC").all(user.id)
-        : db.prepare('SELECT * FROM reading_units WHERE active = 1 AND grade = ? ORDER BY title, id').all(user.grade || '');
+        : db.prepare('SELECT * FROM reading_units WHERE active = 1 AND grade = ?').all(user.grade || '').sort(byOrder);
   return rows.map(u => {
     const best = db.prepare(`SELECT COUNT(*) AS n, MAX(CASE WHEN ja_only = 1 THEN score END) AS best, MAX(CASE WHEN ja_only = 1 THEN passed END) AS passed,
       MAX(CASE WHEN ja_only = 0 THEN score END) AS enBest, MAX(CASE WHEN ja_only = 0 THEN passed END) AS enPassed FROM reading_practice WHERE user_id = ? AND unit_id = ?`).get(user.id, u.id);
@@ -207,4 +227,4 @@ function practiceSummary() {
     .map(r => ({ ...r, passed: !!r.passed, enPassed: !!r.enPassed }));
 }
 
-module.exports = { MAX_MISSING, TEST_POINTS, recordTest, testSummary, DEFAULT_WPM, PASS_SCORE, getConfig, setConfig, parseText, wordsOf, limitSec, addUnit, updateUnit, deleteUnit, listUnits, unitsFor, recordPractice, practiceSummary };
+module.exports = { moveUnit, MAX_MISSING, TEST_POINTS, recordTest, testSummary, DEFAULT_WPM, PASS_SCORE, getConfig, setConfig, parseText, wordsOf, limitSec, addUnit, updateUnit, deleteUnit, listUnits, unitsFor, recordPractice, practiceSummary };

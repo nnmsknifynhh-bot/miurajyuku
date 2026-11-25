@@ -50,10 +50,12 @@
     // ── 単元の一覧 ──
     const ls = section('📚 登録した単元', '生徒は、自分の学年の単元だけ練習できます（小学生は中1も。大人は「自分だけ」の文と「大人みんな」の文。先生・オーナーは全部）。');
     const tw = el('div', 'table-wrap'); ls.append(tw);
-    const t = el('table', 'logs'); const h = el('tr'); ['学年', '単元', '語数', '制限時間', '', ''].forEach(x => h.append(el('th', null, x))); t.append(el('thead')); t.firstChild.append(h);
+    const t = el('table', 'logs'); const h = el('tr'); ['順', '学年', '単元', '語数', '制限時間', '', ''].forEach(x => h.append(el('th', null, x))); t.append(el('thead')); t.firstChild.append(h);
     const tb = el('tbody');
     for (const u of d.units) {
       const tr = el('tr'); if (!u.active) tr.style.opacity = '.5';
+      // ↑↓：同じ学年の中のならび順（生徒の画面もこの順）
+      { const td = el('td', 'rd-move'); for (const [dir, ic] of [['up', '↑'], ['down', '↓']]) { const b = el('button', 'btn small secondary', ic); b.type = 'button'; b.title = dir === 'up' ? '上へ' : '下へ'; b.onclick = async () => { try { await api('POST', `/api/admin/reading/units/${u.id}/move`, { dir }); load(root, { api, toast }); } catch (e) { toast(e.message); } }; td.append(b); } tr.append(td); }
       [u.grade + (u.grade === '大人' ? (u.userName ? `（${u.userName}さん）` : '（みんな）') : ''), u.title, `${u.words}語`, mmss(u.limit)].forEach(v => tr.append(el('td', null, v)));
       const a = el('td'); const eb = el('button', 'btn small secondary', '直す');
       eb.onclick = () => { editing = u.id; gsel.value = u.grade; psel.value = u.userId ? String(u.userId) : ''; syncP(); title.value = u.title; ta.value = toText(u.lines); save.textContent = '直す'; cancel.hidden = false; upd(); fs.scrollIntoView({ behavior: 'smooth' }); };
@@ -65,7 +67,7 @@
       db2.onclick = async () => { if (!armed) { armed = true; db2.textContent = 'もう一度押すと消えます'; setTimeout(() => { armed = false; db2.textContent = '消す'; }, 4000); return; } try { await api('DELETE', `/api/admin/reading/units/${u.id}`); toast('消しました'); load(root, { api, toast }); } catch (e) { toast(e.message); } };
       b.append(db2); tr.append(b); tb.append(tr);
     }
-    if (!d.units.length) { const tr = el('tr'); const td = el('td', 'empty', 'まだ単元がありません。上で登録してください'); td.colSpan = 6; tr.append(td); tb.append(tr); }
+    if (!d.units.length) { const tr = el('tr'); const td = el('td', 'empty', 'まだ単元がありません。上で登録してください'); td.colSpan = 7; tr.append(td); tb.append(tr); }
     t.append(tb); tw.append(t);
 
     // ── 1分に読む語数 ──
