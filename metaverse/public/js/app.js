@@ -28,6 +28,8 @@
     $('#me-name').textContent = u.displayName;
     $('#me-dot').style.background = u.avatarColor;
     $('#me-role').textContent = ROLE_LABEL[u.role];
+    // 保護者：右上は「👦🏻わが子👧🏻」。押すと、わが子の様子（保護者のメニュー）が開く
+    if (u.role === 'parent') { $('#me-name').textContent = '👦🏻 わが子 👧🏻'; $('#me-role').hidden = true; $('#me-dot').hidden = true; }
     $('#me-role').className = 'badge ' + u.role;
     document.body.classList.add(u.role === 'student' ? 'is-student' : u.role === 'parent' ? 'is-parent' : 'is-staff');
     if (!/^[中高][1-3]$/.test(u.grade || '')) $('#menu-scores').style.display = 'none'; // 📊 成績は中学生・高校生だけ
@@ -579,7 +581,7 @@
   $('#btn-overview').onclick = () => (state.overview ? exitOverview() : enterOverview());
   function parentSeated() {
     enterOverview();
-    if (!pquizAuto) { pquizAuto = true; setTimeout(() => openPquiz(true), 1200); }
+    // 今日の5問は出さない（保護者の画面をシンプルに）
   }
   function showVisitOver(message) {
     clearInterval(visitTimer);
@@ -653,6 +655,12 @@
     if (!$('#pquiz-dialog').open) $('#pquiz-dialog').showModal();
   }
   $('#btn-pquiz').onclick = () => openPquiz(false);
+  // 保護者の下のボタン：ポイントと着せかえ・ログアウト。わが子の様子の下：使い方・音のテスト・パスワード
+  $('#btn-pshop').onclick = () => { if (state.gb) state.gb.openShop(); };
+  $('#btn-plogout').onclick = () => $('#menu-logout').click();
+  $('#family-help').onclick = () => { $('#family-dialog').close(); $('#menu-help').click(); };
+  $('#family-sound').onclick = () => { $('#family-dialog').close(); $('#menu-sound').click(); };
+  $('#family-pw').onclick = () => { $('#family-dialog').close(); $('#menu-password').click(); };
   $('#family-bsave').onclick = async () => {
     const m = $('#family-bm').value, d = $('#family-bd').value;
     if (!!m !== !!d) return toast('月と日の両方をえらんでください');
@@ -711,19 +719,19 @@
       const fbox = el('div', 'foot-box'); fbox.hidden = true;
       fb.onclick = async () => { if (!fbox.hidden) { fbox.hidden = true; return; } fbox.hidden = false; await drawFootprints(fbox, k.id); };
       card.append(fb, fbox);
-      // 📋 テスト対策（中学生）：見るだけ
-      if (/^中[1-3]$/.test(k.grade || '')) {
-        const pb = el('button', 'btn secondary small', '📋 テスト対策'); pb.type = 'button';
-        const pbox = el('div', 'foot-box'); pbox.hidden = true;
-        pb.onclick = () => { pbox.hidden = !pbox.hidden; if (!pbox.hidden) window.Prep.mount(pbox, { api, toast, userId: k.id }); };
-        card.append(pb, pbox);
-      }
       // 📊 成績（中学生・高校生）：見るだけ
       if (/^[中高][1-3]$/.test(k.grade || '')) {
         const sb = el('button', 'btn secondary small', '📊 成績（テスト・内申・模試）'); sb.type = 'button';
         const sbox = el('div', 'foot-box'); sbox.hidden = true;
         sb.onclick = () => { sbox.hidden = !sbox.hidden; if (!sbox.hidden) window.Scores.mount(sbox, { api, toast, userId: k.id }); };
         card.append(sb, sbox);
+      }
+      // 📋 テスト対策（中学生）：見るだけ
+      if (/^中[1-3]$/.test(k.grade || '')) {
+        const pb = el('button', 'btn secondary small', '📋 テスト対策'); pb.type = 'button';
+        const pbox = el('div', 'foot-box'); pbox.hidden = true;
+        pb.onclick = () => { pbox.hidden = !pbox.hidden; if (!pbox.hidden) window.Prep.mount(pbox, { api, toast, userId: k.id }); };
+        card.append(pb, pbox);
       }
       list.append(card);
     }
@@ -1640,6 +1648,7 @@
   $('#zoom-in').onclick = () => { state.zoom = clampZoom(state.zoom * 1.2); };
   $('#zoom-out').onclick = () => { state.zoom = clampZoom(state.zoom / 1.2); };
   $('#me-btn').onclick = () => {
+    if (state.user && state.user.role === 'parent') { openFamily(); return; }
     $('#me-menu').hidden = !$('#me-menu').hidden;
     if (!$('#me-menu').hidden) api('GET', '/api/version').then(v => { $('#menu-ver').textContent = `アプリの版：${v.version}`; }).catch(() => {});
   };
