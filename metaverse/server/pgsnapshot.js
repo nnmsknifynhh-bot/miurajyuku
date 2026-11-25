@@ -11,11 +11,16 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const zlib = require('zlib');
 
 // 貼り付けのときに入りがちな余分な文字（前後の空白・引用符・「DATABASE_URL=」）を取り除く
 const DATABASE_URL = (process.env.DATABASE_URL || '').trim().replace(/^DATABASE_URL\s*=\s*/i, '').replace(/^["']|["']$/g, '').trim();
 const enabled = !!DATABASE_URL;
 const SAVE_INTERVAL_MS = Number(process.env.SNAPSHOT_INTERVAL_MS || 3000);
+// 通信量をへらす：丸ごと保存は5分に1回まで（止まるときは必ず保存）。曜日ごとのバックアップは6時間に1回
+const MIN_GAP_MS = Number(process.env.SNAPSHOT_MIN_GAP_MS || 5 * 60_000);
+const BACKUP_GAP_MS = Number(process.env.SNAPSHOT_BACKUP_GAP_MS || 6 * 3600_000);
+let lastSaveAt = 0, lastBackupAt = 0, lastBackupId = null;
 
 let PoolImpl = null;
 let pool = null;
@@ -54,7 +59,8 @@ async function restore(dbPath) {
       if (!r.rows.length) return 'empty';
       fs.mkdirSync(path.dirname(dbPath), { recursive: true });
       for (const f of [dbPath, dbPath + '-wal', dbPath + '-shm']) fs.rmSync(f, { force: true });
-      fs.writeFileSync(dbPath, Buffer.from(r.rows[0].data, 'base64'));
+      const raw = r.rows[0].data; // 'gz:'＋base64（圧縮）／前の形は base64 だけ
+      fs.writeFileSync(dbPath, raw.startsWith('gz:') ? zlib.gunzipSync(Buffer.from(raw.slice(3), 'base64')) : Buffer.from(raw, 'base64'));
       return 'restored';
     } catch (e) {
       lastErr = e;
@@ -76,15 +82,19 @@ async function save() {
     const tmp = path.join(os.tmpdir(), `juku-snapshot-${process.pid}-${Date.now()}.db`);
     try {
       db.exec(`VACUUM INTO '${tmp.replace(/'/g, "''")}'`);
-      const data = fs.readFileSync(tmp).toString('base64');
+      const data = 'gz:' + zlib.gzipSync(fs.readFileSync(tmp), { level: 9 }).toString('base64'); // 圧縮して送る
       const backupId = 100 + new Date().getDay(); // 曜日ごとのバックアップ（100〜106）
-      for (const id of [1, backupId]) {
+      const ids = [1];
+      if (backupId !== lastBackupId || Date.now() - lastBackupAt >= BACKUP_GAP_MS) ids.push(backupId);
+      for (const id of ids) {
         await getPool().query(
           `INSERT INTO app_snapshot (id, data, size, updated_at) VALUES ($1, $2, $3, now())
            ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, size = EXCLUDED.size, updated_at = now()`,
           [id, data, data.length],
         );
       }
+      lastSaveAt = Date.now();
+      if (ids.includes(backupId)) { lastBackupAt = lastSaveAt; lastBackupId = backupId; }
       return true;
     } finally {
       fs.rmSync(tmp, { force: true });
@@ -104,7 +114,7 @@ function startAutoSave(sqliteDb) {
   const tick = async () => {
     try {
       const n = changesNow();
-      if (n !== lastChanges) { await save(); lastChanges = n; }
+      if (n !== lastChanges && Date.now() - lastSaveAt >= MIN_GAP_MS) { await save(); lastChanges = n; }
     } catch (e) {
       console.error('データの自動保存に失敗しました（次の機会に再試行します）:', e.message);
     }

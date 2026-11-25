@@ -55,3 +55,21 @@ test('データベースにつながらないときは起動を止める（空�
   snapshot._setPool(BrokenPool);
   await assert.rejects(snapshot.restore(path.join(tmp, 'x.db')), /読み込めませんでした/);
 });
+
+test('通信量をへらす：圧縮して保存し、5分以内は続けて保存しない（止まるときは保存）', async () => {
+  const { newDb: nd } = require('pg-mem');
+  const m2 = nd(); const { Pool: P2 } = m2.adapters.createPg(); snapshot._setPool(P2);
+  const { db } = require('../server/db.js');
+  assert.equal(await snapshot.restore(path.join(tmp, 'first.db')), 'empty'); // 起動時と同じく、先に表を作る
+  await snapshot._flushForTest();
+  const p = new P2();
+  const r = await p.query('SELECT data FROM app_snapshot WHERE id = 1');
+  assert.ok(r.rows[0].data.startsWith('gz:'), '圧縮されている');
+  // 読み戻せる
+  const restoredPath = path.join(tmp, 'gz.db');
+  assert.equal(await snapshot.restore(restoredPath), 'restored');
+  const db3 = new DatabaseSync(restoredPath);
+  assert.equal(db3.prepare("SELECT display_name FROM users WHERE login_id = 'hana'").get().display_name, 'はな');
+  db3.close();
+  assert.ok(db);
+});
