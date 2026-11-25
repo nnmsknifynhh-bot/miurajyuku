@@ -24,7 +24,6 @@ export interface Settings {
   /** 月謝の回収期限ルール（要確認のため選択式） */
   feeDueRule: DueRule;
   autoLockMinutes: number;
-  apiToken: string;
   closedThrough?: string;
 }
 

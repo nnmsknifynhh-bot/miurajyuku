@@ -4,7 +4,6 @@ import { Amt, Card, Field, NumInput, Review, Seg, TopBar, go, useRecordDate } fr
 import { ReceiptImg } from '../components/Receipt';
 import { CATEGORY, settleSelfPaid } from '../lib/expense';
 import { dayTitle } from '../lib/day';
-import { aiReceipt } from '../lib/api';
 import { shrinkImage } from '../lib/image';
 import { saveImage } from '../lib/vault';
 import { voidTx } from '../lib/ledger';
@@ -81,29 +80,13 @@ export function ExpenseEdit(props: { id: string; dayId?: string }) {
   // 購入日に近い活動日を上に
   const days = [...d.days].sort((a, b) => Math.abs(diffDays(a.date, e.date)) - Math.abs(diffDays(b.date, e.date))).slice(0, 30);
 
-  const addPhoto = async (file: File, read: boolean) => {
+  const addPhoto = async (file: File) => {
     setBusy(true);
     try {
       const img = await shrinkImage(file);
       const id = uid('img_');
       await saveImage(session, id, img.bytes, img.type);
-      let next: Expense = { ...e, receiptIds: [...e.receiptIds, id] };
-      if (read) {
-        const r = await aiReceipt(d.settings.apiToken, { mediaType: img.type, data: img.base64 }, today());
-        const review = [...r.review];
-        if (!r.date) review.push('購入日が読み取れません');
-        if (r.total === null) review.push('金額が読み取れません');
-        next = {
-          ...next,
-          date: r.date || next.date,
-          items: [r.store, r.items].filter(Boolean).join(' ') || next.items,
-          amount: r.total ?? next.amount,
-          category: (r.category || next.category) as ExpenseCategory,
-          review: [...new Set([...next.review, ...review])],
-        };
-        toast('レシートを読み取りました。内容を確認してください');
-      }
-      setE(next);
+      setE((cur) => ({ ...cur, receiptIds: [...cur.receiptIds, id] }));
     } catch (err) {
       toast({ text: errorText(err), err: true });
     } finally {
@@ -140,16 +123,16 @@ export function ExpenseEdit(props: { id: string; dayId?: string }) {
             {!locked && (
               <div className="fab-row">
                 <label className="btn primary">
-                  {busy ? '処理中…' : '📷 撮影して読み取る'}
-                  <input type="file" accept="image/*" capture="environment" hidden disabled={busy} onChange={(ev) => ev.target.files?.[0] && addPhoto(ev.target.files[0], true)} />
+                  {busy ? '保存中…' : '📷 撮影して添付'}
+                  <input type="file" accept="image/*" capture="environment" hidden disabled={busy} onChange={(ev) => ev.target.files?.[0] && addPhoto(ev.target.files[0])} />
                 </label>
                 <label className="btn">
-                  画像を添付のみ
-                  <input type="file" accept="image/*" hidden disabled={busy} onChange={(ev) => ev.target.files?.[0] && addPhoto(ev.target.files[0], false)} />
+                  写真を選んで添付
+                  <input type="file" accept="image/*" hidden disabled={busy} onChange={(ev) => ev.target.files?.[0] && addPhoto(ev.target.files[0])} />
                 </label>
               </div>
             )}
-            <div className="muted">写真はこの端末内に暗号化して保存され、ロック解除中だけ表示できます。読み取り（AI）はサーバー設定が必要です。</div>
+            <div className="muted">写真は記録用です（金額などは下に入力してください）。この端末内に暗号化して保存され、ロック解除中だけ表示できます。</div>
           </div>
         </Card>
         <Card title="内容">

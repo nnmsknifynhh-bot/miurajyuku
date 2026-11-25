@@ -250,7 +250,12 @@ export function applyScheduleChange(d: AppData, c: ScheduleChange) {
   if (!day) return;
   if (c.kind === 'addActivity') day.activities.push({ id: uid('a_'), name: c.name, venue: c.venue });
   if (c.kind === 'venue') day.activities.find((a) => a.id === c.activityId)!.venue = c.to;
-  if (c.kind === 'addDuty') day.duties.push({ id: uid('du_'), name: c.name, amount: d.settings.prepDefault });
+  if (c.kind === 'addDuty') {
+    // 以前取消扱いにした同じ人は、記録ごと元に戻す
+    const old = day.duties.find((x) => x.cancelled && compact(x.name) === compact(c.name));
+    if (old) old.cancelled = false;
+    else day.duties.push({ id: uid('du_'), name: c.name, amount: d.settings.prepDefault });
+  }
   if (c.kind === 'missingDuty') {
     const du = day.duties.find((x) => x.id === c.dutyId)!;
     du.cancelled = true; // 記録は残す

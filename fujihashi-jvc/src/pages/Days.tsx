@@ -1,10 +1,9 @@
 import { useState } from 'react';
-import { useStore, errorText } from '../store';
+import { useStore } from '../store';
 import { Card, Check, Field, Seg, TopBar, go, needs } from '../components/ui';
 import { applyScheduleChange, dayTitle, describeChange, diffSchedule, newDay, type ScheduleChange } from '../lib/day';
 import { parseScheduleText, type ScheduleItem } from '../lib/scheduleParser';
-import { aiSchedule } from '../lib/api';
-import { shrinkImage } from '../lib/image';
+import { COL_LABEL, guessMapping, parseTable, tableToItems, type ColRole, type Mapping } from '../lib/sheetImport';
 import { dayLabel, holidayName, isWeekendOrHoliday } from '../lib/holidays';
 import { sampleScheduleText } from '../lib/sample';
 import { addMonths, fmtDate, monthEnd, monthOf, today, uid, weekday } from '../lib/util';
@@ -29,7 +28,7 @@ export function Days() {
       <TopBar title="活動日（会計ページ）" />
       <main>
         <a className="btn primary" href="#/schedule">
-          📄 月間予定表を取り込む
+          📄 当番表（スプレッドシート）を取り込む
         </a>
         <Card>
           <div className="row" style={{ marginBottom: 8 }}>
@@ -92,14 +91,23 @@ export function Days() {
 
 interface Row extends ScheduleItem { key: string; use: boolean; dutiesText: string }
 
+const SAMPLE_SHEET = (t: string) => {
+  const lines = sampleScheduleText(t).split('\n');
+  const row = (l: string) => {
+    const m = l.match(/^(\S+) (.+?)(?: @(\S+))?(?: 当番：(.+))?$/);
+    return m ? [m[1], m[2], m[3] ?? '', ...(m[4] ?? '').split(/[、・]/)].join('\t') : l;
+  };
+  return ['日付\t活動\t会場\t当番1\t当番2', ...lines.map(row)].join('\n');
+};
+
 export function ScheduleImport() {
   const { data: d, update, toast } = useStore();
-  const [mode, setMode] = useState<'image' | 'text'>('image');
+  const [mode, setMode] = useState<'sheet' | 'text'>('sheet');
   const [text, setText] = useState('');
-  const [file, setFile] = useState<File | null>(null);
+  const [table, setTable] = useState<string[][] | null>(null);
+  const [map, setMap] = useState<Mapping | null>(null);
   const [rows, setRows] = useState<Row[] | null>(null);
   const [changes, setChanges] = useState<{ c: ScheduleChange; use: boolean }[] | null>(null);
-  const [busy, setBusy] = useState(false);
 
   const toRows = (items: ScheduleItem[]) =>
     setRows(
@@ -112,17 +120,19 @@ export function ScheduleImport() {
       }),
     );
 
-  const readAi = async () => {
-    setBusy(true);
-    try {
-      const input = mode === 'image' && file ? { file: await shrinkImage(file, 2000).then((x) => ({ mediaType: x.type, data: x.base64 })) } : { text };
-      toRows((await aiSchedule(d.settings.apiToken, input, today())).items);
-      toast('読み取りました。黄色の「要確認」を必ず確認してください');
-    } catch (e) {
-      toast({ text: errorText(e), err: true });
-    } finally {
-      setBusy(false);
-    }
+  const loadTable = (raw: string) => {
+    const t = parseTable(raw);
+    if (!t.length) return toast({ text: '表が読み取れません', err: true });
+    setTable(t);
+    setMap(guessMapping(t));
+  };
+
+  const readCsvFile = async (f: File) => {
+    const buf = await f.arrayBuffer();
+    let txt = new TextDecoder('utf-8').decode(buf);
+    if (txt.includes('\ufffd')) txt = new TextDecoder('shift_jis').decode(buf); // Excel の CSV（Shift_JIS）
+    setText(txt);
+    loadTable(txt);
   };
 
   const toChanges = () => {
@@ -145,15 +155,81 @@ export function ScheduleImport() {
 
   return (
     <>
-      <TopBar title="月間予定表の取り込み" back="/days" />
+      <TopBar title="当番表（予定表）の取り込み" back="/days" />
       <main>
-        {!rows ? (
+        {!rows && table && map ? (
           <>
-            <Seg value={mode} onChange={setMode} options={[['image', '画像・PDF'], ['text', 'テキスト']]} />
-            {mode === 'image' ? (
-              <Card title="予定表の画像を選ぶ">
-                <input type="file" accept="image/*,application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-                <p className="muted">画像はAIで読み取ります（サーバー設定が必要・1回 数円〜十数円）。読み取れない文字は推測せず「要確認」になります。</p>
+            <div className="alert info">列の意味を確認してください。見出し行から自動で判定しています（違う場合は選び直してください）。</div>
+            <Card title="列の対応">
+              <div className="stack">
+                <Field label="見出しの行">
+                  <select value={map.headerRow} onChange={(e) => setMap({ ...map, headerRow: Number(e.target.value) })}>
+                    <option value={-1}>見出しなし</option>
+                    {table.slice(0, 6).map((r, i) => (
+                      <option key={i} value={i}>
+                        {i + 1}行目: {r.filter(Boolean).join(' / ').slice(0, 40)}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="tbl" style={{ minWidth: map.cols.length * 110 }}>
+                    <thead>
+                      <tr>
+                        {map.cols.map((c, j) => (
+                          <th key={j} style={{ textAlign: 'left' }}>
+                            <select value={c} className={c === 'ignore' ? '' : 'on'} style={{ minHeight: 36, padding: '2px 4px', fontSize: 13 }} onChange={(e) => setMap({ ...map, cols: map.cols.map((x, k) => (k === j ? (e.target.value as ColRole) : x)) })}>
+                              {(Object.keys(COL_LABEL) as ColRole[]).map((k) => (
+                                <option key={k} value={k}>
+                                  {COL_LABEL[k]}
+                                </option>
+                              ))}
+                            </select>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {table.slice(Math.max(0, map.headerRow), Math.max(0, map.headerRow) + 6).map((r, i) => (
+                        <tr key={i} style={i === 0 && map.headerRow >= 0 ? { color: 'var(--muted)' } : undefined}>
+                          {map.cols.map((_, j) => (
+                            <td key={j} style={{ textAlign: 'left', whiteSpace: 'nowrap' }}>
+                              {r[j] ?? ''}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {!map.cols.includes('date') && <div className="alert warn">⚠️ 「日付」の列を選んでください</div>}
+              </div>
+            </Card>
+            <div className="fab-row">
+              <button className="btn" onClick={() => setTable(null)}>← 戻る</button>
+              <button className="btn primary" disabled={!map.cols.includes('date')} onClick={() => toRows(tableToItems(table, map))}>
+                この対応で読み取る →
+              </button>
+            </div>
+          </>
+        ) : !rows ? (
+          <>
+            <Seg value={mode} onChange={setMode} options={[['sheet', 'スプレッドシート'], ['text', 'テキスト']]} />
+            {mode === 'sheet' ? (
+              <Card title="当番表を貼り付け">
+                <div className="stack">
+                  <div className="muted">Googleスプレッドシート や Excel で当番表の範囲（見出し行を含む）を選んでコピーし、下に貼り付けてください。</div>
+                  <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={'日付\t活動\t会場\t当番1\t当番2\n11/21\t練習\t藤橋小\t田中母\t佐藤父'} />
+                  <div className="row">
+                    <label className="btn small">
+                      CSVファイルを選ぶ
+                      <input type="file" accept=".csv,text/csv" hidden onChange={(e) => e.target.files?.[0] && readCsvFile(e.target.files[0])} />
+                    </label>
+                    <button className="btn small" onClick={() => setText(SAMPLE_SHEET(today()))}>
+                      サンプルを入れる
+                    </button>
+                  </div>
+                </div>
               </Card>
             ) : (
               <Card title="予定表のテキストを貼り付け">
@@ -163,16 +239,9 @@ export function ScheduleImport() {
                 </button>
               </Card>
             )}
-            <div className="fab-row">
-              {mode === 'text' && (
-                <button className="btn primary" disabled={!text.trim()} onClick={() => toRows(parseScheduleText(text))}>
-                  読み取る（端末内・無料）
-                </button>
-              )}
-              <button className="btn" disabled={busy || (mode === 'image' ? !file : !text.trim())} onClick={readAi}>
-                {busy ? 'AI読み取り中…' : '🤖 AIで読み取る'}
-              </button>
-            </div>
+            <button className="btn primary" disabled={!text.trim()} onClick={() => (mode === 'sheet' ? loadTable(text) : toRows(parseScheduleText(text)))}>
+              {mode === 'sheet' ? '列を確認する →' : '読み取る'}
+            </button>
           </>
         ) : !changes ? (
           <>

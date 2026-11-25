@@ -57,6 +57,10 @@ describe('予定表 → 日別会計ページ', () => {
     expect(du.handedTxId).toBeTruthy(); // 記録は残る
     expect(d.days[0].review.join()).toContain('返金');
     expect(diffSchedule(d, parseScheduleText('11/22 練習試合 @B 当番：山本母\n11/22 合同練習 @A', BASE))).toEqual([]);
+    // 鈴木母が当番表に戻ったら、取消を解除して同じ行（準備金の記録つき）を使う
+    for (const c of diffSchedule(d, parseScheduleText('11/22 練習試合 @B 当番：山本母、鈴木母\n11/22 合同練習 @A', BASE))) applyScheduleChange(d, c);
+    expect(d.days[0].duties.filter((x) => x.name === '鈴木母')).toHaveLength(1);
+    expect(du.cancelled).toBe(false);
   });
 });
 
@@ -184,5 +188,29 @@ describe('旧版からの引き継ぎ', () => {
   it('部員名簿を家庭単位に変換', () => {
     const d = migrate({ version: 1, members: [{ name: '田中 はな', guardian: '田中母', monthlyFee: 2000, active: true }, { name: '田中 こころ', guardian: '田中母', monthlyFee: 2000, active: true }, { name: '林 みゆ', monthlyFee: 0, active: true }], txs: [] });
     expect(d.households.map((h) => `${h.name}:${h.children.length}:${h.monthlyFee}`)).toEqual(['田中家:2:4000', '林家:1:null']);
+  });
+});
+
+import { guessMapping, parseTable, tableToItems } from '../src/lib/sheetImport';
+
+describe('スプレッドシートからの当番反映', () => {
+  it('Googleスプレッドシートのコピー（タブ区切り・見出しあり・当番が複数列・日付セル結合）', () => {
+    const t = '11月 当番表\n日付\t曜日\t活動\t会場\t当番1\t当番2\n11/21\t土\t練習\t藤橋小\t田中母\t佐藤父\n\t\t午後 自主練\t藤橋小\t\t\n11/23\t祝\t大会\t県立体育館\t鈴木母\t\n11/28\t土\t休み\t\t\t';
+    const rows = parseTable(t);
+    const m = guessMapping(rows);
+    expect(m.headerRow).toBe(1);
+    expect(m.cols).toEqual(['date', 'ignore', 'activity', 'venue', 'duty', 'duty']);
+    const items = tableToItems(rows, m, BASE);
+    expect(items).toHaveLength(3);
+    expect(items[0]).toMatchObject({ date: '2026-11-21', activity: '練習', venue: '藤橋小', duties: ['田中母', '佐藤父'] });
+    expect(items[1]).toMatchObject({ date: '2026-11-21', activity: '午後 自主練' });
+    expect(items[2]).toMatchObject({ date: '2026-11-23', duties: ['鈴木母'] });
+  });
+  it('CSV（引用符・2026/11/22 形式）と読めない日付は要確認', () => {
+    const rows = parseTable('日付,内容,当番\n2026/11/22,練習試合,"高橋母、伊藤母"\n11月29日(日),練習,山本母\n？？,練習,林父');
+    const items = tableToItems(rows, guessMapping(rows), BASE);
+    expect(items[0]).toMatchObject({ date: '2026-11-22', duties: ['高橋母', '伊藤母'] });
+    expect(items[1].date).toBe('2026-11-29');
+    expect(items[2].review.join()).toContain('読めません');
   });
 });

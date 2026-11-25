@@ -153,15 +153,6 @@ export function SettingsPage() {
           </div>
         </Card>
 
-        <Card title="AI読み取り（サーバー接続）">
-          <div className="stack">
-            <Field label="サーバー接続トークン（Netlify の APP_ACCESS_TOKEN と同じ値）">
-              <input type="password" value={s.apiToken} onChange={(e) => set((x) => void (x.apiToken = e.target.value))} autoComplete="off" />
-            </Field>
-            <div className="muted">未設定でも、テキストの読み取り（端末内・無料）と手入力ですべての機能を使えます。画像（予定表・配車のスクリーンショット・レシート）の読み取りに必要です。</div>
-          </div>
-        </Card>
-
         <Card title="CSV出力">
           <div className="fab-row">
             <button className="btn small" onClick={() => download(`出納帳_${today()}.csv`, ledgerCsv(d, '0000-01-01', '9999-12-31'))}>出納帳</button>

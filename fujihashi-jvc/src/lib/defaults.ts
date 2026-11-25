@@ -15,7 +15,6 @@ export function defaultSettings(): Settings {
     monthlyFeeDefault: null, // 要確認
     feeDueRule: 'targetMonthEnd', // 要確認
     autoLockMinutes: 5,
-    apiToken: '',
   };
 }
 

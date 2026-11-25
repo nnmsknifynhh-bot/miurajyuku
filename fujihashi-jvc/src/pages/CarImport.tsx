@@ -1,10 +1,8 @@
 import { useState } from 'react';
-import { useStore, errorText } from '../store';
-import { Card, Seg, TopBar, go } from '../components/ui';
+import { useStore } from '../store';
+import { Card, TopBar, go } from '../components/ui';
 import { parseCarSplit } from '../lib/carParser';
 import { carsFromParsed, duplicateIssues, ROLE_LABEL, syncDriverPayments } from '../lib/day';
-import { aiCarSplit } from '../lib/api';
-import { shrinkImage } from '../lib/image';
 import { rosterPeople } from '../lib/roster';
 import { sampleCarText } from '../lib/sample';
 import { compact } from '../lib/carParser';
@@ -14,13 +12,10 @@ import { fmtDate, today, uid } from '../lib/util';
 export function CarImport(props: { dayId: string }) {
   const { data: d, update, toast } = useStore();
   const day = d.days.find((x) => x.id === props.dayId);
-  const [mode, setMode] = useState<'text' | 'image'>('text');
   const [text, setText] = useState('');
-  const [file, setFile] = useState<File | null>(null);
   const [cars, setCars] = useState<Car[] | null>(null);
   const [issues, setIssues] = useState<string[]>([]);
   const [refCarId, setRefCarId] = useState<string | undefined>();
-  const [busy, setBusy] = useState(false);
   if (!day) return <TopBar title="会計ページが見つかりません" back="/days" />;
   const people = rosterPeople(d);
 
@@ -31,19 +26,6 @@ export function CarImport(props: { dayId: string }) {
     setIssues([...extra, ...res.issues]);
     setRefCarId(res.refCarId);
   };
-  const ai = async () => {
-    setBusy(true);
-    try {
-      const input = mode === 'image' && file ? { file: await shrinkImage(file, 1800).then((x) => ({ mediaType: x.type, data: x.base64 })) } : { text };
-      const r = await aiCarSplit(d.settings.apiToken, input, people.map((p) => p.name), day.date);
-      load({ ...r, date: r.date || undefined }, r.review.map((x) => `AI: ${x}`));
-    } catch (e) {
-      toast({ text: errorText(e), err: true });
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const setRider = (ci: number, rid: string, p: Partial<Car['riders'][number]>) => setCars(cars!.map((c, i) => (i === ci ? { ...c, riders: c.riders.map((r) => (r.id === rid ? { ...r, ...p } : r)) } : c)));
   const dup = cars ? duplicateIssues(cars) : [];
 
@@ -68,7 +50,7 @@ export function CarImport(props: { dayId: string }) {
       dd.cars = next;
       if (refCarId) dd.driverPay.refCarId = refCarId;
       else if (dd.driverPay.refCarId && !next.some((c) => c.id === dd.driverPay.refCarId)) dd.driverPay.refCarId = undefined;
-      dd.carSource = mode === 'text' ? text : '（スクリーンショット）';
+      dd.carSource = text;
       for (const m of issues.filter((m) => !m.startsWith('重複'))) if (!dd.review.includes(m)) dd.review.push(m);
       dd.history.push({ at: new Date().toISOString(), text: `配車表を取り込み（${next.length}台）` });
       syncDriverPayments(dd);
@@ -82,30 +64,18 @@ export function CarImport(props: { dayId: string }) {
       <main>
         {!cars ? (
           <>
-            <Seg value={mode} onChange={setMode} options={[['text', 'LINEの文章'], ['image', 'スクリーンショット']]} />
-            {mode === 'text' ? (
-              <Card title="LINEの配車の文章を貼り付け">
+            <Card title="LINEの配車の文章を貼り付け">
+              <div className="stack">
+                <div className="muted">LINEで配車のメッセージを長押し →「コピー」して、下に貼り付けてください。</div>
                 <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={'🚗三浦車（運転：三浦母）\n・三浦 ゆい\n・田中 はな、田中母'} />
-                <button className="btn small" style={{ marginTop: 8 }} onClick={() => setText(sampleCarText(today()))}>
+                <button className="btn small" onClick={() => setText(sampleCarText(today()))}>
                   サンプル文章を入れる
                 </button>
-              </Card>
-            ) : (
-              <Card title="LINEのスクリーンショットを選ぶ">
-                <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-                <p className="muted">スクリーンショットはAIで読み取ります（サーバー設定が必要）。</p>
-              </Card>
-            )}
-            <div className="fab-row">
-              {mode === 'text' && (
-                <button className="btn primary" disabled={!text.trim()} onClick={() => load(parseCarSplit(text, day.date))}>
-                  読み取る（端末内・無料）
-                </button>
-              )}
-              <button className="btn" disabled={busy || (mode === 'text' ? !text.trim() : !file)} onClick={ai}>
-                {busy ? 'AI読み取り中…' : '🤖 AIで読み取る'}
-              </button>
-            </div>
+              </div>
+            </Card>
+            <button className="btn primary" disabled={!text.trim()} onClick={() => load(parseCarSplit(text, day.date))}>
+              読み取る
+            </button>
           </>
         ) : (
           <>
