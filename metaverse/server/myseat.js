@@ -1,4 +1,4 @@
-// ⭐ 自分だけの指定席（マイ席）
+// ⭐ 自分だけのVIP席
 // 🔥（連続自習）が30日（高校生は4週）続いたら、自分の部屋の空いている席から1つえらべる。机に金色の名前プレート。
 // その子がいないときは、ほかの子も座れる（席が足りなくならないように）。🔥がとぎれたら返す
 const { db, now } = require('./db');
@@ -27,10 +27,10 @@ function statusOf(userId) {
 function choose(userId, seat) {
   const st = statusOf(userId);
   if (!st) return { error: '生徒の機能です' };
-  if (!st.eligible) return { error: `🔥が${st.need}${st.unit}続いたら、マイ席をえらべます（いま${st.streak}${st.unit}）` };
+  if (!st.eligible) return { error: `🔥が${st.need}${st.unit}続いたら、VIP席をえらべます（いま${st.streak}${st.unit}）` };
   if (!seatsOf(st.room).includes(String(seat))) return { error: 'その席はえらべません' };
   const other = db.prepare('SELECT user_id FROM my_seats WHERE seat = ? AND user_id != ?').get(String(seat), userId);
-  if (other) return { error: 'その席は、ほかの子のマイ席です' };
+  if (other) return { error: 'その席は、ほかの子のVIP席です' };
   db.prepare('INSERT INTO my_seats (user_id, seat, room, chosen_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET seat = excluded.seat, room = excluded.room, chosen_at = excluded.chosen_at')
     .run(userId, String(seat), st.room, now());
   return { ok: true, seat: String(seat) };
@@ -44,7 +44,7 @@ function checkKeep(userId) {
   db.prepare('DELETE FROM my_seats WHERE user_id = ?').run(userId);
   return true;
 }
-// みんなのマイ席（名札用）
+// みんなのVIP席（名札用）
 function list() {
   return db.prepare(`SELECT m.user_id AS id, m.seat, m.room, u.display_name AS name FROM my_seats m JOIN users u ON u.id = m.user_id WHERE u.is_active = 1`).all();
 }

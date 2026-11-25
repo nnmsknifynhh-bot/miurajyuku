@@ -291,7 +291,7 @@
     socket.on('my-points', (d) => { state.pts = { balance: d.balance, medal: d.medal }; if (d.earning === true) earningUntil = Date.now() + 75_000; else if (d.earning === false) earningUntil = 0; renderPts(); });
     socket.on('morning-board', (mb) => { state.morning = mb; if ($('#morning-dialog').open) openMorning(); });
     socket.on('blackboard', ({ board }) => { state.board = board; if (board && !isStaff()) { toast('📝 先生の黒板が新しくなったよ（ロビー）', 5000); markBoardSeen(); } });
-    socket.on('myseat-lost', () => { toast('⭐ 🔥がとぎれたので、マイ席はお休みになりました。また続けたら、えらべるよ', 7000); refreshFun(true); });
+    socket.on('myseat-lost', () => { toast('👑 🔥がとぎれたので、VIP席はお休みになりました。また続けたら、えらべるよ', 7000); refreshFun(true); });
     socket.on('referral-reward', ({ kind, points }) => {
       chime(0.2); refreshFun(true);
       if (kind === 'enroll') return showGift('🐥', '友だちが入塾しました！', 'おそろいの「なかよしひよこ」をもらったよ。7日間のペア自習チャレンジもスタート！', 'friend_chick');
@@ -858,14 +858,14 @@
         // 💌 第1章クリア：手紙（読むまで、入室したときに1回出る）
         if (ev.letter && !letterAsked[ev.event]) { letterAsked[ev.event] = true; showLetter(ev); }
       }
-      // ⭐ マイ席
+      // 👑 VIP席
       const ms = g.mySeat;
       if (ms && !state.trial) {
         if (ms.eligible && !ms.seat) {
-          chips.push('⭐ マイ席をえらべるよ！ メニューの「⭐ マイ席」から');
+          chips.push('👑 VIP席をえらべるよ！ メニューの「👑 VIP席」から');
           const k = 'juku-myseat-ok-' + state.user.id; let seen = false; try { seen = !!localStorage.getItem(k); localStorage.setItem(k, '1'); } catch (e2) {}
-          if (!seen) { toast(`⭐ 🔥${ms.need}${ms.unit}達成！ 自分だけの「マイ席」をえらべるようになったよ`, 8000); chime(0.25); }
-        } else if (!ms.eligible && ms.streak >= Math.ceil(ms.need / 3)) chips.push(`⭐ マイ席まで 🔥${ms.streak}/${ms.need}${ms.unit}`);
+          if (!seen) { toast(`⭐ 🔥${ms.need}${ms.unit}達成！ 自分だけの「VIP席」をえらべるようになったよ`, 8000); chime(0.25); }
+        } else if (!ms.eligible && ms.streak >= Math.ceil(ms.need / 3)) chips.push(`👑 VIP席まで 🔥${ms.streak}/${ms.need}${ms.unit}`);
         if (!ms.eligible) { try { localStorage.removeItem('juku-myseat-ok-' + state.user.id); } catch (e2) {} }
       }
       // 🎎 3学期：ひな祭り・春のスター
@@ -1966,15 +1966,17 @@
   $('#board-save').onclick = () => saveBoard($('#board-input').value.trim());
   $('#board-clear').onclick = () => saveBoard('');
   $('#board-close').onclick = () => $('#board-dialog').close();
-  // ───── ⭐ マイ席 ─────
+  // ───── 👑 VIP席 ─────
   const myMySeat = () => (state.mySeats || []).find(s => s.id === (state.user && state.user.id));
   async function openMySeat() {
     $('#me-menu').hidden = true;
     let d;
     try { d = await api('GET', '/api/me/myseat'); } catch (e) { return toast(e.message); }
+    // まだ使えないとき：タップすると、条件だけお知らせ
+    if (!d.eligible && !myMySeat()) return toast(`👑 VIP席は🔥${d.need}${d.unit}で使えるよ！（いま🔥${d.streak}${d.unit}）`, 5000);
     $('#myseat-note').textContent = d.eligible
       ? `🔥${d.streak}${d.unit}続いているね！ 好きな席をえらぶと、机に名前プレートがつきます。いないときは、ほかの子も座れます。🔥がとぎれたら返します。`
-      : `🔥が${d.need}${d.unit}続いたら、自分だけの「マイ席」をえらべます（いま🔥${d.streak}${d.unit}）。`;
+      : `🔥が${d.need}${d.unit}続いたら、自分だけの「VIP席」をえらべます（いま🔥${d.streak}${d.unit}）。`;
     const map = $('#myseat-map'); map.textContent = '';
     const seats = d.seats.map(s => { const [x, y] = s.id.split(',').map(Number); return { ...s, x, y }; });
     const groups = (SM.SEAT_GROUPS[d.room] || [{ label: '席' }]).map(gp => [gp.label, seats.filter(s =>
@@ -1987,10 +1989,10 @@
       for (const st of side) {
         const mine = st.id === d.seat, b = el('button', mine ? 'mine' : st.taken ? 'other-mine' : null, mine ? '⭐' : st.taken ? '🌟' : '🪑');
         b.type = 'button'; b.disabled = !d.eligible || st.taken || mine;
-        b.title = mine ? 'あなたのマイ席' : st.taken ? 'ほかの子のマイ席' : 'この席をマイ席にする';
+        b.title = mine ? 'あなたのVIP席' : st.taken ? 'ほかの子のVIP席' : 'この席をVIP席にする';
         b.style.gridColumn = xs.indexOf(st.x) + 1; b.style.gridRow = ys.indexOf(st.y) + 1;
         b.onclick = async () => {
-          try { await api('POST', '/api/me/myseat', { seat: st.id }); toast('⭐ マイ席に決めたよ！ 次から入ると、この席に案内します', 5000); $('#myseat-dialog').close(); walkTo(st.x, st.y, true, true); }
+          try { await api('POST', '/api/me/myseat', { seat: st.id }); toast('👑 VIP席に決めたよ！ 次から入ると、この席に案内します', 5000); $('#myseat-dialog').close(); walkTo(st.x, st.y, true, true); }
           catch (e) { toast(e.message); }
         };
         grid.append(b);
@@ -2001,13 +2003,13 @@
   }
   $('#menu-myseat').onclick = openMySeat;
   $('#myseat-close').onclick = () => $('#myseat-dialog').close();
-  // 入ったとき：マイ席が空いていれば、そこへ案内する
+  // 入ったとき：VIP席が空いていれば、そこへ案内する
   function goMySeat() {
     const m = myMySeat(), me = state.me;
     if (!m || !me || me.seat || state.path.length || document.querySelector('dialog[open]')) return;
     const [x, y] = m.seat.split(',').map(Number);
-    if (occupiedSeats().has(m.seat)) return toast('⭐ マイ席は、いまほかの子が使っています。ほかの席にすわってね', 5000);
-    if (walkTo(x, y, true, true)) toast('⭐ マイ席へ案内します', 3000);
+    if (occupiedSeats().has(m.seat)) return toast('👑 VIP席は、いまほかの子が使っています。ほかの席にすわってね', 5000);
+    if (walkTo(x, y, true, true)) toast('👑 VIP席へ案内します', 3000);
   }
   $('#family-invite').onclick = () => { $('#family-dialog').close(); openInvite(); };
   $('#invite-close').onclick = () => $('#invite-dialog').close();
@@ -2281,7 +2283,7 @@
     ctx.restore();
   }
 
-  // ⭐ マイ席：机に金色の名前プレート。本人がすわっているときは、席がほんのり光る
+  // 👑 VIP席：机に金色の名前プレート。本人がすわっているときは、席がほんのり光る
   function drawMySeatPlates(time) {
     for (const s of state.mySeats || []) {
       const [sx, sy] = s.seat.split(',').map(Number);

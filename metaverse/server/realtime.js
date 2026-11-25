@@ -523,7 +523,7 @@ function attach(httpServer) {
     p.fx = p.follow ? fun.fxOf(p.id) : null;
     p.asa = user.role === 'student' && !user.trial_until ? fun.morningDone(p.id) : false;
     { const g = user.role === 'student' ? startphoto.goalOf(p.id) : null; p.goalDone = !!(g && ganbari.dayAll(p.id, ganbari.jst().day) >= g); }
-    if (user.role === 'student' && myseat.checkKeep(p.id)) setTimeout(() => { socket.emit('myseat-lost'); broadcastMySeats(); }, 500); // 🔥がとぎれていたらマイ席を返す
+    if (user.role === 'student' && myseat.checkKeep(p.id)) setTimeout(() => { socket.emit('myseat-lost'); broadcastMySeats(); }, 500); // 🔥がとぎれていたらVIP席を返す
     p.bloom = user.role === 'student' && !user.trial_until ? fun.bloomOf(p.id) : false;
     refreshHS(p, false);
     p.room = roomIdAt(p.x, p.y);
@@ -1043,7 +1043,7 @@ function attach(httpServer) {
         p.socket.emit('study-minute');
         sendPts(p, added.includes(id)); // ⬆ ポイントがふえている / ⏸ 時間帯の外・上限
       }
-      // ⭐ マイ席：🔥がとぎれたら返す（日がかわったとき）
+      // 👑 VIP席：🔥がとぎれたら返す（日がかわったとき）
       let seatsChanged = false;
       for (const p of online.values()) if (p.user.role === 'student' && myseat.checkKeep(p.id)) { p.socket.emit('myseat-lost'); seatsChanged = true; }
       if (seatsChanged) broadcastMySeats();
@@ -1462,7 +1462,7 @@ function referralRewarded(r) {
   }
   if (r.kind === 'parent') refreshMoms();
 }
-// ⭐ マイ席の名前プレート（保護者・体験中の子には、ほかの子の名前は出さない）
+// 👑 VIP席の名前プレート（保護者・体験中の子には、ほかの子の名前は出さない）
 function mySeatsFor(viewer) {
   return myseat.list().map(s => {
     const hide = (viewer.user.role === 'parent' && !(viewer.childIds && viewer.childIds.has(s.id))) || (viewer.user.trial_until && s.id !== viewer.referrerId);

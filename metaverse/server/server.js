@@ -492,7 +492,7 @@ app.post('/api/parent/quiz/answer', auth.requireAuth, requireParent, (req, res) 
   res.json({ ...r, points: ganbari.points(req.user.id).balance });
 });
 
-// ⭐ マイ席：えらべる席と、いまの状態
+// 👑 VIP席：えらべる席と、いまの状態
 app.get('/api/me/myseat', auth.requireAuth, (req, res) => {
   const st = myseat.statusOf(req.user.id);
   if (!st) return bad(res, '生徒の機能です', 403);
