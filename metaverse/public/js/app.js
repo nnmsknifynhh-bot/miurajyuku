@@ -30,6 +30,7 @@
     $('#me-role').textContent = ROLE_LABEL[u.role];
     $('#me-role').className = 'badge ' + u.role;
     document.body.classList.add(u.role === 'student' ? 'is-student' : u.role === 'parent' ? 'is-parent' : 'is-staff');
+    if (!/^[中高][1-3]$/.test(u.grade || '')) $('#menu-scores').style.display = 'none'; // 📊 成績は中学生・高校生だけ
     if (state.trial) { $('#me-role').textContent = '体験'; document.body.classList.add('is-trial'); try { localStorage.setItem('juku-trial-until', String(state.trial.until)); } catch (e) {} }
     mapCanvas = window.Render.buildMap();
     state.zoom = autoZoom();
@@ -708,7 +709,15 @@
       const fb = el('button', 'btn secondary small', '📅 勉強の足あとカレンダー'); fb.type = 'button';
       const fbox = el('div', 'foot-box'); fbox.hidden = true;
       fb.onclick = async () => { if (!fbox.hidden) { fbox.hidden = true; return; } fbox.hidden = false; await drawFootprints(fbox, k.id); };
-      card.append(fb, fbox); list.append(card);
+      card.append(fb, fbox);
+      // 📊 成績（中学生・高校生）：見るだけ
+      if (/^[中高][1-3]$/.test(k.grade || '')) {
+        const sb = el('button', 'btn secondary small', '📊 成績（テスト・内申・模試）'); sb.type = 'button';
+        const sbox = el('div', 'foot-box'); sbox.hidden = true;
+        sb.onclick = () => { sbox.hidden = !sbox.hidden; if (!sbox.hidden) window.Scores.mount(sbox, { api, toast, userId: k.id }); };
+        card.append(sb, sbox);
+      }
+      list.append(card);
     }
     const m = d.moms;
     $('#family-moms').textContent = `🌸 家族の木：花${m.flowers}こ${m.tulips ? `・🌷${m.tulips}` : ''}（${m.stageName}）・今月${m.families}家族が挑戦中・あなたは🔥${d.streak}日連続・${d.points}ポイント`;
@@ -1983,6 +1992,9 @@
 
   $('#menu-shop').onclick = () => { $('#me-menu').hidden = true; state.gb.openShop(); };
   $('#menu-goal').onclick = () => { $('#me-menu').hidden = true; state.gb.openGoal(); };
+  // 📊 成績（中学生・高校生）
+  $('#menu-scores').onclick = () => { $('#me-menu').hidden = true; window.Scores.mount($('#scores-box'), { api, toast }); $('#scores-dialog').showModal(); };
+  $('#scores-close').onclick = () => $('#scores-dialog').close();
   $('#menu-forest').onclick = () => { $('#me-menu').hidden = true; state.gb.openForest(null); };
   setInterval(() => { if (state.gb && document.visibilityState === 'visible') state.gb.refreshForest(); }, 60000);
   const treePos = (i) => { const f = SM.FOREST[i]; return { x: (f.x + 1) * T, y: (f.y + 1) * T - 6 }; };

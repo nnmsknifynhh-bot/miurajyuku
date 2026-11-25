@@ -1,0 +1,207 @@
+// 📊 成績（定期テスト・内申・模試）の画面。生徒・保護者・先生（管理画面）で同じものを使う
+// Scores.mount(box, { api, toast, userId? }) … userId がなければ自分の成績
+(function () {
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const KINDS = [['teiki', '📝 定期テスト'], ['naishin', '📒 内申'], ['moshi', '📈 模試']];
+  const TEIKI = [['1mid', '1学期中間'], ['1end', '1学期期末'], ['2mid', '2学期中間'], ['2end', '2学期期末'], ['final', '学年末']];
+  const NAISHIN = [['1', '1学期'], ['2', '2学期'], ['3', '3学期']];
+  const SHORT = { '1mid': '1中間', '1end': '1期末', '2mid': '2中間', '2end': '2期末', final: '学年末', 1: '1学期', 2: '2学期', 3: '3学期' };
+  const FIVE = ['国語', '数学', '英語', '理科', '社会'];
+  const SUB4 = ['音楽', '美術', '保健体育', '技術家庭'];
+  const NINE = ['国語', '社会', '数学', '理科', '英語', ...SUB4];
+  const isJH = (g) => /^中/.test(g || '');
+  const fmt = (n) => n == null ? '–' : String(n);
+  const diffEl = (cur, prev) => {
+    if (cur == null || prev == null) return null;
+    const d = Math.round((cur - prev) * 10) / 10;
+    return el('small', d > 0 ? 'sr-up' : d < 0 ? 'sr-down' : 'sr-same', d > 0 ? `↑${d}` : d < 0 ? `↓${-d}` : '→');
+  };
+  const titleOf = (r) => r.kind === 'moshi' ? `${r.past ? '📚 過去問 ' : ''}${r.title}${r.takenOn ? `（${Number(r.takenOn.slice(5, 7))}/${Number(r.takenOn.slice(8))}）` : ''}` : `${r.grade} ${r.termName}${r.kind === 'naishin' ? 'の内申' : ''}`;
+
+  // 折れ線グラフ（SVG）。points: [{ label, v }]
+  function chart(points, { label, min, max, invert } = {}) {
+    const ps = points.filter(p => p.v != null);
+    if (ps.length < 2) return null;
+    const W = 320, H = 140, L = 34, R = 10, T = 14, B = 34;
+    const lo = min != null ? min : Math.min(...ps.map(p => p.v)), hi = max != null ? max : Math.max(...ps.map(p => p.v));
+    const span = hi - lo || 1;
+    const xs = (i) => L + (W - L - R) * (ps.length === 1 ? 0.5 : i / (ps.length - 1));
+    const ys = (v) => T + (H - T - B) * (1 - (v - lo) / span);
+    const NS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(NS, 'svg'); svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('class', 'sr-chart'); svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', label || 'グラフ');
+    const mk = (n, a) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); svg.append(e); return e; };
+    for (const v of [lo, (lo + hi) / 2, hi]) { mk('line', { x1: L, x2: W - R, y1: ys(v), y2: ys(v), class: 'sr-grid' }); const t = mk('text', { x: L - 4, y: ys(v) + 3, class: 'sr-ax', 'text-anchor': 'end' }); t.textContent = Math.round(v); }
+    mk('polyline', { points: ps.map((p, i) => `${xs(i)},${ys(p.v)}`).join(' '), class: 'sr-line' });
+    ps.forEach((p, i) => {
+      mk('circle', { cx: xs(i), cy: ys(p.v), r: 3.5, class: 'sr-dot' });
+      const v = mk('text', { x: xs(i), y: ys(p.v) - 6, class: 'sr-val', 'text-anchor': 'middle' }); v.textContent = p.v;
+      if (ps.length <= 8 || i % Math.ceil(ps.length / 8) === 0 || i === ps.length - 1) { const t = mk('text', { x: xs(i), y: H - 18, class: 'sr-ax', 'text-anchor': 'middle' }); t.textContent = p.label; }
+      if (p.group && (i === 0 || ps[i - 1].group !== p.group)) { const t = mk('text', { x: xs(i), y: H - 5, class: 'sr-ax sr-ax-g', 'text-anchor': 'middle' }); t.textContent = p.group; }
+    });
+    return svg;
+  }
+
+  function mount(box, { api, toast, userId }) {
+    let data = null, tab = 'teiki', showPast = true, editing = null;
+    const q = userId ? `?userId=${userId}` : '';
+    async function load() {
+      try { data = await api('GET', '/api/scores' + q); } catch (e) { box.textContent = e.message; return; }
+      render();
+    }
+    function render() {
+      box.textContent = '';
+      box.classList.add('sr-root');
+      const tabs = el('div', 'sr-tabs');
+      for (const [k, name] of KINDS) {
+        const n = data.records.filter(r => r.kind === k).length;
+        const b = el('button', 'sr-tab' + (tab === k ? ' active' : ''), name + (n ? ` (${n})` : '')); b.type = 'button';
+        b.onclick = () => { tab = k; editing = null; render(); };
+        tabs.append(b);
+      }
+      box.append(tabs);
+      if (editing) { box.append(form(editing)); return; }
+      const recs = data.records.filter(r => r.kind === tab && (tab !== 'moshi' || showPast || !r.past));
+      if (data.canEdit) {
+        const add = el('button', 'btn small', tab === 'teiki' ? '＋ 定期テストを入れる' : tab === 'naishin' ? '＋ 内申を入れる' : '＋ 模試を入れる'); add.type = 'button';
+        add.onclick = () => { editing = { kind: tab }; render(); };
+        box.append(add);
+      }
+      if (tab === 'moshi' && data.records.some(r => r.kind === 'moshi' && r.past)) {
+        const l = el('label', 'sr-check'); const c = el('input'); c.type = 'checkbox'; c.checked = showPast; c.onchange = () => { showPast = c.checked; render(); };
+        l.append(c, document.createTextNode(' 過去問も表示する')); box.append(l);
+      }
+      if (!recs.length) { box.append(el('p', 'muted', data.canEdit ? 'まだありません。上のボタンから入れてね。' : 'まだ入っていません。')); return; }
+      // グラフ
+      const real = tab === 'moshi' ? recs.filter(r => !r.past) : recs;
+      const g = tab === 'moshi'
+        ? chart(real.map(r => ({ label: (r.takenOn || '').slice(5).replace('-', '/') || r.title.slice(0, 4), group: r.grade, v: r.totalDev })), { label: '模試の偏差値', min: 30, max: 75 })
+        : chart(recs.map(r => ({ label: SHORT[r.term] || r.term, group: r.grade, v: tab === 'naishin' && !isJH(r.grade) ? r.sum.average : r.sum.total })), { label: tab === 'naishin' ? '内申の合計' : '定期テストの合計' });
+      if (g) { const w = el('div', 'sr-chart-wrap'); w.append(el('b', null, tab === 'moshi' ? '📈 偏差値（合計）の変化（本番の模試）' : tab === 'naishin' ? '📈 内申の変化' : '📈 合計点の変化')); w.append(g); box.append(w); }
+      // 新しいものが上
+      const prevOf = (r) => { const i = recs.indexOf(r); for (let k = i - 1; k >= 0; k--) if (recs[k].kind === r.kind && (r.kind !== 'moshi' || recs[k].past === r.past)) return recs[k]; return null; };
+      for (const r of [...recs].reverse()) box.append(card(r, prevOf(r)));
+    }
+    function card(r, prev) {
+      const c = el('div', 'sr-card');
+      const h = el('div', 'sr-head');
+      h.append(el('b', null, titleOf(r)));
+      h.append(el('span', 'sr-badge ' + (r.confirmed ? 'ok' : 'wait'), r.confirmed ? '✅ 先生確認ずみ' : '⏳ 確認まち'));
+      c.append(h);
+      const t = el('table', 'sr-table');
+      const head = el('tr'); head.append(el('th', null, '教科'));
+      const cols = r.kind === 'naishin' ? ['内申'] : r.kind === 'teiki' ? ['点数', '平均'] : ['点数', '偏差値'];
+      cols.forEach(x => head.append(el('th', 'num', x))); t.append(head);
+      const pmap = new Map(((prev && prev.subjects) || []).map(s => [s.name, s]));
+      for (const s of r.subjects) {
+        const tr = el('tr'); tr.append(el('td', null, s.name));
+        const p = pmap.get(s.name);
+        if (r.kind === 'naishin') { const td = el('td', 'num', fmt(s.value)); const d = diffEl(s.value, p && p.value); if (d) td.append(' ', d); tr.append(td); }
+        else {
+          const td = el('td', 'num', fmt(s.score) + (s.max && s.max !== 100 ? `/${s.max}` : '')); const d = diffEl(s.score, p && p.score); if (d) td.append(' ', d); tr.append(td);
+          tr.append(el('td', 'num', r.kind === 'teiki' ? fmt(s.avg) : fmt(s.dev)));
+        }
+        t.append(tr);
+      }
+      const ps = prev && prev.sum;
+      const foot = el('tr', 'sr-total'); foot.append(el('td', null, r.kind === 'naishin' ? '合計' : '合計'));
+      const tt = el('td', 'num', fmt(r.sum.total) + (r.kind !== 'naishin' && r.sum.totalMax ? `/${r.sum.totalMax}` : '')); const dd = diffEl(r.sum.total, ps && ps.total); if (dd) tt.append(' ', dd); foot.append(tt);
+      foot.append(el('td', 'num', r.kind === 'moshi' ? fmt(r.totalDev) : r.kind === 'teiki' ? (r.rank ? `${r.rank}位${r.rankOf ? `/${r.rankOf}人` : ''}` : '') : ''));
+      t.append(foot); c.append(t);
+      if (r.kind === 'naishin') c.append(el('p', 'sr-sub', isJH(r.grade) ? `5教科 ${fmt(r.sum.total5)}・9教科 ${fmt(r.sum.total)}` : `評定平均 ${fmt(r.sum.average)}`));
+      if (r.kind === 'moshi' && r.judges && r.judges.length) c.append(el('p', 'sr-sub', '🏫 ' + r.judges.map(j => `${j.school} ${j.judge || '–'}判定`).join('・')));
+      const acts = el('div', 'sr-acts');
+      if (data.canEdit) {
+        const e = el('button', 'btn small secondary', '直す'); e.type = 'button'; e.onclick = () => { editing = r; render(); };
+        const d = el('button', 'btn small danger', '消す'); d.type = 'button';
+        let armed = false;
+        d.onclick = async () => { if (!armed) { armed = true; d.textContent = 'もう一度押すと消えます'; setTimeout(() => { armed = false; d.textContent = '消す'; }, 4000); return; } try { await api('DELETE', `/api/scores/${r.id}`); toast('消しました'); load(); } catch (er) { toast(er.message); } };
+        acts.append(e, d);
+      }
+      if (data.canConfirm) {
+        const b = el('button', 'btn small' + (r.confirmed ? ' secondary' : ''), r.confirmed ? '確認をはずす' : '✅ 確認した'); b.type = 'button';
+        b.onclick = async () => { try { await api('POST', `/api/scores/${r.id}/confirm`, { confirmed: !r.confirmed }); load(); } catch (er) { toast(er.message); } };
+        acts.append(b);
+      }
+      if (acts.children.length) c.append(acts);
+      return c;
+    }
+    // 入れる・直す
+    function form(r) {
+      const kind = r.kind, f = el('form', 'sr-form');
+      const grades = data.grades, g0 = r.grade || (grades.includes(data.student.grade) ? data.student.grade : grades[0]);
+      const row = el('div', 'gb-row');
+      const gs = el('select'); grades.forEach(g => gs.append(new Option(g, g))); gs.value = g0;
+      row.append(gs);
+      let ts, title, past, day;
+      if (kind !== 'moshi') { ts = el('select'); (kind === 'teiki' ? TEIKI : NAISHIN).forEach(([v, n]) => ts.append(new Option(n, v))); if (r.term) ts.value = r.term; row.append(ts); }
+      else {
+        title = el('input'); title.placeholder = '模試の名前（例：11月 県模試・2015年度 第3回）'; title.maxLength = 40; title.value = r.title || '';
+        day = el('input'); day.type = 'date'; day.value = r.takenOn || '';
+        const pl = el('label', 'sr-check'); past = el('input'); past.type = 'checkbox'; past.checked = !!r.past; pl.append(past, document.createTextNode(' 📚 過去問'));
+        row.append(title, day, pl);
+      }
+      f.append(el('h3', null, (r.id ? '直す：' : '入れる：') + (KINDS.find(k => k[0] === kind)[1])), row);
+      // 教科（前に入れたものと同じ教科から始める）
+      const last = [...data.records].reverse().find(x => x.kind === kind);
+      const names = r.subjects ? r.subjects : (last ? last.subjects.map(s => ({ name: s.name, max: s.max })) : (kind === 'naishin' ? (isJH(g0) ? NINE : FIVE) : kind === 'moshi' && !isJH(g0) ? ['国語', '数学', '英語'] : FIVE).map(name => ({ name })));
+      const list = el('div', 'sr-rows' + (kind === 'naishin' ? ' n' : '')), rows = [];
+      const head = el('div', 'sr-row sr-row-h'); head.append(el('span', null, '教科'));
+      (kind === 'naishin' ? ['内申（1〜5）'] : kind === 'teiki' ? ['点数', '平均点', '満点'] : ['点数', '偏差値', '満点']).forEach(x => head.append(el('span', null, x)));
+      head.append(el('span')); list.append(head);
+      const numIn = (v, ph, step = 'any') => { const i = el('input'); i.type = 'number'; i.inputMode = 'decimal'; i.step = step; i.placeholder = ph; if (v != null) i.value = v; return i; };
+      function addRow(s = {}) {
+        const rr = el('div', 'sr-row'); const nm = el('input'); nm.value = s.name || ''; nm.placeholder = '教科'; nm.maxLength = 12;
+        const o = { nm };
+        rr.append(nm);
+        if (kind === 'naishin') { o.v = numIn(s.value, '4', '1'); rr.append(o.v); }
+        else { o.sc = numIn(s.score, '点'); o.x = numIn(kind === 'teiki' ? s.avg : s.dev, kind === 'teiki' ? '平均' : '偏差値'); o.max = numIn(s.max && s.max !== 100 ? s.max : null, '100'); rr.append(o.sc, o.x, o.max); }
+        const del = el('button', 'btn small secondary', '×'); del.type = 'button'; del.title = 'この教科をけす'; del.onclick = () => { rr.remove(); rows.splice(rows.indexOf(o), 1); };
+        rr.append(del); list.append(rr); rows.push(o);
+      }
+      names.forEach(addRow);
+      const more = el('div', 'gb-row');
+      const plus = el('button', 'btn small secondary', '＋ 教科を足す'); plus.type = 'button'; plus.onclick = () => addRow();
+      more.append(plus);
+      if (kind === 'teiki') { const s4 = el('button', 'btn small secondary', '＋ 副教科（音・美・保体・技家）'); s4.type = 'button'; s4.onclick = () => SUB4.filter(n => !rows.some(o => o.nm.value === n)).forEach(name => addRow({ name })); more.append(s4); }
+      f.append(list, more);
+      let rank, rankOf, tdev; const judges = [];
+      if (kind === 'teiki') {
+        const rr = el('div', 'gb-row'); rank = numIn(r.rank, '順位', '1'); rankOf = numIn(r.rankOf, '人数', '1');
+        rr.append(el('span', null, '学年順位（あれば）'), rank, el('span', null, '位 /'), rankOf, el('span', null, '人')); f.append(rr);
+      }
+      if (kind === 'moshi') {
+        const rr = el('div', 'gb-row'); tdev = numIn(r.totalDev, '偏差値'); rr.append(el('span', null, '合計の偏差値'), tdev); f.append(rr);
+        f.append(el('small', 'muted', '志望校の判定（3つまで）'));
+        for (let i = 0; i < 3; i++) {
+          const j = (r.judges || [])[i] || {};
+          const jr = el('div', 'gb-row'); const sc = el('input'); sc.placeholder = `志望校${i + 1}`; sc.maxLength = 30; sc.value = j.school || '';
+          const js = el('select'); ['', 'A', 'B', 'C', 'D', 'E'].forEach(x => js.append(new Option(x ? `${x}判定` : '判定', x))); js.value = j.judge || '';
+          jr.append(sc, js); f.append(jr); judges.push([sc, js]);
+        }
+      }
+      const acts = el('div', 'gb-row');
+      const save = el('button', 'btn', r.id ? '直す' : '保存する'); save.type = 'submit';
+      const cancel = el('button', 'btn secondary', 'やめる'); cancel.type = 'button'; cancel.onclick = () => { editing = null; render(); };
+      acts.append(save, cancel); f.append(acts);
+      if (!data.canConfirm) f.append(el('small', 'muted', '保存すると、先生が確認します（直すと、もう一度確認まちになります）。'));
+      f.onsubmit = async (ev) => {
+        ev.preventDefault();
+        const body = { kind, grade: gs.value, subjects: rows.map(o => kind === 'naishin' ? { name: o.nm.value, value: o.v.value } : { name: o.nm.value, score: o.sc.value, max: o.max.value, ...(kind === 'teiki' ? { avg: o.x.value } : { dev: o.x.value }) }) };
+        if (userId) body.userId = userId;
+        if (ts) body.term = ts.value;
+        if (kind === 'moshi') Object.assign(body, { title: title.value, past: past.checked, takenOn: day.value || null, totalDev: tdev.value, judges: judges.map(([a, b]) => ({ school: a.value, judge: b.value })) });
+        if (kind === 'teiki') Object.assign(body, { rank: rank.value, rankOf: rankOf.value });
+        save.disabled = true;
+        try {
+          if (r.id) await api('PATCH', `/api/scores/${r.id}`, body); else await api('POST', '/api/scores', body);
+          toast(r.id ? '直しました' : '保存しました'); editing = null; await load();
+        } catch (e) { toast(e.message); save.disabled = false; }
+      };
+      return f;
+    }
+    box.textContent = '読みこみ中…';
+    load();
+    return { reload: load };
+  }
+  window.Scores = { mount, chart };
+})();

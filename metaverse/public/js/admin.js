@@ -40,6 +40,7 @@
     if (tab === 'ganbari') window.AdminGanbari.load($('#tab-ganbari'), { me, meta, api, toast });
     if (tab === 'kanken') window.AdminKanken.load($('#tab-kanken'), { api, toast });
     if (tab === 'reading') window.AdminReading.load($('#tab-reading'), { api, toast });
+    if (tab === 'scores') window.AdminScores.load($('#tab-scores'), { api, toast });
   }
 
   // ═════════ ユーザー ═════════

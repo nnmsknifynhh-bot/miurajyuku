@@ -89,3 +89,45 @@ dialog::backdrop { background: rgba(30, 25, 40, .45); }
 /* 古い Safari（dialog がない）用：js/compat.js が html に dlg-poly をつける */
 .dlg-poly dialog { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); margin: 0; max-height: 90vh; max-width: 94vw; overflow: auto; z-index: 1000; border: 0; border-radius: 16px; background: #fff; box-shadow: 0 0 0 100vmax rgba(0,0,0,.45); }
 .dlg-poly dialog:not([open]) { display: none; }
+
+/* 📊 成績（定期テスト・内申・模試） */
+.sr-root { display: grid; gap: 10px; max-width: 680px; }
+.sr-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.sr-tab { border: 2px solid #e8dccb; background: #fff; border-radius: 999px; padding: 7px 12px; font-weight: 700; font-size: 14px; cursor: pointer; color: inherit; }
+.sr-tab.active { background: #2f7de1; border-color: #2f7de1; color: #fff; }
+.sr-check { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; }
+.sr-card { border: 2px solid #eee3d3; border-radius: 14px; padding: 10px 12px; background: #fffdf9; }
+.sr-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.sr-badge { font-size: 12px; font-weight: 700; border-radius: 999px; padding: 2px 9px; }
+.sr-badge.ok { background: #e6f6ec; color: #1e7a4f; }
+.sr-badge.wait { background: #fff4d6; color: #8a5a00; }
+.sr-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.sr-table th, .sr-table td { padding: 4px 6px; border-bottom: 1px solid #f0e8dc; text-align: left; }
+.sr-table th.num { text-align: right; }
+.sr-chart .sr-ax-g { font-weight: 700; fill: #5d4a3a; }
+.sr-table td.num { text-align: right; white-space: nowrap; }
+.sr-table tr.sr-total td { font-weight: 800; border-bottom: 0; }
+.sr-up { color: #1e7a4f; font-weight: 700; }
+.sr-down { color: #c0392b; font-weight: 700; }
+.sr-same { color: #888; }
+.sr-sub { margin: 6px 0 0; font-size: 13px; color: #5d4a3a; }
+.sr-acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.sr-chart-wrap { border: 2px solid #eee3d3; border-radius: 14px; padding: 8px 10px; background: #fff; }
+.sr-chart { width: 100%; height: auto; display: block; }
+.sr-chart .sr-grid { stroke: #f0e8dc; stroke-width: 1; }
+.sr-chart .sr-ax { font-size: 9px; fill: #8a7a6a; }
+.sr-chart .sr-line { fill: none; stroke: #2f7de1; stroke-width: 2.5; stroke-linejoin: round; }
+.sr-chart .sr-dot { fill: #fff; stroke: #2f7de1; stroke-width: 2; }
+.sr-chart .sr-val { font-size: 10px; font-weight: 700; fill: #2f5f9e; }
+.sr-form { display: grid; gap: 8px; border: 2px solid #cfe0f7; border-radius: 14px; padding: 12px; background: #f7fbff; }
+.sr-form h3 { margin: 0; font-size: 16px; }
+.sr-form input, .sr-form select { min-width: 0; }
+.sr-rows { display: grid; gap: 4px; }
+.sr-row { display: grid; grid-template-columns: minmax(70px, 1.3fr) repeat(3, minmax(48px, 1fr)) 36px; gap: 4px; align-items: center; }
+.sr-row input { width: 100%; padding: 6px; font-size: 15px; box-sizing: border-box; }
+.sr-rows.n .sr-row { grid-template-columns: minmax(90px, 2fr) minmax(60px, 1fr) 36px; }
+.sr-row-h { font-size: 12px; color: #7a6a5a; font-weight: 700; }
+.sr-wait-note { font-weight: 700; color: #8a5a00; }
+.sr-wait-cell { color: #8a5a00; font-weight: 700; }
+.sr-detail { margin-top: 12px; }
+.scores-dialog { max-width: min(640px, 96vw); width: 100%; }

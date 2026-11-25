@@ -20,6 +20,7 @@ const referral = require('./referral');
 const myseat = require('./myseat');
 const SchoolMap = require('../public/shared/map.js');
 const kanken = require('./kanken');
+const scores = require('./scores');
 
 const PORT = Number(process.env.PORT || 3000);
 const app = express();
@@ -209,6 +210,37 @@ app.post('/api/reading/writing', express.raw({ type: 'image/jpeg', limit: '4mb' 
   if (req.query.mode === 'test') realtime.activityResult(req.user, `✍️ ライティングテスト「${unit.title}」${r.score}点 → ${r.passed ? '🏅 合格' + (r.points ? `（+${r.points}pt）` : '') : '再テスト'}`);
   res.json(r);
 });
+// ═════════ 📊 成績（定期テスト・内申・模試） ═════════
+app.get('/api/scores', auth.requireAuth, (req, res) => {
+  const id = req.query.userId ? Number(req.query.userId) : req.user.id;
+  if (!scores.canSee(req.user, id)) return bad(res, '自分（自分のお子さん）の成績だけ見られます', 403);
+  const st = scores.target(id);
+  if (!st) return bad(res, '生徒が見つかりません', 404);
+  res.json({ student: { id: st.id, name: st.name, grade: st.grade }, canEdit: scores.canEdit(req.user, st), canConfirm: req.user.role === 'owner' || req.user.role === 'teacher', records: scores.listFor(id), grades: scores.GRADES, termName: scores.TERM_NAME });
+});
+app.post('/api/scores', auth.requireAuth, (req, res) => {
+  const r = scores.save(req.user, req.body.userId ? Number(req.body.userId) : req.user.id, req.body || {});
+  if (r.error) return bad(res, r.error, r.code || 400);
+  res.status(201).json(r);
+});
+app.patch('/api/scores/:id', auth.requireAuth, (req, res) => {
+  const rec = db.prepare('SELECT user_id FROM score_records WHERE id = ?').get(Number(req.params.id));
+  if (!rec) return bad(res, '記録が見つかりません', 404);
+  const r = scores.save(req.user, rec.user_id, req.body || {}, Number(req.params.id));
+  if (r.error) return bad(res, r.error, r.code || 400);
+  res.json(r);
+});
+app.delete('/api/scores/:id', auth.requireAuth, (req, res) => {
+  const r = scores.remove(req.user, Number(req.params.id));
+  if (r.error) return bad(res, r.error, r.code || 400);
+  res.json(r);
+});
+app.post('/api/scores/:id/confirm', auth.requireAuth, (req, res) => {
+  const r = scores.confirm(req.user, Number(req.params.id), req.body.confirmed !== false);
+  if (r.error) return bad(res, r.error, r.code || 400);
+  res.json(r);
+});
+app.get('/api/admin/scores', auth.requireAuth, (req, res) => { if (req.user.role !== 'owner' && req.user.role !== 'teacher') return bad(res, 'この機能は先生とオーナー用です', 403); res.json(scores.overview()); });
 app.post('/api/me/tour-seen', auth.requireAuth, (req, res) => { onboard.markTour(req.user.id); res.json({ ok: true }); });
 app.post('/api/me/first-day', auth.requireAuth, (req, res) => {
   const r = onboard.finishFirstDay(req.user);
