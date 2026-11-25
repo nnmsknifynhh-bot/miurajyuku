@@ -216,7 +216,7 @@ app.get('/api/scores', auth.requireAuth, (req, res) => {
   if (!scores.canSee(req.user, id)) return bad(res, '自分（自分のお子さん）の成績だけ見られます', 403);
   const st = scores.target(id);
   if (!st) return bad(res, '生徒が見つかりません', 404);
-  res.json({ student: { id: st.id, name: st.name, grade: st.grade }, canEdit: scores.canEdit(req.user, st), canConfirm: req.user.role === 'owner' || req.user.role === 'teacher', records: scores.listFor(id), grades: scores.GRADES, termName: scores.TERM_NAME });
+  res.json({ student: { id: st.id, name: st.name, grade: st.grade }, canEdit: scores.canEdit(req.user, st), canConfirm: req.user.role === 'owner' || req.user.role === 'teacher', records: scores.listFor(id), grades: scores.GRADES, termName: scores.TERM_NAME, moshiTypes: scores.getTypes() });
 });
 app.post('/api/scores', auth.requireAuth, (req, res) => {
   const r = scores.save(req.user, req.body.userId ? Number(req.body.userId) : req.user.id, req.body || {});
@@ -240,7 +240,13 @@ app.post('/api/scores/:id/confirm', auth.requireAuth, (req, res) => {
   if (r.error) return bad(res, r.error, r.code || 400);
   res.json(r);
 });
-app.get('/api/admin/scores', auth.requireAuth, (req, res) => { if (req.user.role !== 'owner' && req.user.role !== 'teacher') return bad(res, 'この機能は先生とオーナー用です', 403); res.json(scores.overview()); });
+app.put('/api/admin/moshi-types', auth.requireAuth, (req, res) => {
+  if (req.user.role !== 'owner') return bad(res, 'オーナーの機能です', 403);
+  const r = scores.setTypes(req.body.types, req.user.id);
+  if (r.error) return bad(res, r.error);
+  res.json(r);
+});
+app.get('/api/admin/scores', auth.requireAuth, (req, res) => { if (req.user.role !== 'owner' && req.user.role !== 'teacher') return bad(res, 'この機能は先生とオーナー用です', 403); res.json({ ...scores.overview(), moshiTypes: scores.getTypes(), defaultLevels: scores.DEFAULT_LEVELS, canEditTypes: req.user.role === 'owner' }); });
 app.post('/api/me/tour-seen', auth.requireAuth, (req, res) => { onboard.markTour(req.user.id); res.json({ ok: true }); });
 app.post('/api/me/first-day', auth.requireAuth, (req, res) => {
   const r = onboard.finishFirstDay(req.user);

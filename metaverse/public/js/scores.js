@@ -10,6 +10,17 @@
   const SUB4 = ['音楽', '美術', '保健体育', '技術家庭'];
   const NINE = ['国語', '社会', '数学', '理科', '英語', ...SUB4];
   const isJH = (g) => /^中/.test(g || '');
+  // 志望校の判定の表示（例：〇〇高校 A判定（80%））
+  const judgeText = (j) => `${j.school} ${j.judge ? `${j.judge}判定${j.pct != null ? `（${j.pct}%）` : ''}` : j.below != null ? `判定なし（${j.below}%未満）` : '–'}`;
+  // 合計の偏差値から判定（サーバーと同じ決め方。入れている途中に見せる）
+  function judgeOf(type, school, dev) {
+    const sc = type && type.schools.find(x => x.name === school);
+    if (!sc) return null;
+    if (dev == null || dev === '' || !Number.isFinite(Number(dev))) return { school, judge: null, pct: null };
+    for (const l of type.levels) { const t = sc.devs[l.name]; if (t != null && Number(dev) >= t) return { school, judge: l.name, pct: l.pct }; }
+    const last = type.levels[type.levels.length - 1];
+    return { school, judge: null, pct: null, below: last ? last.pct : null };
+  }
   const fmt = (n) => n == null ? '–' : String(n);
   const diffEl = (cur, prev) => {
     if (cur == null || prev == null) return null;
@@ -108,7 +119,7 @@
       foot.append(el('td', 'num', r.kind === 'moshi' ? fmt(r.totalDev) : r.kind === 'teiki' ? (r.rank ? `${r.rank}位${r.rankOf ? `/${r.rankOf}人` : ''}` : '') : ''));
       t.append(foot); c.append(t);
       if (r.kind === 'naishin') c.append(el('p', 'sr-sub', isJH(r.grade) ? `5教科 ${fmt(r.sum.total5)}・9教科 ${fmt(r.sum.total)}` : `評定平均 ${fmt(r.sum.average)}`));
-      if (r.kind === 'moshi' && r.judges && r.judges.length) c.append(el('p', 'sr-sub', '🏫 ' + r.judges.map(j => `${j.school} ${j.judge || '–'}判定`).join('・')));
+      if (r.kind === 'moshi' && r.judges && r.judges.length) c.append(el('p', 'sr-sub', '🏫 ' + r.judges.map(judgeText).join('・')));
       const acts = el('div', 'sr-acts');
       if (data.canEdit) {
         const e = el('button', 'btn small secondary', '直す'); e.type = 'button'; e.onclick = () => { editing = r; render(); };
@@ -132,21 +143,31 @@
       const row = el('div', 'gb-row');
       const gs = el('select'); grades.forEach(g => gs.append(new Option(g, g))); gs.value = g0;
       row.append(gs);
-      let ts, title, past, day;
+      let ts, title, past, day, tsel, round;
+      const types = data.moshiTypes || [];
       if (kind !== 'moshi') { ts = el('select'); (kind === 'teiki' ? TEIKI : NAISHIN).forEach(([v, n]) => ts.append(new Option(n, v))); if (r.term) ts.value = r.term; row.append(ts); }
       else {
-        title = el('input'); title.placeholder = '模試の名前（例：11月 県模試・2015年度 第3回）'; title.maxLength = 40; title.value = r.title || '';
+        // 模試の種類：オーナーが登録したものからえらぶ（登録がないとき・先生は「その他」で名前を入れられる）
+        tsel = el('select'); tsel.append(new Option('模試をえらぶ', ''));
+        types.forEach(t => tsel.append(new Option(t.name, t.id)));
+        const other = !types.length || data.canConfirm;
+        if (other) tsel.append(new Option('その他（名前を入れる）', '_other'));
+        tsel.value = r.typeId && types.some(t => t.id === r.typeId) ? r.typeId : r.id && !r.typeId ? (other ? '_other' : '') : !types.length ? '_other' : types.length === 1 ? types[0].id : '';
+        round = el('input'); round.placeholder = '何回目・何年度（例：第3回・2015年度 第1回）'; round.maxLength = 30; round.value = r.round || '';
+        title = el('input'); title.placeholder = '模試の名前'; title.maxLength = 40; title.value = r.typeId ? '' : (r.title || '');
         day = el('input'); day.type = 'date'; day.value = r.takenOn || '';
         const pl = el('label', 'sr-check'); past = el('input'); past.type = 'checkbox'; past.checked = !!r.past; pl.append(past, document.createTextNode(' 📚 過去問'));
-        row.append(title, day, pl);
+        row.append(tsel, title, round, day, pl);
       }
       f.append(el('h3', null, (r.id ? '直す：' : '入れる：') + (KINDS.find(k => k[0] === kind)[1])), row);
       // 教科（前に入れたものと同じ教科から始める）
       const last = [...data.records].reverse().find(x => x.kind === kind);
       const names = r.subjects ? r.subjects : (last ? last.subjects.map(s => ({ name: s.name, max: s.max })) : (kind === 'naishin' ? (isJH(g0) ? NINE : FIVE) : kind === 'moshi' && !isJH(g0) ? ['国語', '数学', '英語'] : FIVE).map(name => ({ name })));
-      const list = el('div', 'sr-rows' + (kind === 'naishin' ? ' n' : '')), rows = [];
+      // 満点はふつう100点なので、かくしておく（「満点を変える」で出す）
+      let showMax = kind !== 'naishin' && names.some(x => x.max && x.max !== 100);
+      const list = el('div', 'sr-rows' + (kind === 'naishin' ? ' n' : showMax ? '' : ' nomax')), rows = [];
       const head = el('div', 'sr-row sr-row-h'); head.append(el('span', null, '教科'));
-      (kind === 'naishin' ? ['内申（1〜5）'] : kind === 'teiki' ? ['点数', '平均点', '満点'] : ['点数', '偏差値', '満点']).forEach(x => head.append(el('span', null, x)));
+      (kind === 'naishin' ? ['内申（1〜5）'] : kind === 'teiki' ? ['点数', '平均点', '満点'] : ['点数', '偏差値', '満点']).forEach(x => head.append(el('span', x === '満点' ? 'sr-max' : null, x)));
       head.append(el('span')); list.append(head);
       const numIn = (v, ph, step = 'any') => { const i = el('input'); i.type = 'number'; i.inputMode = 'decimal'; i.step = step; i.placeholder = ph; if (v != null) i.value = v; return i; };
       function addRow(s = {}) {
@@ -155,6 +176,7 @@
         rr.append(nm);
         if (kind === 'naishin') { o.v = numIn(s.value, '4', '1'); rr.append(o.v); }
         else { o.sc = numIn(s.score, '点'); o.x = numIn(kind === 'teiki' ? s.avg : s.dev, kind === 'teiki' ? '平均' : '偏差値'); o.max = numIn(s.max && s.max !== 100 ? s.max : null, '100'); rr.append(o.sc, o.x, o.max); }
+        if (o.max) o.max.classList.add('sr-max');
         const del = el('button', 'btn small secondary', '×'); del.type = 'button'; del.title = 'この教科をけす'; del.onclick = () => { rr.remove(); rows.splice(rows.indexOf(o), 1); };
         rr.append(del); list.append(rr); rows.push(o);
       }
@@ -162,6 +184,11 @@
       const more = el('div', 'gb-row');
       const plus = el('button', 'btn small secondary', '＋ 教科を足す'); plus.type = 'button'; plus.onclick = () => addRow();
       more.append(plus);
+      if (kind !== 'naishin') {
+        const mx = el('button', 'btn small secondary', showMax ? '満点をかくす' : '✏️ 満点を変える（100点でない教科）'); mx.type = 'button';
+        mx.onclick = () => { showMax = !showMax; list.classList.toggle('nomax', !showMax); mx.textContent = showMax ? '満点をかくす' : '✏️ 満点を変える（100点でない教科）'; };
+        more.append(mx);
+      }
       if (kind === 'teiki') { const s4 = el('button', 'btn small secondary', '＋ 副教科（音・美・保体・技家）'); s4.type = 'button'; s4.onclick = () => SUB4.filter(n => !rows.some(o => o.nm.value === n)).forEach(name => addRow({ name })); more.append(s4); }
       f.append(list, more);
       let rank, rankOf, tdev; const judges = [];
@@ -171,13 +198,38 @@
       }
       if (kind === 'moshi') {
         const rr = el('div', 'gb-row'); tdev = numIn(r.totalDev, '偏差値'); rr.append(el('span', null, '合計の偏差値'), tdev); f.append(rr);
-        f.append(el('small', 'muted', '志望校の判定（3つまで）'));
-        for (let i = 0; i < 3; i++) {
-          const j = (r.judges || [])[i] || {};
-          const jr = el('div', 'gb-row'); const sc = el('input'); sc.placeholder = `志望校${i + 1}`; sc.maxLength = 30; sc.value = j.school || '';
-          const js = el('select'); ['', 'A', 'B', 'C', 'D', 'E'].forEach(x => js.append(new Option(x ? `${x}判定` : '判定', x))); js.value = j.judge || '';
-          jr.append(sc, js); f.append(jr); judges.push([sc, js]);
+        const jbox = el('div', 'sr-judges'); f.append(jbox);
+        const typeOf = () => types.find(t => t.id === tsel.value) || null;
+        let picks = (r.judges || []).map(j => j.school);
+        function drawJudges() {
+          jbox.textContent = ''; judges.length = 0;
+          const t = typeOf();
+          title.hidden = tsel.value !== '_other'; round.hidden = tsel.value === '_other';
+          if (tsel.value === '_other') { // 自由な名前：判定も手で入れる
+            jbox.append(el('small', 'muted', '志望校の判定（3つまで）'));
+            for (let i = 0; i < 3; i++) {
+              const j = (r.judges || [])[i] || {};
+              const jr = el('div', 'gb-row'); const sc = el('input'); sc.placeholder = `志望校${i + 1}`; sc.maxLength = 30; sc.value = j.school || '';
+              const js = el('select'); ['', 'S', 'A', 'B', 'C', 'D', 'E'].forEach(x => js.append(new Option(x ? `${x}判定` : '判定', x))); js.value = j.judge || '';
+              jr.append(sc, js); jbox.append(jr); judges.push([sc, js]);
+            }
+            return;
+          }
+          if (!t) return;
+          if (!t.schools.length) { jbox.append(el('small', 'muted', 'この模試の志望校はまだ登録されていません（先生が登録すると、判定が自動で出ます）')); return; }
+          jbox.append(el('small', 'muted', '志望校をえらぶと、合計の偏差値から判定が自動で出ます（3つまで）'));
+          for (let i = 0; i < 3; i++) {
+            const jr = el('div', 'gb-row');
+            const sel = el('select'); sel.append(new Option(`志望校${i + 1}`, '')); t.schools.forEach(x => sel.append(new Option(x.name, x.name)));
+            sel.value = t.schools.some(x => x.name === picks[i]) ? picks[i] : '';
+            const out = el('b', 'sr-judge-out');
+            const upd = () => { picks[i] = sel.value; const j = sel.value ? judgeOf(t, sel.value, tdev.value) : null; out.textContent = j ? (j.judge ? `${j.judge}判定（${j.pct}%）` : j.below != null && tdev.value ? `判定なし（${j.below}%未満）` : '合計の偏差値を入れてね') : ''; };
+            sel.onchange = upd; upd(); jr.append(sel, out); jbox.append(jr); judges.push([sel, null, upd]);
+          }
         }
+        tsel.onchange = drawJudges;
+        tdev.addEventListener('input', () => judges.forEach(x => x[2] && x[2]()));
+        drawJudges();
       }
       const acts = el('div', 'gb-row');
       const save = el('button', 'btn', r.id ? '直す' : '保存する'); save.type = 'submit';
@@ -189,7 +241,12 @@
         const body = { kind, grade: gs.value, subjects: rows.map(o => kind === 'naishin' ? { name: o.nm.value, value: o.v.value } : { name: o.nm.value, score: o.sc.value, max: o.max.value, ...(kind === 'teiki' ? { avg: o.x.value } : { dev: o.x.value }) }) };
         if (userId) body.userId = userId;
         if (ts) body.term = ts.value;
-        if (kind === 'moshi') Object.assign(body, { title: title.value, past: past.checked, takenOn: day.value || null, totalDev: tdev.value, judges: judges.map(([a, b]) => ({ school: a.value, judge: b.value })) });
+        if (kind === 'moshi') {
+          Object.assign(body, { past: past.checked, takenOn: day.value || null, totalDev: tdev.value });
+          if (tsel.value === '_other') Object.assign(body, { title: title.value, judges: judges.map(([a, b]) => ({ school: a.value, judge: b.value })) });
+          else Object.assign(body, { typeId: tsel.value, round: round.value, schools: judges.map(([a]) => a.value).filter(Boolean) });
+          if (!tsel.value) { toast('模試をえらんでください'); return; }
+        }
         if (kind === 'teiki') Object.assign(body, { rank: rank.value, rankOf: rankOf.value });
         save.disabled = true;
         try {

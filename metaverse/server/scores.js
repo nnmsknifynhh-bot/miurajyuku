@@ -2,7 +2,7 @@
 // - 中学生・高校生だけ。生徒も先生も入れられる。生徒が入れたものは、先生が「確認ずみ」にできる（生徒が直すと確認はもどる）
 // - 生徒は自分の成績だけ、保護者は自分の子どもの成績だけ、先生・オーナーは全員を見られる
 // - ポイントはつけない
-const { db, now, audit } = require('./db');
+const { db, now, audit, getSetting, setSetting } = require('./db');
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS score_records (
@@ -39,19 +39,70 @@ function num(v, min, max, label) {
   return { v: Math.round(n * 10) / 10 };
 }
 
+// ───────── 模試の種類（オーナーが登録）：判定の段階（例 S 90%・A 80%…）と、志望校ごとの判定ラインの偏差値 ─────────
+const DEFAULT_LEVELS = [{ name: 'S', pct: 90 }, { name: 'A', pct: 80 }, { name: 'B', pct: 60 }, { name: 'C', pct: 40 }, { name: 'D', pct: 20 }];
+function getTypes() { try { const v = JSON.parse(getSetting('moshi_types', '[]')); return Array.isArray(v) ? v : []; } catch (e) { return []; } }
+function setTypes(list, actorId) {
+  if (!Array.isArray(list) || list.length > 30) return { error: '模試の種類は30個までです' };
+  const out = [], names = new Set();
+  for (const t of list) {
+    const name = clean(t && t.name, 30);
+    if (!name) return { error: '模試の名前を入れてください' };
+    if (names.has(name)) return { error: `「${name}」が2つあります` }; names.add(name);
+    const lv = Array.isArray(t.levels) && t.levels.length ? t.levels : DEFAULT_LEVELS;
+    if (lv.length > 8) return { error: `${name}：判定の段階は8つまでです` };
+    const levels = [], ln = new Set();
+    for (const l of lv) {
+      const n = clean(l && l.name, 4); if (!n) return { error: `${name}：判定の名前（S・Aなど）を入れてください` };
+      if (ln.has(n)) return { error: `${name}：判定「${n}」が2つあります` }; ln.add(n);
+      const pct = num(l.pct, 0, 100, `${name}の${n}判定の合格可能性`); if (pct.error) return pct;
+      levels.push({ name: n, pct: pct.v });
+    }
+    const schools = [], sn = new Set();
+    for (const sc of (Array.isArray(t.schools) ? t.schools : []).slice(0, 300)) {
+      const n = clean(sc && sc.name, 30); if (!n) continue;
+      if (sn.has(n)) return { error: `${name}：「${n}」が2つあります` }; sn.add(n);
+      const devs = {};
+      for (const l of levels) { const d = num(sc.devs && sc.devs[l.name], 20, 90, `${n}の${l.name}判定の偏差値`); if (d.error) return d; if (d.v != null) devs[l.name] = d.v; }
+      schools.push({ name: n, devs });
+    }
+    const id = /^m[0-9a-z]+$/.test(String(t.id || '')) ? String(t.id) : 'm' + Date.now().toString(36) + out.length;
+    out.push({ id, name, levels, schools });
+  }
+  setSetting('moshi_types', JSON.stringify(out));
+  audit(actorId, 'scores.moshi_types', null, { count: out.length });
+  return { ok: true, types: out };
+}
+/** 合計の偏差値から、その学校の判定（いちばん上の段階から順に、判定ラインをこえているか） */
+function judgeOf(type, schoolName, dev) {
+  const sc = type.schools.find(x => x.name === schoolName);
+  if (!sc) return null;
+  if (dev == null) return { school: schoolName, judge: null, pct: null };
+  for (const l of type.levels) { const t = sc.devs[l.name]; if (t != null && dev >= t) return { school: schoolName, judge: l.name, pct: l.pct }; }
+  const last = type.levels[type.levels.length - 1];
+  return { school: schoolName, judge: null, pct: null, below: last ? last.pct : null };
+}
+
 /** 入力をたしかめて、保存する形にする */
 function normalize(kind, body, gradeNow) {
   if (!['teiki', 'naishin', 'moshi'].includes(kind)) return { error: '種類をえらんでください' };
   const grade = body.grade || gradeNow;
   if (!isTarget(grade)) return { error: '学年をえらんでください（中1〜高3）' };
-  let term = null, title = null, past = 0, takenOn = null;
+  let term = null, title = null, past = 0, takenOn = null, type = null, round = null;
   if (kind !== 'moshi') {
     term = String(body.term || '');
     if (!TERMS[kind].includes(term)) return { error: kind === 'teiki' ? 'どのテストかえらんでください' : '学期をえらんでください' };
   } else {
-    title = clean(body.title, 40);
-    if (!title) return { error: '模試の名前を入れてください（例：11月 県模試）' };
     past = body.past ? 1 : 0;
+    if (body.typeId) { // オーナーが登録した模試（名前＋何回目・何年度）
+      type = getTypes().find(t => t.id === String(body.typeId));
+      if (!type) return { error: '模試の種類が見つかりません' };
+      round = clean(body.round, 30);
+      title = (type.name + (round ? ' ' + round : '')).slice(0, 60);
+    } else {
+      title = clean(body.title, 40);
+      if (!title) return { error: '模試をえらんでください' };
+    }
   }
   if (body.takenOn) { if (!RE_DAY.test(body.takenOn)) return { error: '日付が正しくありません' }; takenOn = body.takenOn; }
   const src = Array.isArray(body.subjects) ? body.subjects : [];
@@ -81,6 +132,18 @@ function normalize(kind, body, gradeNow) {
   }
   if (kind === 'moshi') {
     const d = num(body.totalDev, 10, 100, '合計の偏差値'); if (d.error) return d; data.totalDev = d.v;
+    if (type) { // 志望校をえらぶと、判定は合計の偏差値から自動で決まる
+      data.typeId = type.id; data.round = round;
+      const js = [];
+      for (const n of (Array.isArray(body.schools) ? body.schools : []).slice(0, 3)) {
+        if (!n) continue;
+        const j = judgeOf(type, String(n), data.totalDev);
+        if (!j) return { error: `「${n}」は、この模試の志望校の一覧にありません` };
+        if (!js.some(x => x.school === j.school)) js.push(j);
+      }
+      data.judges = js;
+      return { grade, term, title, past, takenOn, data };
+    }
     const judges = [];
     for (const j of (Array.isArray(body.judges) ? body.judges : []).slice(0, 5)) {
       const school = clean(j && j.school, 30), g = String((j && j.judge) || '').toUpperCase();
@@ -189,4 +252,4 @@ function overview() {
   for (const r of recs) { const s = by.get(r.userId); if (!s) continue; s.count++; if (!r.confirmed) s.unconfirmed++; if (!s.last) s.last = r; }
   return { students: [...by.values()], records: recs.filter(r => by.has(r.userId)).map(r => ({ ...r, name: by.get(r.userId).name, nowGrade: by.get(r.userId).grade })) };
 }
-module.exports = { GRADES, TERMS, TERM_NAME, JUDGES, normalize, summarize, listFor, canSee, canEdit, target, save, remove, confirm, overview, isTarget };
+module.exports = { getTypes, setTypes, judgeOf, DEFAULT_LEVELS, GRADES, TERMS, TERM_NAME, JUDGES, normalize, summarize, listFor, canSee, canEdit, target, save, remove, confirm, overview, isTarget };

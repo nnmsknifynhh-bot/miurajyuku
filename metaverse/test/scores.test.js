@@ -59,7 +59,7 @@ test('内申（学期ごと・9教科）と模試（本番・過去問はいく�
     r = await http('POST', '/api/scores', { kind: 'moshi', grade: '中2', title: `${2010 + i}年度 第1回`, past: true, subjects: S5([60, 60, 60, 60, 60]).map(s => ({ ...s, dev: 55 })), totalDev: 56 + i, judges: [{ school: '〇〇高校', judge: 'b' }] }, stu);
     assert.equal(r.status, 201, JSON.stringify(r.data));
   }
-  assert.match((await http('POST', '/api/scores', { kind: 'moshi', grade: '中2', title: '', subjects: S5([1, 1, 1, 1, 1]) }, stu)).data.error, /模試の名前/);
+  assert.match((await http('POST', '/api/scores', { kind: 'moshi', grade: '中2', title: '', subjects: S5([1, 1, 1, 1, 1]) }, stu)).data.error, /模試をえらんで/);
   assert.match((await http('POST', '/api/scores', { kind: 'moshi', grade: '中2', title: 'x', subjects: S5([1, 1, 1, 1, 1]), judges: [{ school: 'A高', judge: 'F' }] }, stu)).data.error, /A〜E/);
   r = await http('POST', '/api/scores', { kind: 'moshi', grade: '中2', title: '11月 県模試', takenOn: '2026-11-08', subjects: S5([70, 65, 80, 60, 75]), totalDev: 58.5, judges: [{ school: '〇〇高校', judge: 'A' }] }, stu);
   assert.equal(r.status, 201);
@@ -87,4 +87,28 @@ test('見られる人：本人・保護者（見るだけ）・先生。ほか�
   assert.ok(s.count >= 6 && s.unconfirmed >= 5);
   assert.ok(!o.students.some(x => x.name === 'sho5'), '小学生は出ない');
   assert.equal((await http('DELETE', `/api/scores/${id}`, null, stu)).status, 200, '本人は消せる');
+});
+
+test('模試の種類（オーナーが登録）：生徒はえらぶだけ。志望校をえらぶと、合計の偏差値から判定が自動で出る（S 90%・A 80%…）', async () => {
+  assert.equal((await http('PUT', '/api/admin/moshi-types', { types: [] }, stu)).status, 403);
+  assert.match((await http('PUT', '/api/admin/moshi-types', { types: [{ name: 'V模擬', schools: [{ name: 'A高', devs: { S: 120 } }] }] }, owner)).data.error, /20〜90/);
+  const r = await http('PUT', '/api/admin/moshi-types', { types: [{ name: 'V模擬', schools: [{ name: '〇〇高校', devs: { S: 65, A: 62, B: 59, C: 56, D: 53 } }, { name: '△△高校', devs: { S: 58, A: 55, B: 52, C: 49, D: 46 } }] }] }, owner);
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  const t = r.data.types[0];
+  assert.deepEqual(t.levels.map(l => `${l.name}${l.pct}`), ['S90', 'A80', 'B60', 'C40', 'D20'], 'はじめの判定の段階');
+  const d0 = (await http('GET', '/api/scores', null, stu)).data;
+  assert.equal(d0.moshiTypes[0].name, 'V模擬');
+  const S5 = ['国語', '数学', '英語', '理科', '社会'].map(name => ({ name, score: 70 }));
+  let s = await http('POST', '/api/scores', { kind: 'moshi', grade: '中2', typeId: t.id, round: '第3回', totalDev: 60.5, subjects: S5, schools: ['〇〇高校', '△△高校'] }, stu);
+  assert.equal(s.status, 201, JSON.stringify(s.data));
+  let rec = (await http('GET', '/api/scores', null, stu)).data.records.find(x => x.id === s.data.id);
+  assert.equal(rec.title, 'V模擬 第3回');
+  assert.deepEqual(rec.judges.map(j => `${j.school}:${j.judge}${j.pct}`), ['〇〇高校:B60', '△△高校:S90']);
+  assert.equal(rec.subjects[0].max, 100, '満点は入れなくても100点');
+  // 判定ラインに届かないとき
+  s = await http('POST', '/api/scores', { kind: 'moshi', grade: '中2', typeId: t.id, round: '第4回', totalDev: 50, subjects: S5, schools: ['〇〇高校'] }, stu);
+  rec = (await http('GET', '/api/scores', null, stu)).data.records.find(x => x.id === s.data.id);
+  assert.deepEqual(rec.judges[0], { school: '〇〇高校', judge: null, pct: null, below: 20 });
+  assert.match((await http('POST', '/api/scores', { kind: 'moshi', grade: '中2', typeId: t.id, totalDev: 50, subjects: S5, schools: ['ない高校'] }, stu)).data.error, /一覧にありません/);
+  assert.match((await http('POST', '/api/scores', { kind: 'moshi', grade: '中2', typeId: 'mxxx', subjects: S5 }, stu)).data.error, /見つかりません/);
 });

@@ -126,6 +126,12 @@ dialog::backdrop { background: rgba(30, 25, 40, .45); }
 .sr-row { display: grid; grid-template-columns: minmax(70px, 1.3fr) repeat(3, minmax(48px, 1fr)) 36px; gap: 4px; align-items: center; }
 .sr-row input { width: 100%; padding: 6px; font-size: 15px; box-sizing: border-box; }
 .sr-rows.n .sr-row { grid-template-columns: minmax(90px, 2fr) minmax(60px, 1fr) 36px; }
+.sr-rows.nomax .sr-row { grid-template-columns: minmax(70px, 1.3fr) repeat(2, minmax(48px, 1fr)) 36px; }
+.sr-rows.nomax .sr-max { display: none; }
+.sr-type { border: 2px solid #eee3d3; border-radius: 12px; padding: 8px 12px; margin-bottom: 8px; display: grid; gap: 8px; }
+.sr-type summary { font-weight: 700; cursor: pointer; }
+.sr-judges { display: grid; gap: 6px; }
+.sr-judge-out { color: #2f5f9e; font-size: 15px; }
 .sr-row-h { font-size: 12px; color: #7a6a5a; font-weight: 700; }
 .sr-wait-note { font-weight: 700; color: #8a5a00; }
 .sr-wait-cell { color: #8a5a00; font-weight: 700; }
