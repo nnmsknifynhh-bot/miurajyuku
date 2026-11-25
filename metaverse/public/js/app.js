@@ -31,6 +31,7 @@
     $('#me-role').className = 'badge ' + u.role;
     document.body.classList.add(u.role === 'student' ? 'is-student' : u.role === 'parent' ? 'is-parent' : 'is-staff');
     if (!/^[中高][1-3]$/.test(u.grade || '')) $('#menu-scores').style.display = 'none'; // 📊 成績は中学生・高校生だけ
+    if (!/^中[1-3]$/.test(u.grade || '')) $('#menu-prep').style.display = 'none'; // 📋 テスト対策は中学生だけ
     if (state.trial) { $('#me-role').textContent = '体験'; document.body.classList.add('is-trial'); try { localStorage.setItem('juku-trial-until', String(state.trial.until)); } catch (e) {} }
     mapCanvas = window.Render.buildMap();
     state.zoom = autoZoom();
@@ -710,6 +711,13 @@
       const fbox = el('div', 'foot-box'); fbox.hidden = true;
       fb.onclick = async () => { if (!fbox.hidden) { fbox.hidden = true; return; } fbox.hidden = false; await drawFootprints(fbox, k.id); };
       card.append(fb, fbox);
+      // 📋 テスト対策（中学生）：見るだけ
+      if (/^中[1-3]$/.test(k.grade || '')) {
+        const pb = el('button', 'btn secondary small', '📋 テスト対策'); pb.type = 'button';
+        const pbox = el('div', 'foot-box'); pbox.hidden = true;
+        pb.onclick = () => { pbox.hidden = !pbox.hidden; if (!pbox.hidden) window.Prep.mount(pbox, { api, toast, userId: k.id }); };
+        card.append(pb, pbox);
+      }
       // 📊 成績（中学生・高校生）：見るだけ
       if (/^[中高][1-3]$/.test(k.grade || '')) {
         const sb = el('button', 'btn secondary small', '📊 成績（テスト・内申・模試）'); sb.type = 'button';
@@ -1700,13 +1708,17 @@
     if (r.missing.length) lines.push(`✏️ ${r.missing.map(m => m.termName).join('・')}の成績を入れてね`);
     chip.textContent = lines.join('\n'); chip.style.whiteSpace = 'pre-line'; chip.hidden = !lines.length;
     chip.classList.toggle('urgent', !!(c && (c.during || c.days <= 7)));
+    chip.dataset.prep = c && (c.during || c.days <= 35) && !r.missing.length ? '1' : '';
+    // 📋 テスト対策の遅れ（中学生）
+    if (c && /^中[1-3]$/.test(state.user.grade || '') && c.days <= 35) { try { const p = await api('GET', '/api/prep'); if (p.counts && p.counts.late) { chip.textContent += `\n⚠️ テスト対策の遅れ ${p.counts.late}`; chip.classList.add('urgent'); } } catch (e) { /* なし */ } }
     // 入れ忘れは、1日1回お知らせも出す
     const key = r.missing.map(m => m.grade + m.term).join(',') + '|' + new Date().toDateString();
     if (r.missing.length && remindShown !== key) { remindShown = key; setTimeout(() => toast(`✏️ ${r.missing.map(m => m.termName).join('・')}テストの成績を入れてね（右上のメニュー →「📊 成績」）`, 7000), 4000); }
   }
   setInterval(refreshTestChip, 30 * 60_000);
   if (window.Scores) window.Scores.onChange = refreshTestChip;
-  $('#test-chip').onclick = () => { window.Scores.mount($('#scores-box'), { api, toast }); $('#scores-dialog').showModal(); };
+  // 中学生でテストが近いときはテスト対策、それ以外（成績の入れ忘れ・高校生）は成績の画面
+  $('#test-chip').onclick = () => { if (/^中[1-3]$/.test(state.user.grade || '') && $('#test-chip').dataset.prep === '1') openPrep(); else { window.Scores.mount($('#scores-box'), { api, toast }); $('#scores-dialog').showModal(); } };
   // 🎯 小学生：今日の目標時間（あと何分かは自分にだけ見える）
   async function refreshGoal() {
     if (!state.user || state.user.role !== 'student') return;
@@ -2013,6 +2025,10 @@
   // 📊 成績（中学生・高校生）
   $('#menu-scores').onclick = () => { $('#me-menu').hidden = true; window.Scores.mount($('#scores-box'), { api, toast }); $('#scores-dialog').showModal(); };
   $('#scores-close').onclick = () => { $('#scores-dialog').close(); refreshTestChip(); };
+  // 📋 テスト対策（中学生）
+  const openPrep = () => { window.Prep.mount($('#prep-box'), { api, toast }); $('#prep-dialog').showModal(); };
+  $('#menu-prep').onclick = () => { $('#me-menu').hidden = true; openPrep(); };
+  $('#prep-close').onclick = () => { $('#prep-dialog').close(); refreshTestChip(); };
   $('#menu-forest').onclick = () => { $('#me-menu').hidden = true; state.gb.openForest(null); };
   setInterval(() => { if (state.gb && document.visibilityState === 'visible') state.gb.refreshForest(); }, 60000);
   const treePos = (i) => { const f = SM.FOREST[i]; return { x: (f.x + 1) * T, y: (f.y + 1) * T - 6 }; };

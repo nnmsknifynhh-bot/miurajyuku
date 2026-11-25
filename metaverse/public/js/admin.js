@@ -41,11 +41,12 @@
     if (tab === 'kanken') window.AdminKanken.load($('#tab-kanken'), { api, toast });
     if (tab === 'reading') window.AdminReading.load($('#tab-reading'), { api, toast });
     if (tab === 'scores') window.AdminScores.load($('#tab-scores'), { api, toast });
+    if (tab === 'prep') window.AdminPrep.load($('#tab-prep'), { api, toast });
   }
 
   // ═════════ ユーザー ═════════
   async function loadUsers() {
-    try { users = (await api('GET', '/api/admin/users')).users; renderUsers(); }
+    try { users = (await api('GET', '/api/admin/users')).users; window.__users = users; renderUsers(); }
     catch (e) { toast(e.message); }
   }
 
@@ -83,7 +84,7 @@
       if (u.locked) name.append(el('span', 'badge off', '🔒 ロック中'));
       if (u.trialUntil) name.append(el('span', 'badge trial', u.trialUntil > Date.now() ? `🎈 体験中（${new Date(u.trialUntil).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', timeZone: 'Asia/Tokyo' })}まで）` : '🎈 体験おわり'));
       if (u.referrer) name.append(el('span', 'badge', `🤝 紹介：${u.referrer.name}${u.referrer.role === 'parent' ? '（保護者）' : ''}`));
-      const sub = [`ID: ${u.loginId}`, ...(u.role === "student" ? [`学年: ${u.grade || "未設定"}`] : []), ...(u.classDays && u.classDays.length ? [`🏫 授業 ${u.classDays.map(i => '日月火水木金土'[i]).join('・')}`] : []), ...(u.visitDays && u.visitDays.length ? [`📅 ${u.visitDays.map(i => '日月火水木金土'[i]).join('・')} ${u.visitTime}〜`] : []), ...(u.birthday ? [`🎂 ${Number(u.birthday.slice(0, 2))}月${Number(u.birthday.slice(3))}日${u.birthdayPublic ? '' : '（先生だけ）'}`] : []), `ログイン中の端末: ${u.activeSessions}`];
+      const sub = [`ID: ${u.loginId}`, ...(u.role === "student" ? [`学年: ${u.grade || "未設定"}`] : []), ...(u.school ? [`🏫 ${u.school}`] : []), ...(u.classDays && u.classDays.length ? [`🏫 授業 ${u.classDays.map(i => '日月火水木金土'[i]).join('・')}`] : []), ...(u.visitDays && u.visitDays.length ? [`📅 ${u.visitDays.map(i => '日月火水木金土'[i]).join('・')} ${u.visitTime}〜`] : []), ...(u.birthday ? [`🎂 ${Number(u.birthday.slice(0, 2))}月${Number(u.birthday.slice(3))}日${u.birthdayPublic ? '' : '（先生だけ）'}`] : []), `ログイン中の端末: ${u.activeSessions}`];
       if (u.role === 'teacher') sub.push('担当: ' + (u.rooms.length ? u.rooms.map(roomName).join('・') : 'なし'));
       info.append(name, el('div', 'sub', sub.join('　')));
       const actions = el('div', 'actions');
@@ -194,6 +195,9 @@
       lab.append(cb, document.createTextNode(w)); vbox.append(lab);
     });
     $('#f-vtime').value = u && u.visitTime ? u.visitTime : '';
+    // 学校名（ほかの生徒の学校名から選べる）
+    $('#f-school').value = u && u.school ? u.school : '';
+    { const dl = $('#school-list'); dl.textContent = ''; [...new Set((window.__users || []).map(x => x.school).filter(Boolean))].sort().forEach(n => dl.append(new Option(n, n))); }
     // 授業の曜日
     const cbox = $('#f-cdays'); cbox.textContent = '';
     ['日', '月', '火', '水', '木', '金', '土'].forEach((w, i) => {
@@ -212,6 +216,7 @@
     $('#perms-field').hidden = role === 'parent';
     $('#bday-field').hidden = role !== 'student';
     $('#class-field').hidden = role !== 'student';
+    $('#school-field').hidden = role !== 'student';
     $('#visit-field').hidden = role !== 'student' || !/^高[123]$/.test(($('#f-grade') || {}).value || '');
     const isOwner = role === 'owner';
     $('#rooms-field').hidden = role !== 'teacher';
@@ -258,6 +263,7 @@
       body.birthday = m ? `${m}-${d}` : null;
       body.birthdayPublic = $('#f-bpublic').checked;
       body.classDays = [...document.querySelectorAll('#f-cdays input:checked')].map(cb => Number(cb.value));
+      body.school = $('#f-school').value.trim() || null;
       if (/^高[123]$/.test(body.grade || '')) {
         const days = [...document.querySelectorAll('#f-vdays input:checked')].map(cb => Number(cb.value));
         const t = $('#f-vtime').value;

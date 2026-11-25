@@ -21,6 +21,7 @@ const myseat = require('./myseat');
 const SchoolMap = require('../public/shared/map.js');
 const kanken = require('./kanken');
 const scores = require('./scores');
+const prep = require('./prep');
 
 const PORT = Number(process.env.PORT || 3000);
 const app = express();
@@ -83,10 +84,13 @@ function publicUser(u) {
     birthday: u.birthday || null, birthdayPublic: u.birthday_public === undefined ? true : !!u.birthday_public,
     visitDays: u.visit_days ? u.visit_days.split(',').map(Number) : [], visitTime: u.visit_time || null,
     classDays: u.class_days ? u.class_days.split(',').map(Number) : [],
+    school: u.school || null,
     trialUntil: u.trial_until || null,
     hair: u.staff_hair || null, // 先生・オーナーの髪型
   };
 }
+// 学校名（全角・半角のスペースをそろえる）
+const cleanSchool = (s) => { const v = String(s == null ? '' : s).replace(/[\u0000-\u001f\u007f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 30); return v || null; };
 function listRooms(user) {
   return db.prepare('SELECT id, name, type, capacity, max_capacity FROM rooms ORDER BY sort_order').all()
     .map(r => ({ id: r.id, name: r.name, type: r.type, capacity: r.capacity, maxCapacity: r.max_capacity, canEnter: canEnterRoom(user, r) }));
@@ -221,6 +225,48 @@ app.get('/api/scores', auth.requireAuth, (req, res) => {
 app.put('/api/scores/test-date', auth.requireAuth, (req, res) => {
   const r = scores.setTestDate(req.user, req.body.userId ? Number(req.body.userId) : req.user.id, req.body || {});
   if (r.error) return bad(res, r.error, r.code || 400);
+  res.json(r);
+});
+// ═════════ 📋 テスト対策（中学生） ═════════
+const staffOnly = (req, res) => { if (req.user.role !== 'owner' && req.user.role !== 'teacher') { bad(res, 'この機能は先生とオーナー用です', 403); return false; } return true; };
+app.get('/api/prep', auth.requireAuth, (req, res) => {
+  const id = req.query.userId ? Number(req.query.userId) : req.user.id;
+  if (!scores.canSee(req.user, id)) return bad(res, '自分（自分のお子さん）の分だけ見られます', 403);
+  const r = prep.scheduleFor(id, ganbari.jst().day);
+  if (!r) return bad(res, '生徒が見つかりません', 404);
+  res.json({ ...r, canCheck: req.user.role === 'owner' || req.user.role === 'teacher' });
+});
+app.post('/api/prep/check', auth.requireAuth, (req, res) => {
+  const r = prep.setCheck(req.user, req.body || {});
+  if (r.error) return bad(res, r.error, r.code || 400);
+  res.json(r);
+});
+app.get('/api/admin/prep', auth.requireAuth, (req, res) => {
+  if (!staffOnly(req, res)) return;
+  const today = ganbari.jst().day;
+  res.json({
+    template: prep.templateText(), items: prep.parseTemplate(prep.templateText()).items, schoolTests: prep.schoolTests(), overview: prep.overview(today), today,
+    schools: db.prepare("SELECT school AS name, COUNT(*) AS n FROM users WHERE role = 'student' AND is_active = 1 AND school IS NOT NULL AND grade IN ('中1', '中2', '中3') GROUP BY school ORDER BY school").all(),
+    units: db.prepare("SELECT DISTINCT title FROM reading_units WHERE active = 1 AND grade IN ('中1', '中2', '中3') ORDER BY title").all().map(r => r.title),
+    subjects: [...new Set(prep.parseTemplate(prep.templateText()).items.map(i => i.subject))], terms: prep.TERM_NAME, defaultTemplate: prep.DEFAULT_TEMPLATE,
+  });
+});
+app.put('/api/admin/prep/template', auth.requireAuth, (req, res) => {
+  if (!staffOnly(req, res)) return;
+  const r = prep.setTemplate(req.body.text, req.user.id);
+  if (r.error) return bad(res, r.error);
+  res.json(r);
+});
+app.put('/api/admin/prep/school-test', auth.requireAuth, (req, res) => {
+  if (!staffOnly(req, res)) return;
+  const r = prep.setSchoolTest(req.body || {}, req.user.id);
+  if (r.error) return bad(res, r.error);
+  res.json(r);
+});
+app.get('/api/admin/prep/sw', auth.requireAuth, (req, res) => {
+  if (!staffOnly(req, res)) return;
+  const r = prep.swTable(String(req.query.school || ''), String(req.query.grade || ''), String(req.query.term || ''), ganbari.jst().day);
+  if (!r) return bad(res, '日程が見つかりません', 404);
   res.json(r);
 });
 app.get('/api/scores/reminder', auth.requireAuth, (req, res) => res.json(scores.reminder(req.user, ganbari.jst().day)));
@@ -788,7 +834,7 @@ admin.post('/users', requireOwner, (req, res) => {
       .run(loginId, displayName, role, auth.hashPassword(b.password), color, now(), now());
     const id = Number(r.lastInsertRowid);
     if (grade) db.prepare('UPDATE users SET grade = ? WHERE id = ?').run(grade, id);
-    if (role === 'student') db.prepare('UPDATE users SET birthday = ?, birthday_public = ?, visit_days = ?, visit_time = ?, class_days = ? WHERE id = ?').run(birthday, b.birthdayPublic === false ? 0 : 1, visit.days, visit.time, classDays, id);
+    if (role === 'student') db.prepare('UPDATE users SET birthday = ?, birthday_public = ?, visit_days = ?, visit_time = ?, class_days = ?, school = ? WHERE id = ?').run(birthday, b.birthdayPublic === false ? 0 : 1, visit.days, visit.time, classDays, cleanSchool(b.school), id);
     applyPermissionsAndRooms(id, role, b.permissions, b.rooms);
     return id;
   });
@@ -836,6 +882,10 @@ admin.patch('/users/:id', requireOwner, (req, res) => {
       const v = ganbari.normVisit(b.visitDays, b.visitTime);
       if (!v) return '来る曜日と時刻が正しくありません（曜日をえらんだら時刻も入れてください）';
       db.prepare('UPDATE users SET visit_days = ?, visit_time = ? WHERE id = ?').run(v.days, v.time, id); changes.push('visit');
+    }
+    if (b.school !== undefined) {
+      if (target.role !== 'student') return '学校名は生徒だけに設定できます';
+      db.prepare('UPDATE users SET school = ? WHERE id = ?').run(cleanSchool(b.school), id); changes.push('school');
     }
     if (b.classDays !== undefined) {
       if (target.role !== 'student') return '授業の曜日は生徒だけに設定できます';

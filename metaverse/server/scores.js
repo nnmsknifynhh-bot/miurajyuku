@@ -258,9 +258,9 @@ function overview() {
 const COUNTDOWN_DAYS = 60;   // 何日前からカウントダウンを出すか
 const REMIND_AFTER = 14;     // テストが終わって何日たったら「成績を入れてね」
 const dayNum = (d) => Math.round(Date.parse(d + 'T00:00:00Z') / 86400e3);
+// 塾が入れた学校の日程（テスト対策）を先に使い、ないテストだけ生徒が入れた日
 function testDates(userId) {
-  return db.prepare('SELECT grade, term, start_day AS start, end_day AS end FROM score_test_dates WHERE user_id = ?').all(userId)
-    .map(r => ({ ...r, termName: TERM_NAME[r.term] })).sort((a, b) => a.start.localeCompare(b.start));
+  return require('./prep').datesFor(userId).map(({ st, ...d }) => d);
 }
 function setTestDate(actor, studentId, b) {
   const st = target(studentId);
@@ -269,6 +269,8 @@ function setTestDate(actor, studentId, b) {
   const grade = b.grade || st.grade, term = String(b.term || '');
   if (!isTarget(grade)) return { error: '学年をえらんでください' };
   if (!TERMS.teiki.includes(term)) return { error: 'どのテストかえらんでください' };
+  const su = db.prepare('SELECT school FROM users WHERE id = ?').get(st.id);
+  if (require('./prep').jukuHas({ school: su && su.school }, grade, term)) return { error: 'このテストの日は、塾で設定しています' };
   if (!b.start) { db.prepare('DELETE FROM score_test_dates WHERE user_id = ? AND grade = ? AND term = ?').run(st.id, grade, term); return { ok: true }; }
   if (!RE_DAY.test(b.start) || (b.end && !RE_DAY.test(b.end))) return { error: '日付が正しくありません' };
   const end = b.end && b.end !== b.start ? b.end : null;
