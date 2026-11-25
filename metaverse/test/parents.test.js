@@ -152,7 +152,7 @@ test('見たよスタンプ：わが子にだけ・1日1回・花が咲く・子
   U.kid.c.s.disconnect(); await sleep(400);
   const k2 = await connect(U.kid.cookie); await sleep(150);
   const cheer = k2.events.find(e => e.ev === 'cheer');
-  assert.deepEqual(cheer.d.stamps, [stamp]);
+  assert.deepEqual(cheer.d.stamps, [{ stamp, from: null }], '呼び名をえらぶまでは「おうちの人」');
   k2.s.disconnect(); await sleep(400);
   const k3 = await connect(U.kid.cookie); await sleep(150);
   assert.ok(!k3.events.some(e => e.ev === 'cheer'));
@@ -293,4 +293,31 @@ test('📝 先生の黒板：先生・オーナーだけが書ける・消せる
   assert.equal((await http('GET', '/api/blackboard', null, U.kid.cookie)).data.board.text, 'テスト前、ラストスパート！');
   await http('PUT', '/api/blackboard', { text: '' }, owner);
   assert.equal((await http('GET', '/api/blackboard', null, U.kid.cookie)).data.board, null);
+});
+
+test('保護者の呼び名（👨 パパ など）：子どもの画面のスタンプに出る。保護者が家族を招待できる', async () => {
+  const { db } = require('../server/db.js');
+  const P = require('../server/parents.js');
+  const owner = (await http('POST', '/api/login', { loginId: 'owner', password: 'ownerpass1' })).cookie;
+  const par = db.prepare("SELECT u.id, u.login_id FROM users u JOIN parent_children pc ON pc.parent_id = u.id WHERE u.role = 'parent' AND u.is_active = 1 LIMIT 1").get();
+  const kidId = db.prepare('SELECT student_id FROM parent_children WHERE parent_id = ?').get(par.id).student_id;
+  // 呼び名をえらぶ（その他は8文字まで）
+  assert.equal(P.normLabel('👨 パパ'), '👨 パパ');
+  assert.equal(P.normLabel('おねえちゃんだよだよ'), '🏠 おねえちゃんだよ');
+  assert.equal(P.normLabel(''), null);
+  assert.equal((await http('PATCH', `/api/admin/users/${par.id}`, { parentLabel: '👨 パパ' }, owner)).status, 200);
+  db.prepare("INSERT INTO parent_cheers (parent_id, student_id, day, stamp, created_at) VALUES (?, ?, '2099-01-01', '💪 その調子', datetime('now'))").run(par.id, kidId);
+  assert.deepEqual(P.takeCheers(kidId).at(-1), { stamp: '💪 その調子', from: '👨 パパ' });
+  assert.equal(P.parentsOf(kidId).find(x => x.id === par.id).label, '👨 パパ');
+  // 保護者が家族の招待コードを作る（自分の子どもだけ）
+  const auth = require('../server/auth.js');
+  const s = auth.createSession(par.id, { headers: {}, ip: '127.0.0.1', socket: {} });
+  const pc = `juku_sid=${s.token}`;
+  const me = (await http('GET', '/api/me', null, pc));
+  assert.equal(me.status, 200);
+  assert.equal(me.data.user.parentLabel, '👨 パパ');
+  const inv = await http('POST', '/api/parent/invite', { studentId: kidId }, pc);
+  assert.equal(inv.status, 200, JSON.stringify(inv.data)); assert.match(inv.data.code, /^[A-Z0-9]{4}-[A-Z0-9]{4}$/);
+  assert.equal((await http('POST', '/api/parent/invite', { studentId: 999999 }, pc)).status, 403);
+  assert.equal((await http('POST', '/api/parent/label', { label: '👵 おばあちゃん' }, pc)).data.label, '👵 おばあちゃん');
 });

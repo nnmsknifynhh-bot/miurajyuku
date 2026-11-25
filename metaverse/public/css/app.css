@@ -500,3 +500,12 @@ body.is-parent #btn-family, body.is-parent #btn-pquiz { display: none !important
 .kid-chip[hidden] { display: none !important; }
 .hud-top { align-items: flex-start; }
 .hud-top .me-btn { align-self: flex-start; }
+
+.plabel-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
+.family-invite-box { display: grid; gap: 6px; }
+.family-code { white-space: pre-wrap; font-size: 13px; background: #f7f3ec; border-radius: 10px; padding: 8px 10px; margin: 0; font-family: inherit; }
+#family-label select, #family-label input { min-width: 0; }
+#plabel-dialog { width: min(420px, 92vw); max-width: 92vw; box-sizing: border-box; }
+#plabel-dialog .dialog-body { box-sizing: border-box; }
+#plabel-dialog .btn { min-width: 0; width: 100%; padding-left: 6px; padding-right: 6px; }
+#plabel-dialog .dialog-actions .btn { width: auto; }

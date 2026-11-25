@@ -85,6 +85,7 @@ function publicUser(u) {
     visitDays: u.visit_days ? u.visit_days.split(',').map(Number) : [], visitTime: u.visit_time || null,
     classDays: u.class_days ? u.class_days.split(',').map(Number) : [],
     school: u.school || null,
+    parentLabel: u.parent_label || null, // 保護者の呼び名
     trialUntil: u.trial_until || null,
     hair: u.staff_hair || null, // 先生・オーナーの髪型
   };
@@ -489,6 +490,20 @@ app.post('/api/parent/birthday', auth.requireAuth, requireParent, (req, res) => 
   if (bd === undefined) return bad(res, '誕生日が正しくありません');
   db.prepare('UPDATE users SET birthday = ?, updated_at = ? WHERE id = ?').run(bd, now(), req.user.id);
   res.json({ ok: true, birthday: bd });
+});
+// 保護者の呼び名（子どもの画面に「👨 パパから：…」と出る）
+app.post('/api/parent/label', auth.requireAuth, requireParent, (req, res) => {
+  const v = parents.normLabel(req.body.label);
+  db.prepare('UPDATE users SET parent_label = ?, updated_at = ? WHERE id = ?').run(v, now(), req.user.id);
+  res.json({ ok: true, label: v });
+});
+// 保護者が家族（パパ・おばあちゃんなど）を招待：自分の子どもの招待コードを作る
+app.post('/api/parent/invite', auth.requireAuth, requireParent, (req, res) => {
+  const sid = Number(req.body.studentId);
+  if (!parents.childIds(req.user.id).has(sid)) return bad(res, '自分のお子さんの招待コードだけ作れます', 403);
+  const r = parents.createInvite(sid, req.user.id);
+  if (r.error) return bad(res, r.error);
+  res.json(r);
 });
 app.post('/api/parent/cheer', auth.requireAuth, requireParent, (req, res) => {
   const r = parents.sendCheer(req.user.id, Number(req.body.studentId), String(req.body.stamp || ''));
@@ -897,6 +912,10 @@ admin.patch('/users/:id', requireOwner, (req, res) => {
         db.prepare('UPDATE users SET birthday = ? WHERE id = ?').run(bd, id); changes.push('birthday');
       }
       if (b.birthdayPublic !== undefined) { db.prepare('UPDATE users SET birthday_public = ? WHERE id = ?').run(b.birthdayPublic ? 1 : 0, id); changes.push('birthdayPublic'); }
+    }
+    if (b.parentLabel !== undefined) {
+      if (target.role !== 'parent') return '呼び名は保護者だけに設定できます';
+      db.prepare('UPDATE users SET parent_label = ? WHERE id = ?').run(parents.normLabel(b.parentLabel), id); changes.push('parentLabel');
     }
     if (b.visitDays !== undefined) {
       if (target.role !== 'student') return '来る曜日は生徒だけに設定できます';

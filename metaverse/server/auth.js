@@ -56,7 +56,7 @@ function readCookie(req, name) {
 
 // ユーザーを権限・担当教室付きで読み込む
 function loadUser(id) {
-  const u = db.prepare('SELECT id, login_id, display_name, role, avatar_color, staff_hair, grade, birthday, birthday_public, visit_days, visit_time, class_days, school, trial_until, is_active, created_at, updated_at FROM users WHERE id = ?').get(id);
+  const u = db.prepare('SELECT id, login_id, display_name, role, avatar_color, staff_hair, grade, birthday, birthday_public, visit_days, visit_time, class_days, school, parent_label, trial_until, is_active, created_at, updated_at FROM users WHERE id = ?').get(id);
   if (!u) return null;
   const perm = db.prepare('SELECT * FROM permissions WHERE user_id = ?').get(id);
   u.is_active = !!u.is_active;

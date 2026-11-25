@@ -148,6 +148,8 @@ if (!db.prepare('PRAGMA table_info(users)').all().some(c => c.name === 'trial_un
 if (!db.prepare('PRAGMA table_info(users)').all().some(c => c.name === 'class_days')) db.exec('ALTER TABLE users ADD COLUMN class_days TEXT');
 // 生徒の学校名（テスト対策：学校ごとのテストの日・範囲）
 if (!db.prepare('PRAGMA table_info(users)').all().some(c => c.name === 'school')) db.exec('ALTER TABLE users ADD COLUMN school TEXT');
+// 保護者の呼び名（子どもの画面に出す。例：👨 パパ）
+if (!db.prepare('PRAGMA table_info(users)').all().some(c => c.name === 'parent_label')) db.exec('ALTER TABLE users ADD COLUMN parent_label TEXT');
 function getSetting(key, def = null) {
   const r = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
   return r ? r.value : def;

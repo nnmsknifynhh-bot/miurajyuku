@@ -261,7 +261,7 @@
       state.mySeats = d.mySeats || [];
       cakeGiven.clear(); for (const id of (d.me.cakeGiven || [])) cakeGiven.add(id);
       state.pts = d.me.pts || null;
-      loadBoard(); loadMorning(); refreshGoal(); refreshTestChip(); refreshKidChip();
+      loadBoard(); loadMorning(); refreshGoal(); refreshTestChip(); refreshKidChip(); setTimeout(askParentLabel, 3500);
       if (state.user.role === 'student') setTimeout(goMySeat, 1800);
       { const mine = state.testQueue && state.testQueue.booths.find(b => b.userId === d.me.id); state.testBooth = mine ? mine.seat : null; }
       buildReactions(); updateAll(); refreshWeek(true); refreshFun(true); renderTest();
@@ -314,7 +314,8 @@
     socket.on('moms-updated', (m) => { if (state.gb && state.gb.forest) state.gb.forest.moms = m; });
     // 生徒：おうちの人からの「見たよ」スタンプ（次に入ったとき1回だけ）
     socket.on('cheer', ({ stamps }) => {
-      const show = (i) => { if (i >= stamps.length) return; toast(`🏠 おうちの人から：${stamps[i]}`, 7000); chime(0.15); setTimeout(() => show(i + 1), 7200); };
+      // { stamp, from }（from＝保護者の呼び名。例：👨 パパ）。前の形（文字だけ）にも対応
+      const show = (i) => { if (i >= stamps.length) return; const s = stamps[i], st = typeof s === 'string' ? s : s.stamp, from = (typeof s === 'object' && s.from) || '🏠 おうちの人'; toast(`${from}から：${st}`, 7000); chime(0.15); setTimeout(() => show(i + 1), 7200); };
       setTimeout(() => show(0), 1500);
     });
     socket.on('class-state', (c) => { state.classes = c; state.call.sync(); });
@@ -670,6 +671,24 @@
   $('#pquiz-close').onclick = () => { $('#pquiz-dialog').close(); refreshPts(); };
 
   // わが子の様子と「見たよ」スタンプ
+  const PARENT_LABELS = ['👩 ママ', '👨 パパ', '👵 おばあちゃん', '👴 おじいちゃん', '👩 お母さん', '👨 お父さん'];
+  // 保護者：呼び名をまだえらんでいなければ、1回だけたずねる
+  function askParentLabel() {
+    if (!state.user || state.user.role !== 'parent' || state.user.parentLabel) return;
+    try { if (localStorage.getItem('juku-plabel-asked-' + state.user.id)) return; localStorage.setItem('juku-plabel-asked-' + state.user.id, '1'); } catch (e) { /* なし */ }
+    const box = $('#plabel-btns'); box.textContent = '';
+    for (const x of [...PARENT_LABELS.slice(0, 4), 'その他']) {
+      const b = el('button', 'btn secondary', x); b.type = 'button';
+      b.onclick = async () => {
+        let v = x;
+        if (x === 'その他') { v = prompt('お子さんの画面に出す呼び名（8文字まで）', '') || ''; if (!v.trim()) return; }
+        try { const r = await api('POST', '/api/parent/label', { label: v }); state.user.parentLabel = r.label; $('#plabel-dialog').close(); toast(`お子さんの画面に「${r.label}から」と出ます`, 5000); } catch (e) { toast(e.message); }
+      };
+      box.append(b);
+    }
+    $('#plabel-dialog').showModal();
+  }
+  $('#plabel-later').onclick = () => $('#plabel-dialog').close();
   async function openFamily() {
     let d;
     try { d = await api('GET', '/api/parent/home'); } catch (e) { toast(e.message); return; }
@@ -735,6 +754,33 @@
       }
       list.append(card);
     }
+    // 🏷 呼び名・👪 家族を招待
+    { const lab = $('#family-label'); lab.textContent = '';
+      const cur = state.user.parentLabel || '';
+      const sel = el('select'); sel.append(new Option('🏠 おうちの人（えらばない）', ''));
+      PARENT_LABELS.forEach(x => sel.append(new Option(x, x)));
+      sel.append(new Option('その他（自分で入れる）', '_other'));
+      const other = el('input'); other.maxLength = 8; other.placeholder = '例：おねえちゃん'; other.hidden = true;
+      if (cur && !PARENT_LABELS.includes(cur)) { sel.value = '_other'; other.hidden = false; other.value = cur.replace(/^🏠\s*/, ''); } else sel.value = cur;
+      sel.onchange = () => { other.hidden = sel.value !== '_other'; };
+      const sv = el('button', 'btn small', '保存'); sv.type = 'button';
+      sv.onclick = async () => { try { const r = await api('POST', '/api/parent/label', { label: sel.value === '_other' ? other.value : sel.value }); state.user.parentLabel = r.label; toast(r.label ? `お子さんの画面に「${r.label}から」と出ます` : '「🏠 おうちの人から」にもどしました'); } catch (e) { toast(e.message); } };
+      lab.append(sel, other, sv); }
+    { const box = $('#family-invite-box'); box.textContent = '';
+      for (const k of d.children) {
+        const b = el('button', 'btn small secondary', `👪 ${k.name}さんの家族を招待する`); b.type = 'button';
+        b.onclick = async () => {
+          try {
+            const { code } = await api('POST', '/api/parent/invite', { studentId: k.id });
+            const text = `三浦塾 オンライン教室（ご家族の方へ）\n${k.name}さんの家族用 招待コード：${code}\n\n1. ${location.origin}/#parent を開く\n2. 招待コード・お名前・ログインID・パスワードを入れて登録\n※コードは1回だけ使えます。`;
+            const pre = el('pre', 'family-code', text); const cp = el('button', 'btn small', '📋 コピー'); cp.type = 'button';
+            cp.onclick = async () => { try { await navigator.clipboard.writeText(text); toast('コピーしました'); } catch (e) { toast('コピーできませんでした'); } };
+            const line = el('a', 'btn small', 'LINEで送る'); line.href = 'https://line.me/R/share?text=' + encodeURIComponent(text); line.target = '_blank'; line.rel = 'noopener';
+            b.replaceWith(pre, (() => { const r = el('div', 'gb-row'); r.append(cp, line); return r; })());
+          } catch (e) { toast(e.message); }
+        };
+        box.append(b);
+      } }
     const m = d.moms;
     $('#family-moms').textContent = `🌸 家族の木：花${m.flowers}こ${m.tulips ? `・🌷${m.tulips}` : ''}（${m.stageName}）・今月${m.families}家族が挑戦中・あなたは🔥${d.streak}日連続・${d.points}ポイント`;
     if (!$('#family-dialog').open) $('#family-dialog').showModal();

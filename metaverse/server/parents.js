@@ -71,7 +71,7 @@ function childrenOf(parentId) {
     WHERE pc.parent_id = ? AND u.is_active = 1 ORDER BY u.display_name`).all(parentId);
 }
 function parentsOf(studentId) {
-  return db.prepare(`SELECT u.id, u.display_name AS name, u.login_id AS loginId, u.is_active AS active, u.birthday FROM parent_children pc JOIN users u ON u.id = pc.parent_id
+  return db.prepare(`SELECT u.id, u.display_name AS name, u.login_id AS loginId, u.is_active AS active, u.birthday, u.parent_label AS label FROM parent_children pc JOIN users u ON u.id = pc.parent_id
     WHERE pc.student_id = ? ORDER BY u.id`).all(studentId);
 }
 function unlink(parentId, studentId) {
@@ -264,10 +264,20 @@ function cheersSentToday(parentId, date = new Date()) {
   return new Set(db.prepare('SELECT student_id FROM parent_cheers WHERE parent_id = ? AND day = ?').all(parentId, G.jst(date).day).map(r => r.student_id));
 }
 // 子どもがまだ受け取っていないスタンプ（受け取ったことにする）
+// ［{ stamp, from }］from は保護者の呼び名（例：👨 パパ）。えらんでいなければ null（「🏠 おうちの人」）
 function takeCheers(studentId) {
-  const rows = db.prepare('SELECT id, stamp FROM parent_cheers WHERE student_id = ? AND delivered = 0 ORDER BY id').all(studentId);
+  const rows = db.prepare('SELECT c.id, c.stamp, u.parent_label AS label FROM parent_cheers c LEFT JOIN users u ON u.id = c.parent_id WHERE c.student_id = ? AND c.delivered = 0 ORDER BY c.id').all(studentId);
   if (rows.length) db.prepare(`UPDATE parent_cheers SET delivered = 1 WHERE id IN (${rows.map(() => '?').join(',')})`).run(...rows.map(r => r.id));
-  return rows.map(r => r.stamp);
+  return rows.map(r => ({ stamp: r.stamp, from: r.label || null }));
+}
+// 保護者の呼び名：えらべるもの（その他は8文字まで自由に）
+const LABELS = ['👩 ママ', '👨 パパ', '👵 おばあちゃん', '👴 おじいちゃん', '👩 お母さん', '👨 お父さん'];
+function normLabel(v) {
+  if (v == null || v === '') return null;
+  const s = String(v).replace(/[\u0000-\u001f\u007f<>]/g, '').trim();
+  if (LABELS.includes(s)) return s;
+  const t = s.slice(0, 8);
+  return t ? '🏠 ' + t.replace(/^🏠\s*/, '') : null;
 }
 // 家族の木の🌸（見たよスタンプ）をだれが押したか（オーナー用）：新しい順
 function cheersList(days = 60, date = new Date()) {
@@ -287,7 +297,7 @@ function momsTree(date = new Date()) {
   return { name: '家族の木', tulips: require('./referral').tulips(), flowers, families, stage, stageName: G.STAGE_NAMES[stage], nextFlowers: MOM_STAGES[stage + 1] ?? null };
 }
 
-module.exports = {
+module.exports = { LABELS, normLabel,
   VISIT_MS, SUBJECTS, STAMPS, createInvite, inviteStudent, useInvite, childrenOf, parentsOf, unlink, childIds, normCode,
   startVisit, visitEndsAt, meetingOn, meetingPhase, getMeeting, setMeeting, endMeetingNow, mendanAllowed, allowMendan, mendanList, recordVisit, visitsOn, visitStreak, subjectOf, todayQuiz, answerQuiz, quizPoints, addQuestions, listQuestions, deleteQuestion,
   sendCheer, cheersSentToday, takeCheers, momsTree, cheersList,

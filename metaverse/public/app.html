@@ -316,6 +316,8 @@
       <div id="family-gifts" class="family-gifts" hidden></div>
       <div id="family-list"></div>
       <p class="muted" id="family-moms"></p>
+      <details class="family-add" open><summary>🏷 お子さんの画面での呼び名</summary><p class="muted">「見たよ」スタンプが、お子さんの画面に「👨 パパから：がんばったね」のように出ます（ほかの子には出ません）</p><div class="gb-row" id="family-label"></div></details>
+      <details class="family-add"><summary>👪 家族を招待する（パパ・おばあちゃんなど）</summary><p class="muted">ご家族がそれぞれのIDで入れます。スタンプも1人1日1回ずつ送れます。招待コードは1回だけ使えます。</p><div id="family-invite-box" class="family-invite-box"></div></details>
       <div class="family-invite"><button type="button" class="btn secondary" id="family-invite">🌷 お友だちのご家族に紹介する</button><small class="muted">紹介したご家族が入塾すると、家族の木に🌷が咲き、50ポイントもらえます</small></div>
       <details class="family-add"><summary>🎂 あなたの誕生日</summary>
         <p class="muted">登録すると、誕生日の日にお子さんの画面に「おうちの人の誕生日」カードが出ます（月と日だけ。ほかの人には見えません）</p>
@@ -326,6 +328,15 @@
       </details>
       <div class="family-more"><button type="button" class="btn secondary small" id="family-help">❓ 使い方</button><button type="button" class="btn secondary small" id="family-sound">🔈 音のテスト</button><button type="button" class="btn secondary small" id="family-pw">🔑 パスワードを変える</button></div>
       <div class="dialog-actions"><button type="button" class="btn secondary" id="family-close">とじる</button></div>
+    </div>
+  </dialog>
+  <!-- 🏷 保護者の呼び名（はじめに1回だけ） -->
+  <dialog id="plabel-dialog">
+    <div class="dialog-body">
+      <h2>🏷 お子さんの画面での呼び名</h2>
+      <p>「見たよ」スタンプを送ると、お子さんの画面に<b>「👨 パパから：がんばったね」</b>のように出ます。あなたの呼び名をえらんでください（あとで「わが子」から変えられます）。</p>
+      <div class="plabel-btns" id="plabel-btns"></div>
+      <div class="dialog-actions"><button type="button" class="btn secondary" id="plabel-later">あとで</button></div>
     </div>
   </dialog>
   <!-- 👪 保護者：今日の5問 -->
