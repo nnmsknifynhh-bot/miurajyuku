@@ -5,7 +5,12 @@ const ITER = 310_000;
 
 export interface Sealed { v: 1; salt: string; iv: string; data: string; iter: number }
 
-const b64 = (b: ArrayBuffer | Uint8Array) => btoa(String.fromCharCode(...new Uint8Array(b)));
+const b64 = (b: ArrayBuffer | Uint8Array) => {
+  const u = new Uint8Array(b);
+  let s = '';
+  for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000));
+  return btoa(s);
+};
 const unb64 = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 
 function openDb(): Promise<IDBDatabase> {
@@ -93,4 +98,62 @@ export async function requestPersistence() {
   } catch {
     /* noop */
   }
+}
+
+// ---- 画像（レシート・スクリーンショット）の暗号化保存 ----
+export const IMG_PREFIX = 'img:';
+
+export async function saveImage(s: Session, id: string, bytes: ArrayBuffer, type: string) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, s.key, bytes);
+  await kvSet(IMG_PREFIX + id, { iv: b64(iv), data: b64(ct), type });
+}
+
+export async function loadImage(s: Session, id: string): Promise<Blob | null> {
+  const v = await kvGet<{ iv: string; data: string; type: string }>(IMG_PREFIX + id);
+  if (!v) return null;
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(v.iv) as BufferSource }, s.key, unb64(v.data) as BufferSource);
+  return new Blob([pt], { type: v.type });
+}
+
+export async function kvKeys(prefix = ''): Promise<string[]> {
+  const db = await openDb();
+  return new Promise((res, rej) => {
+    const q = db.transaction(STORE).objectStore(STORE).getAllKeys();
+    q.onsuccess = () => res((q.result as string[]).filter((k) => String(k).startsWith(prefix)));
+    q.onerror = () => rej(q.error);
+  });
+}
+
+/** パスコード変更時: 画像を新しい鍵で暗号化し直す */
+export async function reencryptImages(from: Session, to: Session) {
+  for (const k of await kvKeys(IMG_PREFIX)) {
+    const id = k.slice(IMG_PREFIX.length);
+    const blob = await loadImage(from, id);
+    if (blob) await saveImage(to, id, await blob.arrayBuffer(), blob.type);
+  }
+}
+
+export async function exportImages(s: Session): Promise<Record<string, { type: string; data: string }>> {
+  const out: Record<string, { type: string; data: string }> = {};
+  for (const k of await kvKeys(IMG_PREFIX)) {
+    const id = k.slice(IMG_PREFIX.length);
+    const blob = await loadImage(s, id);
+    if (blob) out[id] = { type: blob.type, data: b64(await blob.arrayBuffer()) };
+  }
+  return out;
+}
+
+export async function importImages(s: Session, imgs: Record<string, { type: string; data: string }>) {
+  for (const [id, v] of Object.entries(imgs)) await saveImage(s, id, unb64(v.data).buffer as ArrayBuffer, v.type);
+}
+
+export async function clearAll() {
+  const db = await openDb();
+  return new Promise<void>((res, rej) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).clear();
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error);
+  });
 }

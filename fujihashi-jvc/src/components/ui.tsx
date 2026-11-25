@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { yen } from '../lib/util';
+import { today, yen } from '../lib/util';
 
 export function useHash(): string {
   const get = () => window.location.hash.replace(/^#/, '') || '/';
@@ -132,3 +132,37 @@ export function askReason(message: string, def = ''): string | null {
   if (r === null) return null;
   return r.trim();
 }
+
+/** 記録する日付（集金日・支払日など）。初期値は今日 */
+export function useRecordDate(): [string, (s: string) => void, ReactNode] {
+  const [d, setD] = useState(today());
+  const node = (
+    <label className="datebar">
+      <span>記録する日付</span>
+      <input type="date" value={d} onChange={(e) => e.target.value && setD(e.target.value)} />
+      {d !== today() && <span className="chip warn">今日以外</span>}
+    </label>
+  );
+  return [d, setD, node];
+}
+
+export function Review(props: { items: string[]; onClear?: (i: number) => void }) {
+  if (!props.items.length) return null;
+  return (
+    <div className="stack">
+      {props.items.map((m, i) => (
+        <div key={i} className="alert warn">
+          <span>⚠️ <b>要確認</b> {m}</span>
+          {props.onClear && (
+            <button className="btn small" style={{ marginLeft: 'auto' }} onClick={() => props.onClear!(i)}>
+              確認済み
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** 「要確認」を含む値は黄色で表示 */
+export const needs = (v: string | number | null | undefined) => v === null || v === undefined || v === '' || String(v).includes('要確認');

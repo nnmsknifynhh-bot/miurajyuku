@@ -107,3 +107,21 @@ table.tbl th:first-child, table.tbl td:first-child { text-align: left; }
 .fab-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .fab-row .btn { flex: 1; }
 @media (max-width: 360px) { .grid2 { grid-template-columns: 1fr; } }
+.datebar { display: flex; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 6px 10px; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+.datebar input { width: auto; min-height: 38px; padding: 4px 8px; }
+.needs { background: var(--warn-weak) !important; border-color: var(--warn) !important; }
+.thumbs { display: flex; gap: 8px; flex-wrap: wrap; }
+.thumbs img { width: 84px; height: 84px; object-fit: cover; border-radius: 10px; border: 1px solid var(--line); cursor: pointer; }
+.cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; font-size: 13px; }
+.cal .h { color: var(--muted); font-size: 11px; }
+.cal a, .cal span.c { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 44px; border-radius: 10px; text-decoration: none; color: var(--text); }
+.cal .we { color: var(--bad); }
+.cal .sat { color: var(--primary); }
+.cal a.has { background: var(--primary-weak); font-weight: 700; }
+.cal a.today, .cal span.today { outline: 2px solid var(--primary); }
+.cal .dot { width: 6px; height: 6px; border-radius: 3px; background: var(--warn); margin-top: 2px; }
+@media (min-width: 900px) {
+  .app { max-width: 880px; }
+  .tabs-inner { max-width: 880px; }
+  .wide2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+}

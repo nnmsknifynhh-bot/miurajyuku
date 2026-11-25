@@ -1,151 +1,133 @@
 export type ID = string;
 
-export type GasMethod = 'perKm' | 'fuel';
+/** 「要確認」= 未確定の値。null は未設定（要確認）を表す */
+export const NEEDS_REVIEW = '要確認';
+
+export type DueRule = 'targetMonthEnd' | 'distributionMonthEnd';
 
 export interface Settings {
   teamName: string;
   recorderName: string;
-  defaultMonthlyFee: number;
-  feeDueDay: number;
-  feeStartMonth: string; // YYYY-MM 自動生成の開始月
-  fiscalStartMonth: number; // 4 = 4月始まり
-  dutyDefaultAmount: number;
-  gas: { method: GasMethod; yenPerKm: number; kmPerL: number; yenPerL: number; roundTrip: boolean };
-  reminders: {
-    feeDaysBefore: number;
-    transportDaysBefore: number;
-    dutyDayBefore: boolean;
-    dutySameDay: boolean;
-    settleDaysAfter: number;
-    notifyHour: number; // 通知する時刻(時)
-    notifyMinute: number;
-  };
-  lineTemplate: string;
+  fiscalStartMonth: number;
+  /** 交通費（高速利用あり） */
+  fareHighwayPlayer: number;
+  fareHighwayParent: number;
+  fareDriver: number;
+  /** 交通費（高速利用なし） */
+  fareNoHighway: number;
+  /** 基準車両に乗る指導者名（例: 先野） */
+  referencePerson: string;
+  /** 当番準備金の初期値（null = 要確認・毎回入力） */
+  prepDefault: number | null;
+  /** 月謝の初期値（null = 要確認） */
+  monthlyFeeDefault: number | null;
+  /** 月謝の回収期限ルール（要確認のため選択式） */
+  feeDueRule: DueRule;
   autoLockMinutes: number;
-  apiToken: string; // サーバー関数用アクセストークン
-  closedThrough?: string; // YYYY-MM-DD 年度締め済みの日付
+  apiToken: string;
+  closedThrough?: string;
 }
 
-export interface Member {
+export interface Child { id: ID; name: string; grade?: string }
+
+/** 月謝は家庭単位 */
+export interface Household {
   id: ID;
-  name: string; // 子どもの氏名
-  kana?: string;
-  grade?: string;
-  guardian: string; // 保護者名（例: 三浦母）
-  monthlyFee: number;
+  name: string; // 例: 三浦家
+  guardian: string; // 例: 三浦母
+  children: Child[];
+  monthlyFee: number | null; // null = 要確認
   active: boolean;
   note?: string;
 }
 
-export interface FeeCharge {
+export interface FeeCollection { id: ID; date: string; amount: number; txId: ID }
+
+export interface FeeBill {
   id: ID;
-  memberId: ID;
-  month: string; // YYYY-MM
+  householdId: ID;
+  month: string; // 対象月 YYYY-MM
   amount: number;
+  distributedOn?: string; // 月謝袋の配布日
   dueDate: string;
-  txId?: ID;
-  waived?: boolean;
+  collections: FeeCollection[];
+  note?: string;
 }
 
-export type PersonKind = 'child' | 'adult' | 'sibling';
+export interface Activity { id: ID; name: string; venue: string }
+
+export interface DutyPrep {
+  id: ID;
+  name: string; // 当番氏名
+  amount: number | null; // 準備金（null = 要確認）
+  handedTxId?: ID; // 渡した記録（日付・金額は出納帳の取引）
+  cancelled?: boolean;
+  note?: string;
+}
+
+export type Role = 'driver' | 'player' | 'parent' | 'other';
 
 export interface Rider {
   id: ID;
   name: string;
-  kind: PersonKind;
-  relation?: string; // 父・母・兄 など
-  memberId?: ID;
-  isDriver?: boolean;
-  collect: boolean; // 集金対象（選択）
-  amount?: number; // 個別金額（未指定なら遠征の一人あたり金額）
-  txId?: ID; // 入金確認（実際の受け取り）
+  role: Role;
+  childId?: ID; // 名簿の選手
+  householdId?: ID;
+  amountOverride?: number; // 個別の金額（例外）
+  txId?: ID; // 集金済み（集金日は取引日）
 }
 
-export interface Car {
-  id: ID;
-  name: string; // 三浦車
-  driver: string;
-  riders: Rider[]; // 運転手も isDriver=true で含む
-}
+export interface Car { id: ID; name: string; riders: Rider[] } // 運転手も role=driver で含む
 
-export type ExpenseType = 'gas' | 'toll' | 'parking' | 'other';
+export interface DriverPayment { id: ID; driverName: string; amountOverride?: number; txId?: ID }
 
-export interface GasCalcSnapshot {
-  method: GasMethod;
-  distanceKm: number; // 片道 or 入力距離
-  roundTrip: boolean;
-  totalKm: number;
-  yenPerKm?: number;
-  kmPerL?: number;
-  yenPerL?: number;
-  result: number;
-  routeSummary?: string;
-  at: string;
-}
-
-export interface Expense {
-  id: ID;
-  type: ExpenseType;
-  carId?: ID;
-  payee: string; // 精算相手（運転手など）
-  label: string;
-  estimate?: number; // 見積額（Google Maps 等）
-  amount?: number; // 確定額
+export interface DriverPay {
+  refCarId?: ID; // 基準車両
+  distanceKm?: number;
+  gasYen?: number; // 当面は手入力
+  tollRoundTripYen?: number;
   confirmed: boolean;
-  calc?: GasCalcSnapshot; // 確定時点の計算条件（設定変更後も保持）
-  txId?: ID;
+  payments: DriverPayment[];
 }
 
-export interface ExpeditionRule {
-  collectTransport: boolean; // 交通費を事前集金する
-  reimburseGas: boolean;
-  reimburseToll: boolean;
-  reimburseParking: boolean;
-  reimburseOther: boolean;
-  note?: string;
-}
-
-export interface Expedition {
+export interface DayPage {
   id: ID;
-  title: string;
   date: string;
-  destination: string;
-  origin?: string;
-  waypoints?: string[];
-  collectDue: string; // 集金期限（原則活動前）
-  perPerson: number;
-  rule: ExpeditionRule;
+  activities: Activity[];
+  duties: DutyPrep[];
+  usesHighway: boolean | null; // null = 要確認
   cars: Car[];
-  expenses: Expense[];
-  sourceText?: string;
-  createdAt: string;
-}
-
-export interface DutyAssignee {
-  id: ID;
-  name: string;
-  amount: number;
-  status: 'active' | 'cancelled' | 'replaced';
-  txId?: ID;
-  note?: string;
-}
-
-export interface Duty {
-  id: ID;
-  date: string;
-  activity: string;
-  assignees: DutyAssignee[];
-  cancelled: boolean;
+  carSource?: string;
+  driverPay: DriverPay;
+  notes?: string;
+  review: string[]; // 要確認メモ
   history: { at: string; text: string }[];
 }
 
-export type TxCategory = 'fee' | 'transport' | 'gas' | 'toll' | 'parking' | 'duty' | 'refund' | 'opening' | 'other';
+export type ExpenseCategory = 'drink' | 'bento' | 'equipment' | 'other';
+export type Funding = 'advance' | 'self'; // 事前渡し金から / 立て替え
 
-export interface TxRelated {
-  kind: 'fee' | 'expedition' | 'duty';
+export interface Expense {
   id: ID;
-  subId?: ID;
+  date: string; // 購入日
+  purchaser: string;
+  items: string;
+  category: ExpenseCategory;
+  amount: number;
+  funding: Funding;
+  dayId?: ID; // 関連する活動日（備品は無くても可）
+  receiptIds: ID[]; // 暗号化保存した画像
+  settleTxId?: ID; // 立て替え分の支払い
+  review: string[];
+  createdAt: string;
 }
+
+/** 事前渡し金の差額精算（活動日 × 人） */
+export interface PrepSettlement { id: ID; dayId: ID; person: string; txId?: ID; diff: number; at: string }
+
+export type TxCategory = 'fee' | 'transport' | 'driver' | 'prep' | 'prepSettle' | 'expense' | 'opening' | 'other';
+
+export interface TxRelated { kind: 'fee' | 'day' | 'expense'; id: ID; subId?: ID }
 
 export interface TxRevision {
   at: string;
@@ -158,30 +140,25 @@ export interface Tx {
   id: ID;
   date: string;
   counterparty: string;
-  amount: number; // 正の整数
+  amount: number;
   direction: 'in' | 'out';
   category: TxCategory;
   description: string;
   related?: TxRelated;
-  sourceKey?: string; // 二重計上防止キー
+  sourceKey?: string;
   recorder: string;
   createdAt: string;
   voided?: { at: string; by: string; reason: string };
   revisions: TxRevision[];
 }
 
-export interface ReminderState {
-  dismissed: Record<string, string>; // key -> 日付
-  notified: Record<string, string>; // key -> 通知日
-}
-
 export interface AppData {
-  version: 1;
+  version: 2;
   settings: Settings;
-  members: Member[];
-  fees: FeeCharge[];
-  expeditions: Expedition[];
-  duties: Duty[];
+  households: Household[];
+  bills: FeeBill[];
+  days: DayPage[];
+  expenses: Expense[];
+  prepSettlements: PrepSettlement[];
   txs: Tx[];
-  reminderState: ReminderState;
 }

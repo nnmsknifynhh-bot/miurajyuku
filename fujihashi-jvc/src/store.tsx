@@ -1,8 +1,7 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react';
 import type { AppData } from './lib/types';
 import { saveVault, type Session } from './lib/vault';
 import { AppError } from './lib/ledger';
-import { ensureFeeCharges } from './lib/fees';
 
 export interface ToastMsg { text: string; err?: boolean; undo?: () => void }
 
@@ -84,12 +83,6 @@ export function StoreProvider(props: { initial: AppData; session: Session; onLoc
     setSessionState(s);
     persist(ref.current);
   }, [persist]);
-
-  // 月が変わったら部費予定を自動生成
-  useEffect(() => {
-    const probe = structuredClone(ref.current);
-    if (ensureFeeCharges(probe) > 0) update((d) => void ensureFeeCharges(d));
-  }, [update]);
 
   const lock = useCallback(() => {
     saving.current.finally(props.onLock);

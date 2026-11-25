@@ -98,3 +98,13 @@ export function guessYmd(month: number, day: number, base: string = today()): st
   candidates.sort((a, b) => Math.abs(diffDays(a, base)) - Math.abs(diffDays(b, base)));
   return candidates[0];
 }
+
+/** その月の末日（31日が無い月にも対応） */
+export function monthEnd(ym: string): string {
+  const [y, m] = ym.split('-').map(Number);
+  return `${ym}-${pad(new Date(y, m, 0).getDate())}`;
+}
+
+export function weekday(ymd: string): number {
+  return parseYmd(ymd).getDay();
+}

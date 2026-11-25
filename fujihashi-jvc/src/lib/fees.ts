@@ -1,55 +1,50 @@
-import type { AppData, FeeCharge } from './types';
+import type { AppData, FeeBill } from './types';
 import { addTx, AppError } from './ledger';
-import { addMonths, monthOf, monthRange, today, uid } from './util';
+import { addMonths, monthEnd, today, uid } from './util';
 
-function dueDateOf(month: string, day: number): string {
-  const [y, m] = month.split('-').map(Number);
-  const last = new Date(y, m, 0).getDate();
-  return `${month}-${String(Math.min(day, last)).padStart(2, '0')}`;
+/** 回収期限（設定のルールによる。未確認のため選択式） */
+export function feeDueDate(d: AppData, month: string): string {
+  return d.settings.feeDueRule === 'targetMonthEnd' ? monthEnd(month) : monthEnd(addMonths(month, -1));
 }
 
-/** 開始月〜今月（+来月）までの部費予定を自動生成。既存は変更しない。生成件数を返す */
-export function ensureFeeCharges(d: AppData, base = today()): number {
-  const to = addMonths(monthOf(base), 1);
-  const from = d.settings.feeStartMonth || monthOf(base);
-  let n = 0;
-  for (const month of monthRange(from, to)) {
-    for (const m of d.members) {
-      if (!m.active || m.monthlyFee <= 0) continue;
-      if (d.fees.some((f) => f.memberId === m.id && f.month === month)) continue;
-      d.fees.push({ id: uid('fee_'), memberId: m.id, month, amount: m.monthlyFee, dueDate: dueDateOf(month, d.settings.feeDueDay) });
-      n++;
+export const collected = (b: FeeBill) => b.collections.reduce((s, c) => s + c.amount, 0);
+export const outstanding = (b: FeeBill) => Math.max(0, b.amount - collected(b));
+
+/** 対象月の月謝袋を在籍家庭ぶん作成（既存は変更しない）。金額未設定の家庭は作らず名前を返す */
+export function createBills(d: AppData, month: string, distributedOn?: string): { created: number; missing: string[] } {
+  let created = 0;
+  const missing: string[] = [];
+  for (const h of d.households) {
+    if (!h.active) continue;
+    if (d.bills.some((b) => b.householdId === h.id && b.month === month)) continue;
+    if (h.monthlyFee === null) {
+      missing.push(h.name);
+      continue;
     }
+    d.bills.push({ id: uid('bill_'), householdId: h.id, month, amount: h.monthlyFee, distributedOn, dueDate: feeDueDate(d, month), collections: [] });
+    created++;
   }
-  return n;
+  return { created, missing };
 }
 
-export function payFee(d: AppData, chargeId: string, date?: string) {
-  const f = d.fees.find((x) => x.id === chargeId);
-  if (!f) throw new AppError('部費予定が見つかりません');
-  if (f.txId) throw new AppError('すでに入金済みです');
-  const m = d.members.find((x) => x.id === f.memberId);
+export function collectFee(d: AppData, billId: string, amount: number, date = today()) {
+  const b = d.bills.find((x) => x.id === billId);
+  if (!b) throw new AppError('月謝が見つかりません');
+  const rest = outstanding(b);
+  if (rest <= 0) throw new AppError('すでに全額回収済みです');
+  if (amount > rest) throw new AppError(`未回収額（${rest.toLocaleString()}円）を超えています`);
+  const h = d.households.find((x) => x.id === b.householdId);
+  const n = b.collections.length;
   const tx = addTx(d, {
     date,
-    counterparty: m ? `${m.guardian || m.name}` : '不明',
-    amount: f.amount,
+    counterparty: h?.guardian || h?.name || '',
+    amount,
     direction: 'in',
     category: 'fee',
-    description: `${Number(f.month.slice(5))}月分部費（${m?.name ?? ''}）`,
-    related: { kind: 'fee', id: f.id },
-    sourceKey: `fee:${f.id}`,
+    description: `${Number(b.month.slice(5))}月分 月謝（${h?.name ?? ''}）${n ? `${n + 1}回目` : ''}`,
+    related: { kind: 'fee', id: b.id },
+    sourceKey: `fee:${b.id}:${n}:${amount}`,
   });
-  f.txId = tx.id;
+  b.collections.push({ id: uid('col_'), date, amount, txId: tx.id });
   return tx;
 }
-
-/** 期限が来ている（または今月分の）未払い部費 */
-export function unpaidFees(d: AppData, base = today()): FeeCharge[] {
-  const cur = monthOf(base);
-  return d.fees
-    .filter((f) => !f.txId && !f.waived && f.month <= cur)
-    .filter((f) => d.members.find((m) => m.id === f.memberId)?.active !== false)
-    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-}
-
-export { dueDateOf };

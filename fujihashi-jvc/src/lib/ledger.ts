@@ -1,5 +1,5 @@
 import type { AppData, Tx, TxCategory, TxRelated } from './types';
-import { monthRange, nowIso, today, uid, addMonths, monthOf, fiscalYearOf, fiscalRange } from './util';
+import { monthRange, nowIso, today, uid, monthOf, fiscalYearOf, fiscalRange } from './util';
 
 export class AppError extends Error {}
 
@@ -69,12 +69,14 @@ export function voidTx(d: AppData, id: string, reason: string) {
 }
 
 export function unlinkTx(d: AppData, id: string) {
-  for (const f of d.fees) if (f.txId === id) delete f.txId;
-  for (const e of d.expeditions) {
-    for (const c of e.cars) for (const r of c.riders) if (r.txId === id) delete r.txId;
-    for (const x of e.expenses) if (x.txId === id) delete x.txId;
+  for (const b of d.bills) b.collections = b.collections.filter((c) => c.txId !== id);
+  for (const day of d.days) {
+    for (const c of day.cars) for (const r of c.riders) if (r.txId === id) delete r.txId;
+    for (const p of day.driverPay.payments) if (p.txId === id) delete p.txId;
+    for (const du of day.duties) if (du.handedTxId === id) delete du.handedTxId;
   }
-  for (const du of d.duties) for (const a of du.assignees) if (a.txId === id) delete a.txId;
+  for (const e of d.expenses) if (e.settleTxId === id) delete e.settleTxId;
+  d.prepSettlements = d.prepSettlements.filter((p) => p.txId !== id);
 }
 
 export function editTx(
@@ -104,13 +106,12 @@ export function editTx(
 }
 
 export const CATEGORY_LABEL: Record<TxCategory, string> = {
-  fee: '部費',
-  transport: '遠征交通費',
-  gas: 'ガソリン代',
-  toll: '高速代',
-  parking: '駐車場代',
-  duty: '当番支払い',
-  refund: '返金',
+  fee: '月謝',
+  transport: '遠征交通費（集金）',
+  driver: '運転手への交通費',
+  prep: '当番準備金',
+  prepSettle: '準備金の差額精算',
+  expense: '経費（立て替え精算）',
   opening: '繰越',
   other: 'その他',
 };
@@ -141,4 +142,3 @@ export function currentFiscal(d: AppData) {
   return { fy, ...fiscalRange(fy, d.settings.fiscalStartMonth) };
 }
 
-export { addMonths };

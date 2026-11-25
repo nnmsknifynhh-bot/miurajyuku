@@ -1,132 +1,181 @@
 import { describe, expect, it } from 'vitest';
-import { buildDraft, parseCarSplit } from '../src/lib/carParser';
-import { parseDutyChanges, parseScheduleText } from '../src/lib/scheduleParser';
-import { SAMPLE_CAR_TEXT, sampleChangeText, sampleData, sampleScheduleText } from '../src/lib/sample';
+import { parseCarSplit } from '../src/lib/carParser';
+import { parseScheduleText } from '../src/lib/scheduleParser';
+import { sampleCarText, sampleData } from '../src/lib/sample';
 import { addTx, balance, editTx, voidTx } from '../src/lib/ledger';
-import { ensureFeeCharges, payFee, unpaidFees } from '../src/lib/fees';
-import { calcGas } from '../src/lib/gas';
-import { collectRider, settleExpense, confirmExpense } from '../src/lib/expedition';
-import { cancelDuty, newDuty, payDuty, replaceAssignee } from '../src/lib/duty';
-import { computeReminders } from '../src/lib/reminders';
-import { ledgerCsv } from '../src/lib/csv';
+import { collectFee, createBills, feeDueDate, outstanding } from '../src/lib/fees';
+import { applyScheduleChange, carsFromParsed, collectFare, defaultFare, diffSchedule, driverBase, fareStats, handPrep, payDriver, syncDriverPayments } from '../src/lib/day';
+import { prepGroups, settlePrep, settleSelfPaid } from '../src/lib/expense';
+import { rosterPeople, parseRoster } from '../src/lib/roster';
+import { holidayName, isWeekendOrHoliday } from '../src/lib/holidays';
+import { ledgerCsv, transportCsv } from '../src/lib/csv';
+import { emptyData } from '../src/lib/defaults';
+import { monthEnd, uid } from '../src/lib/util';
 
-describe('車割り解析', () => {
-  it('サンプル文章から日付・車・運転手・乗車メンバーを抽出', () => {
-    const r = parseCarSplit(SAMPLE_CAR_TEXT, '2026-11-15');
-    expect(r.date).toBe('2026-11-23');
-    expect(r.destination).toBe('市民体育館');
-    expect(r.cars.map((c) => c.name)).toEqual(['三浦車', '鈴木車', '山本車']);
-    expect(r.cars.map((c) => c.driver)).toEqual(['三浦父', '鈴木母', '山本母']);
-    expect(r.cars[0].riders.map((x) => x.name)).toEqual(['三浦 ゆい', '田中 はな', '田中母', '佐藤 りん']);
-    expect(r.cars[0].riders[2]).toMatchObject({ kind: 'adult', relation: '母' });
-    expect(r.cars[1].riders.find((x) => x.name === '鈴木弟')).toMatchObject({ kind: 'sibling', relation: '弟' });
-    expect(r.cars[2].riders.map((x) => x.name)).toContain('小林めい');
+const BASE = '2026-11-15';
+
+describe('祝日・月末', () => {
+  it('祝日と振替休日', () => {
+    expect(holidayName('2026-11-23')).toBe('勤労感謝の日');
+    expect(holidayName('2026-05-06')).toBe('振替休日'); // 5/3 が日曜
+    expect(holidayName('2026-09-22')).toBe('国民の休日');
+    expect(holidayName('2027-03-21')).toBe('春分の日');
+    expect(isWeekendOrHoliday('2026-11-24')).toBe(false);
+    expect(isWeekendOrHoliday('2026-11-21')).toBe(true);
   });
-
-  it('名簿照合・重複と不明名の確認', () => {
-    const d = sampleData();
-    const draft = buildDraft(parseCarSplit(SAMPLE_CAR_TEXT, '2026-11-15'), d.members);
-    const msgs = draft.issues.map((i) => i.message).join('\n');
-    expect(msgs).toContain('ゆい');
-    // 運転手は免除（集金対象外）が初期値
-    expect(draft.cars[0].riders[0]).toMatchObject({ isDriver: true, collect: false, name: '三浦父' });
-    expect(draft.cars[0].riders[1].memberId).toBeTruthy();
-    const kobayashi = draft.cars[2].riders.find((r) => r.name === '小林めい');
-    expect(kobayashi?.memberId).toBeTruthy();
-  });
-
-  it('いろいろな書式', () => {
-    const r = parseCarSplit('12月7日 遠征\n①佐藤車 運転:佐藤パパ\nりん・はな・ゆい\n②田中号車\n(田中母運転)\nはな\n田中姉', '2026-11-15');
-    expect(r.date).toBe('2026-12-07');
-    expect(r.cars[0]).toMatchObject({ name: '佐藤車', driver: '佐藤パパ' });
-    expect(r.cars[0].riders.map((x) => x.name)).toEqual(['りん', 'はな', 'ゆい']);
-    expect(r.cars[1].name).toBe('田中号車');
-    expect(r.cars[1].driver).toBe('田中母');
-    expect(r.cars[1].riders.map((x) => x.kind)).toEqual(['child', 'sibling']);
+  it('31日が無い月の末日', () => {
+    expect(monthEnd('2027-02')).toBe('2027-02-28');
+    expect(monthEnd('2028-02')).toBe('2028-02-29');
+    expect(monthEnd('2026-11')).toBe('2026-11-30');
   });
 });
 
-describe('予定表・変更連絡', () => {
-  it('予定表テキスト', () => {
-    const r = parseScheduleText(sampleScheduleText('2026-11-14'), '2026-11-15');
-    expect(r).toHaveLength(3);
-    expect(r[0]).toMatchObject({ date: '2026-11-22', activity: '練習', names: ['田中母', '佐藤母'] });
-    expect(r[2]).toMatchObject({ amount: 1500, names: ['高橋母', '伊藤母'], activity: '練習試合' });
+describe('予定表 → 日別会計ページ', () => {
+  it('テキスト解析（会場・当番）', () => {
+    const r = parseScheduleText('11/21(土) 練習 @藤橋小体育館 当番：田中母、佐藤父\n11/22(日) 練習試合 (市民体育館)\n11/29 休み', BASE);
+    expect(r).toHaveLength(2);
+    expect(r[0]).toMatchObject({ date: '2026-11-21', activity: '練習', venue: '藤橋小体育館', duties: ['田中母', '佐藤父'] });
+    expect(r[1]).toMatchObject({ venue: '市民体育館', activity: '練習試合' });
   });
-  it('変更連絡', () => {
-    const r = parseDutyChanges(sampleChangeText('2026-11-23'), [], '2026-11-15');
-    expect(r[0]).toEqual({ type: 'replace', date: '2026-11-24', from: '佐藤母', to: '山本母' });
-    expect(r[1]).toMatchObject({ type: 'cancel', date: '2026-11-29' });
+  it('同じ日の複数活動は1ページ。再取り込みで記録を消さず差分のみ', () => {
+    const d = emptyData();
+    const items = parseScheduleText('11/22 練習試合 @A 当番：鈴木母\n11/22 合同練習 @A', BASE);
+    for (const c of diffSchedule(d, items)) applyScheduleChange(d, c);
+    expect(d.days).toHaveLength(1);
+    expect(d.days[0].activities).toHaveLength(2);
+    d.settings.prepDefault = 3000;
+    d.days[0].duties[0].amount = 3000;
+    handPrep(d, d.days[0].id, d.days[0].duties[0].id);
+    // 当番交代・会場変更・活動追加
+    const changes = diffSchedule(d, parseScheduleText('11/22 練習試合 @B 当番：山本母\n11/22 合同練習 @A', BASE));
+    const kinds = changes.map((c) => c.kind).sort();
+    expect(kinds).toEqual(['addDuty', 'missingDuty', 'venue']);
+    expect(changes.find((c) => c.kind === 'missingDuty')).toMatchObject({ paid: true });
+    for (const c of changes) applyScheduleChange(d, c);
+    const du = d.days[0].duties.find((x) => x.name === '鈴木母')!;
+    expect(du.cancelled).toBe(true);
+    expect(du.handedTxId).toBeTruthy(); // 記録は残る
+    expect(d.days[0].review.join()).toContain('返金');
+    expect(diffSchedule(d, parseScheduleText('11/22 練習試合 @B 当番：山本母\n11/22 合同練習 @A', BASE))).toEqual([]);
   });
 });
 
-describe('出納帳・二重計上防止', () => {
-  it('部費入金は二重計上できず、取消で未払いに戻る', () => {
+describe('配車表と交通費', () => {
+  const setup = () => {
     const d = sampleData();
-    const f = unpaidFees(d)[0];
-    const before = balance(d);
-    const tx = payFee(d, f.id);
-    expect(balance(d)).toBe(before + f.amount);
-    expect(() => payFee(d, f.id)).toThrow();
-    expect(() => addTx(d, { counterparty: 'x', amount: f.amount, direction: 'in', category: 'fee', description: '', sourceKey: `fee:${f.id}` })).toThrow(/二重/);
+    const day = d.days.find((x) => x.cars.length)!;
+    return { d, day };
+  };
+  it('分類: 運転手・選手・帯同保護者、兄弟は1人ずつ、重複検出', () => {
+    const d = sampleData();
+    const r = carsFromParsed(parseCarSplit(sampleCarText(BASE), BASE), rosterPeople(d));
+    const c0 = r.cars[0].riders.map((x) => `${x.name}:${x.role}`);
+    expect(c0).toEqual(['三浦母:driver', '三浦 ゆい:player', '田中 はな:player', '田中 こころ:player', '田中母:parent']);
+    expect(r.cars[1].riders[0]).toMatchObject({ name: '佐藤父', role: 'driver' });
+    expect(r.issues.join()).toContain('重複');
+  });
+  it('高速あり: 選手1000・保護者1000・運転手0。運転手の子は集金対象', () => {
+    const { d, day } = setup();
+    day.usesHighway = true;
+    const s = d.settings;
+    expect(defaultFare(s, day, 'player')).toBe(1000);
+    expect(defaultFare(s, day, 'parent')).toBe(1000);
+    expect(defaultFare(s, day, 'driver')).toBe(0);
+    const st = fareStats(s, day);
+    // 三浦車: 選手3人(運転手=三浦母の子ゆい含む)+保護者1 = 4000、佐藤車: 選手3=3000（先野コーチは0円）、伊藤車: 選手2=2000
+    expect(st.expected).toBe(9000);
+    expect(day.cars[1].riders.find((r) => r.name.includes('先野'))).toMatchObject({ amountOverride: 0 });
+    expect(day.driverPay.refCarId).toBe(day.cars[1].id);
+    day.usesHighway = false;
+    expect(fareStats(s, day).expected).toBe(0);
+    day.usesHighway = null;
+    expect(fareStats(s, day).unknown.length).toBeGreaterThan(0);
+  });
+  it('集金の二重計上防止・個別金額', () => {
+    const { d, day } = setup();
+    const r = day.cars[0].riders[1];
+    expect(() => collectFare(d, day.id, r.id)).toThrow(/集金済み/);
+    const r2 = day.cars[1].riders[1];
+    r2.amountOverride = 500;
+    const tx = collectFare(d, day.id, r2.id, '2026-11-20');
+    expect(tx.amount).toBe(500);
+    expect(tx.date).toBe('2026-11-20');
+  });
+  it('運転手へ同額支給', () => {
+    const { d, day } = setup();
+    syncDriverPayments(day);
+    expect(day.driverPay.payments.map((p) => p.driverName)).toEqual(['三浦母', '佐藤父', '伊藤母']);
+    expect(() => payDriver(d, day.id, day.driverPay.payments[0].id)).toThrow(/確定/);
+    Object.assign(day.driverPay, { distanceKm: 84, gasYen: 1800, tollRoundTripYen: 2400, confirmed: true });
+    expect(driverBase(day)).toBe(4200);
+    const bal = balance(d);
+    for (const p of day.driverPay.payments) payDriver(d, day.id, p.id);
+    expect(balance(d)).toBe(bal - 4200 * 3);
+  });
+});
+
+describe('準備金と経費', () => {
+  it('準備金の差額精算・立て替え精算', () => {
+    const { d, day } = (() => {
+      const d = sampleData();
+      return { d, day: d.days.find((x) => x.cars.length)! };
+    })();
+    const du = day.duties[0]; // 3000円渡し済み
+    d.expenses.push({ id: uid(), date: day.date, purchaser: du.name, items: 'お茶', category: 'drink', amount: 1200, funding: 'advance', dayId: day.id, receiptIds: [], review: [], createdAt: '' });
+    d.expenses.push({ id: uid(), date: day.date, purchaser: du.name, items: '弁当', category: 'bento', amount: 2500, funding: 'advance', dayId: day.id, receiptIds: [], review: [], createdAt: '' });
+    const g = prepGroups(d).find((x) => x.dayId === day.id)!;
+    expect(g).toMatchObject({ handed: 3000, spent: 3700, diff: 700, settled: false });
+    const bal = balance(d);
+    settlePrep(d, day.id, du.name);
+    expect(balance(d)).toBe(bal - 700);
+    expect(() => settlePrep(d, day.id, du.name)).toThrow();
+    // 精算後にレシートを追加 → 残りの差額だけ再び未精算
+    d.expenses.push({ id: uid(), date: day.date, purchaser: du.name, items: '氷', category: 'drink', amount: 300, funding: 'advance', dayId: day.id, receiptIds: [], review: [], createdAt: '' });
+    expect(prepGroups(d).find((x) => x.dayId === day.id)).toMatchObject({ settled: false, remaining: 300 });
+    settlePrep(d, day.id, du.name);
+    expect(balance(d)).toBe(bal - 1000);
+    expect(prepGroups(d).find((x) => x.dayId === day.id)!.settled).toBe(true);
+    const self = { id: uid(), date: '2026-11-10', purchaser: '小林母', items: 'テーピング', category: 'equipment' as const, amount: 880, funding: 'self' as const, receiptIds: [], review: [], createdAt: '' };
+    d.expenses.push(self);
+    settleSelfPaid(d, self.id);
+    expect(() => settleSelfPaid(d, self.id)).toThrow();
+  });
+});
+
+describe('月謝（家庭単位）', () => {
+  it('回収期限・一部入金・未回収', () => {
+    const d = emptyData();
+    d.households = parseRoster('三浦 ゆい, 6年, 三浦母\n田中 はな, 6年, 田中母\n田中 こころ, 3年\n佐藤 りん 6年 佐藤父', null);
+    expect(d.households.map((h) => `${h.name}:${h.children.length}`)).toEqual(['三浦家:1', '田中家:2', '佐藤家:1']);
+    expect(d.households[2].guardian).toBe('佐藤父');
+    const r = createBills(d, '2026-12');
+    expect(r.created).toBe(0);
+    expect(r.missing).toHaveLength(3); // 金額は要確認
+    d.households.forEach((h) => (h.monthlyFee = 2000 * h.children.length));
+    createBills(d, '2027-02', '2027-01-31');
+    expect(d.bills[0].dueDate).toBe('2027-02-28');
+    d.settings.feeDueRule = 'distributionMonthEnd';
+    expect(feeDueDate(d, '2027-03')).toBe('2027-02-28');
+    const b = d.bills[1];
+    collectFee(d, b.id, 2000);
+    expect(outstanding(b)).toBe(2000);
+    expect(() => collectFee(d, b.id, 3000)).toThrow(/超えて/);
+    const tx = collectFee(d, b.id, 2000);
+    expect(outstanding(b)).toBe(0);
     voidTx(d, tx.id, '誤入力');
-    expect(d.fees.find((x) => x.id === f.id)!.txId).toBeUndefined();
-    expect(balance(d)).toBe(before);
-    payFee(d, f.id); // 取消後は再記録できる
-    expect(ensureFeeCharges(d)).toBe(0);
+    expect(outstanding(b)).toBe(2000);
   });
-  it('修正履歴と年度締め', () => {
+});
+
+describe('出納帳', () => {
+  it('修正履歴・年度締め・CSV', () => {
     const d = sampleData();
     const t = addTx(d, { date: '2026-11-10', counterparty: 'A', amount: 100, direction: 'out', category: 'other', description: 'x' });
-    editTx(d, t.id, { amount: 120 }, '金額訂正');
+    editTx(d, t.id, { amount: 120 }, '訂正');
     expect(t.revisions[0].before.amount).toBe(100);
     d.settings.closedThrough = '2026-11-10';
     expect(() => voidTx(d, t.id, 'x')).toThrow(/締め/);
-  });
-  it('CSV出力', () => {
-    const d = sampleData();
-    const csv = ledgerCsv(d, '2000-01-01', '2100-01-01');
-    expect(csv.startsWith('﻿日付')).toBe(true);
-  });
-});
-
-describe('遠征・当番', () => {
-  it('ガソリン代 A/B', () => {
-    expect(calcGas({ distanceKm: 42, roundTrip: true, method: 'perKm', yenPerKm: 20, kmPerL: 0, yenPerL: 0 }).result).toBe(1680);
-    expect(calcGas({ distanceKm: 60, roundTrip: false, method: 'fuel', yenPerKm: 0, kmPerL: 12, yenPerL: 175 }).result).toBe(875);
-  });
-  it('集金と精算', () => {
-    const d = sampleData();
-    const e = d.expeditions[0];
-    const target = e.cars[1].riders.find((r) => r.collect)!;
-    collectRider(d, e.id, target.id);
-    expect(() => collectRider(d, e.id, target.id)).toThrow();
-    const driver = e.cars[0].riders[0];
-    expect(() => collectRider(d, e.id, driver.id)).toThrow(/集金対象/);
-    const ex = e.expenses.find((x) => x.type === 'toll')!;
-    expect(() => settleExpense(d, e.id, ex.id)).toThrow(/確定/);
-    confirmExpense(e, ex, 1200);
-    settleExpense(d, e.id, ex.id);
-    expect(() => confirmExpense(e, ex, 1300)).toThrow();
-  });
-  it('支払い済み当番の交代・中止は確認を求める', () => {
-    const d = sampleData();
-    const du = newDuty('2026-11-22', '練習', ['田中母'], 1000);
-    d.duties.push(du);
-    payDuty(d, du.id, du.assignees[0].id);
-    expect(() => replaceAssignee(d, du.id, du.assignees[0].id, '佐藤母')).toThrow('NEEDS_CONFIRM');
-    const bal = balance(d);
-    replaceAssignee(d, du.id, du.assignees[0].id, '佐藤母', 'refund');
-    expect(balance(d)).toBe(bal + 1000);
-    expect(du.assignees.filter((a) => a.status === 'active').map((a) => a.name)).toEqual(['佐藤母']);
-    cancelDuty(d, du.id);
-    expect(du.cancelled).toBe(true);
-  });
-  it('リマインド', () => {
-    const d = sampleData();
-    const kinds = new Set(computeReminders(d).map((r) => r.kind));
-    expect(kinds.has('fee')).toBe(true);
-    expect(kinds.has('duty')).toBe(true);
-    expect(kinds.has('settle')).toBe(true);
+    expect(ledgerCsv(d, '2000-01-01', '2100-01-01').startsWith('﻿日付')).toBe(true);
+    expect(transportCsv(d)).toContain('選手');
   });
 });

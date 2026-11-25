@@ -187,7 +187,7 @@ function prevDay(ymd: string) {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
 }
 
-const CATS: TxCategory[] = ['fee', 'transport', 'gas', 'toll', 'parking', 'duty', 'refund', 'opening', 'other'];
+const CATS: TxCategory[] = ['other', 'expense', 'fee', 'transport', 'driver', 'prep', 'prepSettle', 'opening'];
 
 function AddTxModal(props: { onClose: () => void }) {
   const { update } = useStore();
@@ -218,7 +218,7 @@ function AddTxModal(props: { onClose: () => void }) {
       <Field label="内容">
         <input type="text" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} placeholder="例: ボール購入" />
       </Field>
-      <p className="muted">部費・遠征・当番の入出金は各画面から記録すると自動で記帳され、二重計上を防げます。</p>
+      <p className="muted">月謝・交通費・準備金・経費の入出金は各画面から記録すると自動で記帳され、二重計上を防げます。</p>
       <button
         className="btn primary block"
         disabled={!f.counterparty.trim() || !(f.amount > 0)}

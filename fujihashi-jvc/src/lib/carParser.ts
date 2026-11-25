@@ -1,5 +1,8 @@
-import type { Car, Member, PersonKind, Rider } from './types';
-import { guessYmd, normalizeText, today, uid } from './util';
+import { guessYmd, normalizeText, today } from './util';
+
+export type PersonKind = 'child' | 'adult' | 'sibling';
+/** 名簿照合用（家庭の子ども1人ずつ） */
+export interface RosterPerson { id: string; name: string; kana?: string; guardian: string; householdId: string }
 
 export interface ParsedRider { name: string; kind: PersonKind; relation?: string }
 export interface ParsedCar { name: string; driver: string; riders: ParsedRider[] }
@@ -105,61 +108,20 @@ export function parseCarSplit(input: string, base = today()): CarSplitResult {
   return res;
 }
 
-// ---- 名簿との照合・確認画面用 ----
+// ---- 名簿との照合 ----
 
-export interface ReviewIssue { level: 'warn' | 'info'; message: string }
+const surname = (m: RosterPerson) => m.name.split(/\s+/)[0];
+const given = (m: RosterPerson) => m.name.split(/\s+/).slice(1).join('') || m.name;
+export const compact = (s: string) => s.replace(/\s+/g, '');
 
-export interface DraftCar extends Car { issues: string[] }
-
-export interface CarDraft { date?: string; title?: string; destination?: string; cars: DraftCar[]; issues: ReviewIssue[] }
-
-const surname = (m: Member) => m.name.split(/\s+/)[0];
-const given = (m: Member) => m.name.split(/\s+/).slice(1).join('') || m.name;
-const compact = (s: string) => s.replace(/\s+/g, '');
-
-export function matchMembers(name: string, kind: PersonKind, members: Member[]): Member[] {
+export function matchPeople(name: string, kind: PersonKind, people: RosterPerson[]): RosterPerson[] {
   const n = compact(name);
-  if (kind === 'child') {
-    return members.filter((m) => compact(m.name) === n || given(m) === n || (m.kana && compact(m.kana) === n) || n === `${surname(m)}${given(m)}`);
+  if (kind === 'child' || kind === 'sibling') {
+    const direct = people.filter((m) => compact(m.name) === n || given(m) === n || (m.kana && compact(m.kana) === n));
+    if (direct.length || kind === 'child') return direct;
   }
-  // 「三浦母」「三浦兄」→ 姓で家族を特定
+  // 「三浦母」「三浦兄」→ 姓で家庭を特定
   const sn = n.replace(REL_RE, '');
   if (!sn) return [];
-  return members.filter((m) => surname(m) === sn || compact(m.guardian).startsWith(sn));
-}
-
-export function buildDraft(r: CarSplitResult, members: Member[]): CarDraft {
-  const issues: ReviewIssue[] = [];
-  const seen = new Map<string, string[]>();
-  const cars: DraftCar[] = r.cars.map((c) => {
-    const carIssues: string[] = [];
-    const riders: Rider[] = [];
-    const driverName = c.driver || '';
-    if (!driverName) carIssues.push('運転手が読み取れません');
-    if (driverName) {
-      const dk = classify(driverName);
-      riders.push({ id: uid('r_'), name: driverName, kind: dk.kind === 'child' ? 'adult' : dk.kind, relation: dk.relation, memberId: matchMembers(driverName, 'adult', members)[0]?.id, isDriver: true, collect: false });
-    }
-    for (const p of c.riders) {
-      const cands = matchMembers(p.name, p.kind, members);
-      let memberId: string | undefined;
-      if (cands.length === 1) memberId = cands[0].id;
-      else if (cands.length > 1) carIssues.push(`「${p.name}」が名簿の複数人（${cands.map((m) => m.name).join('・')}）に該当します`);
-      else if (p.kind === 'child') carIssues.push(`「${p.name}」は名簿に見つかりません（読み取りを確認してください）`);
-      riders.push({ id: uid('r_'), name: p.name, kind: p.kind, relation: p.relation, memberId, collect: true });
-    }
-    for (const rd of riders) {
-      // 子どもは名簿上の同一人物で、それ以外は名前で重複判定
-      const key = rd.kind === 'child' && rd.memberId ? (members.find((m) => m.id === rd.memberId)?.name ?? rd.name) : compact(rd.name);
-      seen.set(key, [...(seen.get(key) ?? []), c.name]);
-    }
-    return { id: uid('car_'), name: c.name, driver: driverName, riders, issues: carIssues };
-  });
-  for (const [name, where] of seen) {
-    if (where.length > 1) issues.push({ level: 'warn', message: `「${name}」が重複しています（${where.join('・')}）` });
-  }
-  if (!r.date) issues.push({ level: 'warn', message: '遠征日が読み取れません。日付を入力してください' });
-  if (!cars.length) issues.push({ level: 'warn', message: '車が見つかりません。「〇〇車」の行があるか確認してください' });
-  for (const c of cars) for (const m of c.issues) issues.push({ level: 'warn', message: `${c.name}: ${m}` });
-  return { date: r.date, title: r.title, destination: r.destination, cars, issues };
+  return people.filter((m) => surname(m) === sn || compact(m.guardian).startsWith(sn));
 }
