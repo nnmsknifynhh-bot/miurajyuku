@@ -214,3 +214,25 @@ describe('スプレッドシートからの当番反映', () => {
     expect(items[2].review.join()).toContain('読めません');
   });
 });
+
+import { newSession, normPass, seal, unsealAny } from '../src/lib/vault';
+
+describe('パスコードの入力ゆれ', () => {
+  it('全角/半角・空白・先頭の大文字を許容し、違うパスコードは拒否', async () => {
+    for (const [setWith, typed] of [
+      ['１２３４５６', '123456'], // 旧版で全角のまま設定 → 半角で入力
+      ['123456', '１２３４５６'],
+      ['abc123', 'Abc123'], // 先頭が自動で大文字に
+      ['Abc123', 'abc123'],
+      ['abc123', ' abc123 '],
+    ]) {
+      const s = await newSession(setWith);
+      const sealed = await seal(s, { ok: 1 });
+      const r = await unsealAny<{ ok: number }>(sealed, typed);
+      expect(r.data.ok).toBe(1);
+    }
+    const s = await newSession(normPass('１２３４５６'));
+    const sealed = await seal(s, { ok: 1 });
+    await expect(unsealAny(sealed, '123457')).rejects.toBeTruthy();
+  }, 60000);
+});

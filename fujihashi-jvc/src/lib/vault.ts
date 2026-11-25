@@ -157,3 +157,37 @@ export async function clearAll() {
     tx.onerror = () => rej(tx.error);
   });
 }
+
+// ---- パスコードの入力ゆれ対策 ----
+/** 全角→半角（NFKC）・前後の空白を除いた形。新しく設定するパスコードはこの形で保存する */
+export function normPass(p: string): string {
+  return p.normalize('NFKC').trim();
+}
+
+/** 入力ゆれの候補（全角/半角・空白・先頭の大文字小文字） */
+export function passCandidates(p: string): string[] {
+  const out = [p, normPass(p), p.trim()];
+  for (const x of [...out]) {
+    if (!x) continue;
+    const f = x[0];
+    const flip = f === f.toUpperCase() ? f.toLowerCase() : f.toUpperCase();
+    if (flip !== f) out.push(flip + x.slice(1));
+  }
+  // 半角で入力して、設定時は全角だった場合
+  const wide = p.trim().replace(/[!-~]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 0xfee0));
+  out.push(wide);
+  return [...new Set(out.filter(Boolean))];
+}
+
+/** 候補を順に試して復号 */
+export async function unsealAny<T>(sealed: Sealed, typed: string): Promise<{ data: T; session: Session }> {
+  let last: unknown;
+  for (const p of passCandidates(typed)) {
+    try {
+      return await unseal<T>(sealed, p);
+    } catch (e) {
+      last = e;
+    }
+  }
+  throw last ?? new Error('wrong');
+}

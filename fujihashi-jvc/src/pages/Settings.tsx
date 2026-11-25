@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useStore, errorText } from '../store';
 import { Card, Field, NumInput, Seg, TopBar } from '../components/ui';
 import { migrate } from '../lib/defaults';
-import { clearAll, exportImages, importImages, kvDel, kvGet, newSession, reencryptImages, seal, unseal, VAULT_KEY, VAULT_PREV_KEY, type Sealed } from '../lib/vault';
+import { clearAll, exportImages, importImages, kvDel, kvGet, newSession, normPass, reencryptImages, seal, unsealAny, VAULT_KEY, VAULT_PREV_KEY, type Sealed } from '../lib/vault';
 import { download, expensesCsv, feesCsv, ledgerCsv, transportCsv } from '../lib/csv';
 import { sampleData } from '../lib/sample';
 import { currentFiscal } from '../lib/ledger';
@@ -34,7 +34,7 @@ export function SettingsPage() {
       if (sealed.format !== 'jvc-kaikei-backup') throw new Error('バックアップファイルではありません');
       const pass = prompt('バックアップを作成したときのパスコード');
       if (!pass) return;
-      const { data } = await unseal<unknown>(sealed, pass).catch(() => {
+      const { data } = await unsealAny<unknown>(sealed, pass).catch(() => {
         throw new Error('パスコードが違います');
       });
       const payload = sealed.bv === 2 ? (data as { data: AppData; images: Record<string, { type: string; data: string }> }) : { data: data as AppData, images: {} };
@@ -51,16 +51,16 @@ export function SettingsPage() {
     }
   };
   const changePass = async () => {
-    if (pw.n1.length < 6) return toast({ text: '新しいパスコードは6文字以上にしてください', err: true });
-    if (pw.n1 !== pw.n2) return toast({ text: '確認用が一致しません', err: true });
+    if (normPass(pw.n1).length < 6) return toast({ text: '新しいパスコードは6文字以上にしてください', err: true });
+    if (normPass(pw.n1) !== normPass(pw.n2)) return toast({ text: '確認用が一致しません', err: true });
     try {
       const sealed = await kvGet<Sealed>(VAULT_KEY);
-      if (sealed) await unseal(sealed, pw.cur);
+      if (sealed) await unsealAny(sealed, pw.cur);
     } catch {
       return toast({ text: '現在のパスコードが違います', err: true });
     }
     setBusy(true);
-    const next = await newSession(pw.n1);
+    const next = await newSession(normPass(pw.n1));
     await reencryptImages(session, next);
     setSession(next);
     await kvDel(VAULT_PREV_KEY);
