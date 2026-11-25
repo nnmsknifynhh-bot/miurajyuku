@@ -261,7 +261,7 @@
       state.mySeats = d.mySeats || [];
       cakeGiven.clear(); for (const id of (d.me.cakeGiven || [])) cakeGiven.add(id);
       state.pts = d.me.pts || null;
-      loadBoard(); loadMorning(); refreshGoal(); refreshTestChip();
+      loadBoard(); loadMorning(); refreshGoal(); refreshTestChip(); refreshKidChip();
       if (state.user.role === 'student') setTimeout(goMySeat, 1800);
       { const mine = state.testQueue && state.testQueue.booths.find(b => b.userId === d.me.id); state.testBooth = mine ? mine.seat : null; }
       buildReactions(); updateAll(); refreshWeek(true); refreshFun(true); renderTest();
@@ -1182,8 +1182,8 @@
   const ptsMode = () => !!(state.user && (state.user.role === 'student' || state.user.role === 'parent') && !state.user.trialUntil);
   let earningUntil = 0;
   function renderPts() {
-    const chip = $('#pts-chip'), on = ptsMode() && state.pts;
-    chip.hidden = !on; $('#place').hidden = !!on;
+    const chip = $('#pts-chip'), on = ptsMode() && state.pts && state.user.role !== 'parent'; // 保護者は左上に「わが子」（ポイントは着せかえの画面で）
+    chip.hidden = !on; $('#place').hidden = !!on || (state.user && state.user.role === 'parent');
     if (!on) return;
     const prev = Number($('#pts-num').dataset.v);
     $('#pts-num').textContent = state.pts.balance; $('#pts-num').dataset.v = state.pts.balance;
@@ -1204,6 +1204,31 @@
     if (state.gb) state.gb.openShop();
   }
   $('#pts-chip').onclick = openShopIfFree;
+  // 👪 保護者の左上：わが子のいま・今日の自習（上）と、🔥・テストまで（下）
+  const fmtShort = (m) => m >= 60 ? `${Math.floor(m / 60)}時間${m % 60 ? m % 60 + '分' : ''}` : `${m}分`;
+  async function refreshKidChip() {
+    const chip = $('#kid-chip');
+    if (!state.user || state.user.role !== 'parent') { chip.hidden = true; return; }
+    let d; try { d = await api('GET', '/api/parent/glance'); } catch (e) { return; }
+    chip.textContent = '';
+    if (!d.children.length) { chip.hidden = true; return; }
+    for (const k of d.children) {
+      const top = el('div', 'kc-top');
+      top.append(el('b', null, `${k.studying ? '📖' : k.online ? '🟢' : '🏠'} ${k.name}さん`), el('span', null, `${k.studying ? 'いま自習中・' : k.online ? '入室中・' : ''}今日 ${fmtShort(k.today)}`));
+      const sub = [];
+      if (k.streak) sub.push(`🔥${k.streak}${k.hs ? '週' : '日'}連続`);
+      const c = k.countdown;
+      if (c) sub.push(c.during ? `📝 ${c.termName}テスト中` : `📅 ${c.termName}まで あと${c.days}日`);
+      if (k.late) sub.push(`⚠️ 遅れ${k.late}`);
+      chip.append(top);
+      if (sub.length) chip.append(el('div', 'kc-sub' + (k.late ? ' late' : ''), sub.join('・')));
+    }
+    chip.hidden = false;
+    // 下の「のこり時間」などが重ならないように、すぐ下へ
+    requestAnimationFrame(() => { const tc = document.querySelector('.top-chips'); if (tc) tc.style.top = Math.round(chip.getBoundingClientRect().bottom + 6) + 'px'; });
+  }
+  $('#kid-chip').onclick = () => openFamily();
+  setInterval(refreshKidChip, 60_000);
   async function refreshPts() {
     if (!ptsMode()) return;
     try { const g = await api('GET', '/api/me/ganbari'); state.pts = { ...(state.pts || {}), balance: g.points.balance }; renderPts(); } catch (e) { /* 次の機会に */ }

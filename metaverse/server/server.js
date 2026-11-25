@@ -471,6 +471,18 @@ app.get('/api/parent/home', auth.requireAuth, requireParent, (req, res) => {
   res.json({ children: kids, stamps: parents.STAMPS, streak: parents.visitStreak(req.user.id), endsAt: parents.visitEndsAt(req.user.id), points: ganbari.points(req.user.id).balance, moms: parents.momsTree(),
     gifts: birthday.giftsForParent(req.user.id), myBirthday: req.user.birthday || null });
 });
+// 保護者の画面の左上：わが子の「いま」・今日の自習・🔥・テストまで（と、テスト対策の遅れ）
+app.get('/api/parent/glance', auth.requireAuth, requireParent, (req, res) => {
+  const today = ganbari.jst().day;
+  res.json({ children: parents.childrenOf(req.user.id).map(k => {
+    const p = realtime._online.get(k.id), u = db.prepare('SELECT id, role, grade, school, trial_until FROM users WHERE id = ?').get(k.id);
+    const rem = u ? scores.reminder(u, today) : { countdown: null };
+    let late = 0;
+    if (rem.countdown && /^中[1-3]$/.test(k.grade || '')) { const s = prep.scheduleFor(k.id, today); late = s && s.counts ? s.counts.late : 0; }
+    return { id: k.id, name: k.name, grade: k.grade, today: ganbari.dayAll(k.id, today), streak: ganbari.streak(k.id), hs: ganbari.isHS(k.grade),
+      studying: !!(p && SchoolMap.isStudyRoom(p.room) && !p.away), online: !!p, countdown: rem.countdown, late };
+  }) });
+});
 // 保護者が自分の誕生日を登録（月-日だけ）。誕生日の日に、子どもの画面にカードが出る
 app.post('/api/parent/birthday', auth.requireAuth, requireParent, (req, res) => {
   const bd = ganbari.normBirthday(req.body.birthday);
