@@ -127,3 +127,29 @@ test('🏫 学校名：教室の設定で作る・名前を変える（生徒と
   assert.equal((await http('POST', '/api/admin/schools', { action: 'remove', name: '△△中' }, owner)).status, 200);
   assert.deepEqual((await http('GET', '/api/admin/prep', null, owner)).data.schoolList, ['〇〇中学校']);
 });
+
+test('学校の定期テストの日（全学年共通）を先に入れておくと、その学校の生徒ぜんいんに反映。学年ごとの日付があればそちらが先', async () => {
+  const r = await http('POST', '/api/admin/schools', { name: '□□中' }, owner);
+  assert.equal(r.status, 200);
+  const mk = async (id, grade) => (await http('POST', '/api/admin/users', { role: 'student', loginId: id, displayName: id, grade, password: 'password123', school: '□□中' }, owner)).data.user.id;
+  const a = await mk('sq1', '中1'), b = await mk('sq3', '中3');
+  assert.match((await http('POST', '/api/admin/schools', { action: 'dates', name: '□□中', dates: { '2end': { start: '2026-12-10', end: '2026-12-08' } } }, owner)).data.error, /後に/);
+  const s = await http('POST', '/api/admin/schools', { action: 'dates', name: '□□中', dates: { '2mid': { start: '2026-10-14' }, '2end': { start: '2026-12-10', end: '2026-12-11' } } }, owner);
+  assert.equal(s.status, 200, JSON.stringify(s.data));
+  assert.deepEqual(s.data.schools.find(x => x.name === '□□中').dates['2end'], { start: '2026-12-10', end: '2026-12-11' });
+  for (const id of [a, b]) { const k = P.scheduleFor(id, '2026-12-01'); assert.equal(k.test.start, '2026-12-10'); assert.equal(k.test.source, 'juku'); }
+  // 中3だけ Unit を入れる（日付は空＝学校の日程）→ 中3は Unit つき、中1は Unit なし
+  assert.equal((await http('PUT', '/api/admin/prep/school-test', { school: '□□中', grade: '中3', term: '2end', start: null, speaking: 'Unit5' }, owner)).status, 200);
+  assert.deepEqual(P.scheduleFor(b, '2026-12-01').sw.speaking.map(x => x.name), ['Unit5']);
+  assert.equal(P.scheduleFor(b, '2026-12-01').test.start, '2026-12-10');
+  assert.deepEqual(P.scheduleFor(a, '2026-12-01').sw.speaking, []);
+  // 中1だけ日付がちがう
+  await http('PUT', '/api/admin/prep/school-test', { school: '□□中', grade: '中1', term: '2end', start: '2026-12-03' }, owner);
+  assert.equal(P.scheduleFor(a, '2026-12-01').test.start, '2026-12-03');
+  // 生徒は自分で入れられない（塾で設定）
+  const c1 = (await http('POST', '/api/login', { loginId: 'sq3', password: 'password123' })).cookie;
+  assert.match((await http('PUT', '/api/scores/test-date', { grade: '中3', term: '2mid', start: '2026-10-01' }, c1)).data.error, /塾で設定/);
+  // Unit チェック表も学校の日程で出る
+  const sw = (await http('GET', `/api/admin/prep/sw?school=${encodeURIComponent('□□中')}&grade=中3&term=2end`, null, owner)).data;
+  assert.equal(sw.test.start, '2026-12-10'); assert.equal(sw.students.length, 1);
+});

@@ -40,7 +40,7 @@
     table();
 
     // ── ② 学校のテスト日程 ──
-    const ss = section('🏫 学校のテスト日程（学校×学年×テスト）', '学校ごとに「テスト初日」を入れると、その学校の生徒に自動でスケジュールが出ます（生徒の画面には「塾で設定」と出ます）。学校名は「👥 ユーザー」で生徒ごとに入れます。スピーキング・ライティングの課題は「Unit6-1　Unit6-2」のように、改行・「、」・スペース2つで区切ります。音読に登録した単元と同じ名前にすると、テスト教室で合格したときに自動で✅がつきます。');
+    const ss = section('🏫 学年ごとの課題・範囲（学校×学年×テスト）', 'テストの日は「🏫 教室の設定」→ 学校名の「📅 定期テストの日」で、学校ごとに先に入れておけます（その学校の生徒ぜんいんに反映）。ここでは学年ごとのスピーキング・ライティングの課題と範囲を入れます。学年だけ日がちがうときは、ここに日付を入れるとそちらが先になります。生徒の学校名は「👥 ユーザー」で入れます。スピーキング・ライティングの課題は「Unit6-1　Unit6-2」のように、改行・「、」・スペース2つで区切ります。音読に登録した単元と同じ名前にすると、テスト教室で合格したときに自動で✅がつきます。');
     const form = el('div', 'pp-form');
     // 学校は「🏫 教室の設定」で作ったものからえらぶ
     const school = el('select'); school.append(new Option('学校をえらぶ', ''));
@@ -50,7 +50,7 @@
     const term = el('select'); TERMS.forEach(([v, n]) => term.append(new Option(n, v)));
     const start = el('input'); start.type = 'date'; const end = el('input'); end.type = 'date';
     const r1 = el('div', 'gb-row'); r1.append(school, dl, grade, term);
-    const r2 = el('div', 'gb-row'); r2.append(el('span', null, 'テスト初日'), start, el('span', null, '最後の日（あれば）'), end);
+    const r2 = el('div', 'gb-row'); r2.append(el('span', null, 'テスト初日（空なら学校の日程）'), start, el('span', null, '最後の日（あれば）'), end);
     const spk = el('textarea', 'gb-out'); spk.rows = 2; spk.placeholder = 'スピーキング（例：Unit6-1　Unit6-2）';
     const wrt = el('textarea', 'gb-out'); wrt.rows = 2; wrt.placeholder = 'ライティング（例：Unit6-1　Unit6-2）';
     const unitHint = el('small', 'muted', d.units.length ? `音読に登録ずみの単元：${d.units.slice(0, 20).join('・')}${d.units.length > 20 ? ' ほか' : ''}` : '音読の単元はまだ登録されていません');
@@ -67,7 +67,7 @@
       form.scrollIntoView({ behavior: 'smooth' });
     };
     const body = () => ({ school: school.value, grade: grade.value, term: term.value, start: start.value || null, end: end.value || null, speaking: spk.value, writing: wrt.value, ranges: Object.fromEntries(Object.entries(rangeIn).map(([k, i]) => [k, i.value])) });
-    save.onclick = async () => { if (!school.value) return toast('学校をえらんでください（学校は「🏫 教室の設定」で作れます）'); if (!start.value) return toast('テスト初日を入れてください'); try { await api('PUT', '/api/admin/prep/school-test', body()); toast('保存しました'); reload(); } catch (e) { toast(e.message); } };
+    save.onclick = async () => { if (!school.value) return toast('学校をえらんでください（学校は「🏫 教室の設定」で作れます）'); try { await api('PUT', '/api/admin/prep/school-test', body()); toast('保存しました'); reload(); } catch (e) { toast(e.message); } };
     del.onclick = async () => { if (!confirm(`${school.value} ${grade.value} の日程を消しますか？`)) return; try { await api('PUT', '/api/admin/prep/school-test', { ...body(), start: null }); toast('消しました'); reload(); } catch (e) { toast(e.message); } };
     // 登録ずみの日程と、生徒ごとの Unit チェック表
     const lw = el('div', 'table-wrap'); ss.append(lw);
@@ -75,7 +75,7 @@
     const swBox = el('div', 'pp-swtable');
     for (const t of d.schoolTests) {
       const tr = el('tr');
-      [t.school, t.grade, t.termName, `${md(t.start)}${t.end ? '〜' + md(t.end) : ''}`, t.speaking.join('・') || '–', t.writing.join('・') || '–'].forEach(v => tr.append(el('td', null, v)));
+      [t.school, t.grade, t.termName, `${md(t.start)}${t.end ? '〜' + md(t.end) : ''}${t.fromSchool ? '（学校の日程）' : ''}`, t.speaking.join('・') || '–', t.writing.join('・') || '–'].forEach(v => tr.append(el('td', null, v)));
       const td = el('td');
       const e = el('button', 'btn small secondary', '直す'); e.type = 'button'; e.onclick = () => fill(t);
       const c = el('button', 'btn small', '✅ Unitチェック表'); c.type = 'button'; c.onclick = () => swTable(t);

@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS prep_school_tests (
   updated_at TEXT NOT NULL,
   PRIMARY KEY (school, grade, term)
 );
+-- 学校ごとの定期テストの日（全学年共通）。学年ごとにちがうときは prep_school_tests の日付が優先
+CREATE TABLE IF NOT EXISTS school_test_dates (school TEXT NOT NULL, term TEXT NOT NULL, start_day TEXT NOT NULL, end_day TEXT, PRIMARY KEY (school, term));
 -- ✅（state 1＝やった・0＝先生が外した）。テストの初日もキーに入れる（次の年のテストに引きつがない）
 CREATE TABLE IF NOT EXISTS prep_checks (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, grade TEXT NOT NULL, term TEXT NOT NULL, start_day TEXT NOT NULL,
@@ -89,7 +91,7 @@ function parseUnits(text) {
   return out.slice(0, 20);
 }
 function schoolTests() {
-  return db.prepare('SELECT * FROM prep_school_tests ORDER BY school, grade, start_day').all().map(viewSchoolTest);
+  return db.prepare('SELECT * FROM prep_school_tests ORDER BY school, grade, term').all().map(viewSchoolTest).map(t => { if (!t.start) { const sd = schoolDate(t.school, t.term); if (sd) Object.assign(t, sd, { fromSchool: true }); } return t; });
 }
 function viewSchoolTest(r) {
   return { school: r.school, grade: r.grade, term: r.term, termName: TERM_NAME[r.term], start: r.start_day, end: r.end_day, speaking: JSON.parse(r.speaking), writing: JSON.parse(r.writing), ranges: JSON.parse(r.ranges) };
@@ -99,10 +101,13 @@ function setSchoolTest(b, actorId) {
   if (!school) return { error: '学校名を入れてください' };
   if (!GRADES.includes(b.grade)) return { error: '学年をえらんでください（中1〜中3）' };
   if (!TERMS.includes(b.term)) return { error: 'どのテストかえらんでください' };
-  if (!b.start) { db.prepare('DELETE FROM prep_school_tests WHERE school = ? AND grade = ? AND term = ?').run(school, b.grade, b.term); audit(actorId, 'prep.school_test_deleted', school, { grade: b.grade, term: b.term }); return { ok: true }; }
-  if (!RE_DAY.test(b.start) || (b.end && !RE_DAY.test(b.end))) return { error: '日付が正しくありません' };
-  const end = b.end && b.end !== b.start ? b.end : null;
+  const hasContent = parseUnits(b.speaking).length || parseUnits(b.writing).length || Object.values(b.ranges || {}).some(v => clean(v, 80));
+  if (b.remove || (!b.start && !hasContent)) { db.prepare('DELETE FROM prep_school_tests WHERE school = ? AND grade = ? AND term = ?').run(school, b.grade, b.term); audit(actorId, 'prep.school_test_deleted', school, { grade: b.grade, term: b.term }); return { ok: true }; }
+  if (!b.start && !schoolDate(school, b.term)) return { error: 'テスト初日を入れてください（学校の日程がまだありません。「🏫 教室の設定」の学校名で入れられます）' };
+  if ((b.start && !RE_DAY.test(b.start)) || (b.end && !RE_DAY.test(b.end))) return { error: '日付が正しくありません' };
+  const end = b.start && b.end && b.end !== b.start ? b.end : null;
   if (end && end < b.start) return { error: '最後の日は、初日より後にしてください' };
+  b.start = b.start || ''; // 空＝学校の日程を使う
   const ranges = {};
   for (const [k, v] of Object.entries(b.ranges || {}).slice(0, 10)) { const kk = clean(k, 10), vv = clean(v, 80); if (kk && vv) ranges[kk] = vv; }
   db.prepare(`INSERT INTO prep_school_tests (school, grade, term, start_day, end_day, speaking, writing, ranges, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -117,19 +122,28 @@ function setSchoolTest(b, actorId) {
  * 学校の日程（先生が入れた）を先に使い、ないテストだけ生徒が入れた日を使う
  * @returns [{ grade, term, termName, start, end, source:'juku'|'self', st? }]
  */
+const schoolDate = (school, term) => db.prepare('SELECT start_day AS start, end_day AS end FROM school_test_dates WHERE school = ? AND term = ?').get(school, term) || null;
+/** その学校・学年・テストの日程（学年の日付 → なければ学校の日付）と、学年ごとの Unit・範囲 */
+function effective(school, grade, term) {
+  const r = db.prepare('SELECT * FROM prep_school_tests WHERE school = ? AND grade = ? AND term = ?').get(school, grade, term);
+  const st = r ? viewSchoolTest(r) : { school, grade, term, termName: TERM_NAME[term], start: '', end: null, speaking: [], writing: [], ranges: {} };
+  if (!st.start) { const sd = schoolDate(school, term); if (!sd) return null; st.start = sd.start; st.end = sd.end; st.fromSchool = true; }
+  return st;
+}
 function datesFor(user) {
   const u = typeof user === 'object' ? user : db.prepare('SELECT id, grade, school FROM users WHERE id = ?').get(user);
   if (!u) return [];
-  const school = u.school || (db.prepare('SELECT school FROM users WHERE id = ?').get(u.id) || {}).school;
-  const juku = school ? db.prepare('SELECT * FROM prep_school_tests WHERE school = ?').all(school).map(viewSchoolTest) : [];
-  const out = juku.map(t => ({ grade: t.grade, term: t.term, termName: t.termName, start: t.start, end: t.end, source: 'juku', st: t }));
+  const row = db.prepare('SELECT grade, school FROM users WHERE id = ?').get(u.id) || {};
+  const school = u.school || row.school, grade = u.grade || row.grade;
+  const out = [];
+  if (school && GRADES.includes(grade)) for (const term of TERMS) { const t = effective(school, grade, term); if (t) out.push({ grade, term, termName: t.termName, start: t.start, end: t.end, source: 'juku', st: t }); }
   const has = new Set(out.map(d => d.grade + '|' + d.term));
   for (const r of db.prepare('SELECT grade, term, start_day AS start, end_day AS end FROM score_test_dates WHERE user_id = ?').all(u.id)) {
     if (!has.has(r.grade + '|' + r.term)) out.push({ ...r, termName: TERM_NAME[r.term], source: 'self' });
   }
   return out.sort((a, b) => a.start.localeCompare(b.start));
 }
-const jukuHas = (user, grade, term) => !!(user.school && db.prepare('SELECT 1 FROM prep_school_tests WHERE school = ? AND grade = ? AND term = ?').get(user.school, grade, term));
+const jukuHas = (user, grade, term) => !!(user.school && GRADES.includes(grade) && effective(user.school, grade, term));
 
 // ───────── スケジュール ─────────
 /** 段階（同じ「いつ」）ごとの期間：その段階の開始日〜次の段階の開始日の前日 */
@@ -165,9 +179,9 @@ function swStates(userId, st, checks, deadline, t) {
 }
 /** 管理画面：その学校・学年・テストの生徒ごとの Unit チェック表 */
 function swTable(school, grade, term, today) {
-  const r = db.prepare('SELECT * FROM prep_school_tests WHERE school = ? AND grade = ? AND term = ?').get(school, grade, term);
-  if (!r) return null;
-  const st = viewSchoolTest(r), { items } = parseTemplate(templateText());
+  const st = effective(school, grade, term);
+  if (!st) return null;
+  const { items } = parseTemplate(templateText());
   const maxDays = Math.max(...items.map(i => i.days), 0), stages = stagesOf(items, st.start);
   const deadline = stages[0] ? stages[0].end : dayStr(dayNum(st.start) - 1 - 0);
   const students = db.prepare("SELECT id, display_name AS name FROM users WHERE role = 'student' AND is_active = 1 AND school = ? AND grade = ? ORDER BY display_name").all(school, grade);
@@ -253,7 +267,9 @@ function schoolList() {
     list = [...new Set([...db.prepare("SELECT DISTINCT school AS s FROM users WHERE school IS NOT NULL").all(), ...db.prepare('SELECT DISTINCT school AS s FROM prep_school_tests').all()].map(r => r.s))].sort();
   }
   const count = new Map(db.prepare("SELECT school, COUNT(*) AS n FROM users WHERE role = 'student' AND is_active = 1 AND school IS NOT NULL GROUP BY school").all().map(r => [r.school, r.n]));
-  return list.map(name => ({ name, students: count.get(name) || 0 }));
+  const dates = new Map();
+  for (const r of db.prepare('SELECT school, term, start_day AS start, end_day AS end FROM school_test_dates').all()) { if (!dates.has(r.school)) dates.set(r.school, {}); dates.get(r.school)[r.term] = { start: r.start, end: r.end }; }
+  return list.map(name => ({ name, students: count.get(name) || 0, dates: dates.get(name) || {} }));
 }
 function addSchool(name, actorId) {
   const n = normSchool(name); if (!n) return { error: '学校名を入れてください' };
@@ -262,6 +278,26 @@ function addSchool(name, actorId) {
   if (list.length >= 200) return { error: '学校は200校までです' };
   setSetting('schools', JSON.stringify([...list, n].sort((a, b) => a.localeCompare(b, 'ja'))));
   audit(actorId, 'school.added', n, null);
+  return { ok: true };
+}
+/** 学校の定期テストの日（全学年共通）をまとめて入れる：{ term: { start, end } }（start が空なら消す） */
+function setSchoolDates(name, dates, actorId) {
+  const n = normSchool(name);
+  if (!schoolList().some(s => s.name === n)) return { error: '学校が見つかりません' };
+  const rows = [];
+  for (const term of TERMS) {
+    const d = (dates || {})[term]; if (!d) continue;
+    if (!d.start) { rows.push([term, null, null]); continue; }
+    if (!RE_DAY.test(d.start) || (d.end && !RE_DAY.test(d.end))) return { error: `${TERM_NAME[term]}：日付が正しくありません` };
+    const end = d.end && d.end !== d.start ? d.end : null;
+    if (end && end < d.start) return { error: `${TERM_NAME[term]}：最後の日は、初日より後にしてください` };
+    rows.push([term, d.start, end]);
+  }
+  for (const [term, st, en] of rows) {
+    if (!st) db.prepare('DELETE FROM school_test_dates WHERE school = ? AND term = ?').run(n, term);
+    else db.prepare('INSERT INTO school_test_dates (school, term, start_day, end_day) VALUES (?, ?, ?, ?) ON CONFLICT (school, term) DO UPDATE SET start_day = excluded.start_day, end_day = excluded.end_day').run(n, term, st, en);
+  }
+  audit(actorId, 'school.dates', n, null);
   return { ok: true };
 }
 /** 名前を変える：生徒の学校名・学校の日程もいっしょに変える */
@@ -275,6 +311,7 @@ function renameSchool(from, to, actorId) {
   try {
     db.prepare('UPDATE users SET school = ? WHERE school = ?').run(b, a);
     db.prepare('UPDATE prep_school_tests SET school = ? WHERE school = ?').run(b, a);
+    db.prepare('UPDATE school_test_dates SET school = ? WHERE school = ?').run(b, a);
     db.exec('COMMIT');
   } catch (e) { db.exec('ROLLBACK'); throw e; }
   setSetting('schools', JSON.stringify(list.map(x => x === a ? b : x).sort((x, y) => x.localeCompare(y, 'ja'))));
@@ -288,7 +325,8 @@ function removeSchool(name, actorId) {
   if (!s) return { error: '学校が見つかりません' };
   if (s.students) return { error: `この学校の生徒が${s.students}人います。先に生徒の学校名を変えてください` };
   setSetting('schools', JSON.stringify(list.map(x => x.name).filter(x => x !== n)));
+  db.prepare('DELETE FROM school_test_dates WHERE school = ?').run(n);
   audit(actorId, 'school.removed', n, null);
   return { ok: true };
 }
-module.exports = { schoolList, addSchool, renameSchool, removeSchool, swTable, DEFAULT_TEMPLATE, GRADES, TERMS, TERM_NAME, parseTemplate, parseUnits, templateText, setTemplate, schoolTests, setSchoolTest, datesFor, jukuHas, stagesOf, scheduleFor, setCheck, overview };
+module.exports = { setSchoolDates, effective, schoolList, addSchool, renameSchool, removeSchool, swTable, DEFAULT_TEMPLATE, GRADES, TERMS, TERM_NAME, parseTemplate, parseUnits, templateText, setTemplate, schoolTests, setSchoolTest, datesFor, jukuHas, stagesOf, scheduleFor, setCheck, overview };

@@ -415,6 +415,23 @@
       const db2 = el('button', 'btn small danger', '消す'); db2.type = 'button'; db2.disabled = s.students > 0; db2.title = s.students ? '生徒がいる学校は消せません' : '';
       db2.onclick = () => { if (confirm(`「${s.name}」を消しますか？`)) post({ action: 'remove', name: s.name }, '消しました'); };
       row.append(nm, el('small', 'muted', `生徒 ${s.students}人`), rb, db2); ul.append(row);
+      // 📅 この学校の定期テストの日（全学年共通）
+      const det = el('details', 'school-dates');
+      const filled = Object.keys(s.dates || {}).length;
+      det.append(el('summary', null, `📅 定期テストの日（全学年共通）${filled ? `：${filled}回分` : '：まだ'}`));
+      const TERMS = [['1mid', '1学期中間'], ['1end', '1学期期末'], ['2mid', '2学期中間'], ['2end', '2学期期末'], ['final', '学年末']];
+      const ins = {};
+      for (const [t, n] of TERMS) {
+        const d = (s.dates || {})[t] || {};
+        const r = el('div', 'gb-row school-date-row');
+        const a = el('input'); a.type = 'date'; a.value = d.start || ''; a.setAttribute('aria-label', n + 'の初日');
+        const b = el('input'); b.type = 'date'; b.value = d.end || ''; b.setAttribute('aria-label', n + 'の最後の日');
+        r.append(el('b', null, n), a, el('span', null, '〜'), b); det.append(r); ins[t] = [a, b];
+      }
+      const sv = el('button', 'btn small', 'この学校の日程を保存'); sv.type = 'button';
+      sv.onclick = () => post({ action: 'dates', name: s.name, dates: Object.fromEntries(Object.entries(ins).map(([t, [a, b]]) => [t, { start: a.value || null, end: b.value || null }])) }, `${s.name}の日程を保存しました`);
+      det.append(el('small', 'muted', '初日だけでもOK（1日だけのテストは右は空）。ないテストは空のまま。入れると、この学校の生徒ぜんいんの「テスト対策」「あと○日」に反映されます。学年ごとに日がちがうときは「📋 テスト対策」で学年の日付を入れると、そちらが先になります。'), sv);
+      ul.append(det);
     }
     if (!list.length) ul.append(el('p', 'muted', 'まだ学校がありません。上から追加してください。'));
     box.append(ul);

@@ -246,7 +246,7 @@ app.get('/api/admin/schools', auth.requireAuth, (req, res) => { if (!staffOnly(r
 app.post('/api/admin/schools', auth.requireAuth, (req, res) => {
   if (!can(req.user, 'manage_classroom') && req.user.role !== 'owner') return bad(res, '教室の設定の権限がありません', 403);
   const b = req.body || {};
-  const r = b.action === 'rename' ? prep.renameSchool(b.from, b.to, req.user.id) : b.action === 'remove' ? prep.removeSchool(b.name, req.user.id) : prep.addSchool(b.name, req.user.id);
+  const r = b.action === 'dates' ? prep.setSchoolDates(b.name, b.dates, req.user.id) : b.action === 'rename' ? prep.renameSchool(b.from, b.to, req.user.id) : b.action === 'remove' ? prep.removeSchool(b.name, req.user.id) : prep.addSchool(b.name, req.user.id);
   if (r.error) return bad(res, r.error);
   res.json({ ...r, schools: prep.schoolList() });
 });
