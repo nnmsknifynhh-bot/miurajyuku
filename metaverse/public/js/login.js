@@ -49,7 +49,7 @@
     const btn = e.target.querySelector('button[type=submit]');
     btn.disabled = true; $('#parent-error').textContent = '';
     try {
-      await api('POST', '/api/parent/register', { code: $('#parent-code').value, displayName: $('#parent-name').value, loginId: $('#parent-id').value, password: $('#parent-pw').value });
+      await api('POST', '/api/parent/register', { code: $('#parent-code').value, displayName: $('#parent-name').value, parentLabel: $('#parent-label').value || null, loginId: $('#parent-id').value, password: $('#parent-pw').value });
       location.replace('/app');
     } catch (err) {
       $('#parent-error').textContent = err.message;

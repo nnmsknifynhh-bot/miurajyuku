@@ -430,6 +430,7 @@ app.post('/api/parent/register', (req, res) => {
     const id = Number(r.lastInsertRowid);
     applyPermissionsAndRooms(id, 'parent', {}, []);
     parents.useInvite(b.code, id);
+    if (b.parentLabel) db.prepare('UPDATE users SET parent_label = ? WHERE id = ?').run(parents.normLabel(b.parentLabel), id); // 呼び名（登録のときにえらぶ）
     return id;
   });
   audit(id, 'parent.registered', loginId, null, req.ip);

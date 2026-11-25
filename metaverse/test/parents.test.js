@@ -321,3 +321,13 @@ test('保護者の呼び名（👨 パパ など）：子どもの画面のス�
   assert.equal((await http('POST', '/api/parent/invite', { studentId: 999999 }, pc)).status, 403);
   assert.equal((await http('POST', '/api/parent/label', { label: '👵 おばあちゃん' }, pc)).data.label, '👵 おばあちゃん');
 });
+
+test('登録のときに呼び名をえらべる（招待されたパパ）', async () => {
+  const { db } = require('../server/db.js');
+  const owner = (await http('POST', '/api/login', { loginId: 'owner', password: 'ownerpass1' })).cookie;
+  const kid = db.prepare("SELECT id FROM users WHERE role = 'student' AND is_active = 1 LIMIT 1").get().id;
+  const inv = await http('POST', `/api/admin/users/${kid}/parent-invite`, {}, owner);
+  const r = await http('POST', '/api/parent/register', { code: inv.data.code, displayName: 'パパ', loginId: 'papa1', password: 'password123', parentLabel: '👨 パパ' });
+  assert.equal(r.status, 201, JSON.stringify(r.data));
+  assert.equal(r.data.user.parentLabel, '👨 パパ');
+});

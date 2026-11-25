@@ -673,9 +673,12 @@
   // わが子の様子と「見たよ」スタンプ
   const PARENT_LABELS = ['👩 ママ', '👨 パパ', '👵 おばあちゃん', '👴 おじいちゃん', '👩 お母さん', '👨 お父さん'];
   // 保護者：呼び名をまだえらんでいなければ、1回だけたずねる
-  function askParentLabel() {
-    if (!state.user || state.user.role !== 'parent' || state.user.parentLabel) return;
-    try { if (localStorage.getItem('juku-plabel-asked-' + state.user.id)) return; localStorage.setItem('juku-plabel-asked-' + state.user.id, '1'); } catch (e) { /* なし */ }
+  let labelPending = true; // 呼び名のカードが終わるまで、使い方の案内は待つ
+  $('#plabel-dialog').addEventListener('close', () => { labelPending = false; });
+  function askParentLabel(tries = 0) {
+    if (!state.user || state.user.role !== 'parent' || state.user.parentLabel) { labelPending = false; return; }
+    if (document.querySelector('dialog[open]')) { if (tries < 120) setTimeout(() => askParentLabel(tries + 1), 1000); return; } // ソファなどの画面が閉じてから
+    try { if (localStorage.getItem('juku-plabel-asked-' + state.user.id)) { labelPending = false; return; } localStorage.setItem('juku-plabel-asked-' + state.user.id, '1'); } catch (e) { /* なし */ }
     const box = $('#plabel-btns'); box.textContent = '';
     for (const x of [...PARENT_LABELS.slice(0, 4), 'その他']) {
       const b = el('button', 'btn secondary', x); b.type = 'button';
@@ -1903,7 +1906,7 @@
   const tourKind = () => isStaff() ? 'staff' : isParent() ? 'parent' : /^小/.test(state.user.grade || '') ? 'es' : /^高|^大人$/.test(state.user.grade || '') ? 'hs' : 'jh';
   function autoTour(tries = 0) {
     if (!state.onboard || state.onboard.tourSeen || !window.Tour) return;
-    if (document.querySelector('dialog[open]') || !$('#welcome-card').hidden) { if (tries < 60) setTimeout(() => autoTour(tries + 1), 1000); return; }
+    if (document.querySelector('dialog[open]') || !$('#welcome-card').hidden || (isParent() && labelPending && tries < 40)) { if (tries < 60) setTimeout(() => autoTour(tries + 1), 1000); return; }
     state.onboard.tourSeen = true;
     window.Tour.start(tourKind(), { onDone: () => api('POST', '/api/me/tour-seen').catch(() => {}) });
   }
