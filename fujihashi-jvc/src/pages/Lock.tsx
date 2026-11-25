@@ -65,6 +65,7 @@ export function Setup(props: { onDone: (d: AppData, s: Session) => void }) {
       <button className="btn primary block" disabled={busy} onClick={submit}>
         {busy ? '準備中…' : 'はじめる'}
       </button>
+      <p className="muted" style={{ textAlign: 'center', fontSize: 11 }}>版 {__APP_VERSION__}</p>
       <p className="muted">※ パスコードを忘れるとデータを復元できません。設定画面から定期的にバックアップを保存してください。</p>
     </div>
   );
@@ -131,6 +132,7 @@ export function Unlock(props: { onDone: (d: AppData, s: Session) => void; onRese
         </button>
       </form>
       <p className="muted">全角・半角、前後の空白、先頭の大文字・小文字の違いは自動で試します。</p>
+      <p className="muted" style={{ textAlign: 'center', fontSize: 11 }}>版 {__APP_VERSION__}</p>
       {!forgot ? (
         <button className="btn small" onClick={() => setForgot(true)} style={{ alignSelf: 'center' }}>
           パスコードを忘れた場合

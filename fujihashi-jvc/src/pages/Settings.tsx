@@ -212,6 +212,7 @@ export function SettingsPage() {
             <button className="btn danger" onClick={wipe}>
               この端末の全データを消去
             </button>
+            <div className="muted">アプリの版: {__APP_VERSION__}</div>
           </div>
         </Card>
       </main>

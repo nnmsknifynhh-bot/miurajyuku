@@ -1,5 +1,5 @@
 // 藤橋JVC 会計 Service Worker: オフライン起動と通知表示
-const CACHE = 'jvc-kaikei-v1';
+const CACHE = 'jvc-kaikei-v2';
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(['/', '/manifest.webmanifest', '/icon.svg'])));
   self.skipWaiting();
