@@ -639,7 +639,7 @@ function streak(userId, date = new Date()) {
   // 保護者会の日・その生徒の授業の曜日も、とばしてつなげる
   // 祝日も、とばしてつなげる（休んでも🔥は消えない。勉強した日は1日に数える）
   const off = (d) => !ruleFor(d, c).on || md.has(d) || classDays.has(weekdayOf(d)) || isHoliday(d);
-  // VIP席の子（🔥30日以上）は、1日だけ休んでも、次の日にまた来れば🔥20から（2日以上休むと0から）
+  // 1日だけ休んでも、次の日にまた来れば：🔥30以上（VIP席）→🔥20から、🔥20〜29→🔥10から（2日以上休むと0から）
   const lim = { left: 800 };
   const runFrom = (start) => {
     let day = start, n = 0;
@@ -650,7 +650,8 @@ function streak(userId, date = new Date()) {
     }
     if (n === 0 || lim.left <= 0) return n;
     const before = runFrom(addDays(day, -1)); // 休んだ日の前の日までの🔥（その日も休みなら0）
-    return before >= VIP_DAYS ? VIP_BACK - 1 + n : n;
+    const back = before >= VIP_DAYS ? VIP_BACK : before >= 20 ? 10 : 0; // 🔥30以上→20から、🔥20〜29→10から
+    return back ? back - 1 + n : n;
   };
   return runFrom(ok.has(today) ? today : addDays(today, -1));
 }

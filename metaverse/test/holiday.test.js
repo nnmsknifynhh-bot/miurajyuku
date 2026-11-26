@@ -98,10 +98,16 @@ test('VIP席の子（🔥30以上）は、1日休んでも次の日にまた来�
   for (let i = 0; i < 35; i++) put2(day(i));
   put2(day(37));
   assert.equal(G.streak(id2, at(37)), 1, '2日休んだら0から');
-  // 🔥30未満の子は今までどおり0から
+  // 🔥20〜29の子は10から
+  const id4 = (await http('POST', '/api/admin/users', { role: 'student', loginId: 'vip4', displayName: 'v4', grade: '中1', password: 'password123' }, owner)).data.user.id;
+  const put4 = (d) => db.prepare('INSERT INTO study_days (user_id, day, auto_min, all_min) VALUES (?, ?, 60, 60)').run(id4, d);
+  for (let i = 10; i < 35; i++) put4(day(i)); // 🔥25
+  put4(day(36));
+  assert.equal(G.streak(id4, at(36)), 10, '🔥20〜29は次の日に来れば🔥10');
+  // 🔥20未満の子は今までどおり0から
   const id3 = (await http('POST', '/api/admin/users', { role: 'student', loginId: 'vip3', displayName: 'v3', grade: '中1', password: 'password123' }, owner)).data.user.id;
   const put3 = (d) => db.prepare('INSERT INTO study_days (user_id, day, auto_min, all_min) VALUES (?, ?, 60, 60)').run(id3, d);
-  for (let i = 10; i < 35; i++) put3(day(i));
+  for (let i = 20; i < 35; i++) put3(day(i)); // 🔥15
   put3(day(36));
   assert.equal(G.streak(id3, at(36)), 1);
 });
