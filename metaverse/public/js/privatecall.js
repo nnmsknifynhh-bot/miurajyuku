@@ -145,7 +145,7 @@
     async function setMic(on) {
       if (!pc.room) return;
       try { await pc.room.localParticipant.setMicrophoneEnabled(on, { echoCancellation: true, noiseSuppression: true }); pc.micOn = on; }
-      catch (e) { pc.micOn = false; toast('マイクが使えません。ブラウザの設定でマイクを許可してください', 5000); }
+      catch (e) { pc.micOn = false; if (on && window.Mic) Mic.explain(e); else toast('マイクが使えません。ブラウザの設定でマイクを許可してください', 5000); }
       render();
     }
     async function setScreen(on) {

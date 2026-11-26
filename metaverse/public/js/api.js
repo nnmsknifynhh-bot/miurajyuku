@@ -32,6 +32,21 @@
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
   }
+  // ホーム画面のアプリは、閉じずに裏にまわしただけだと古い版のまま動きつづける。
+  // しばらく（5分以上）裏にいたあと戻ってきたとき、新しい版が出ていたら読みなおす
+  if (location.protocol !== 'file:') {
+    let loadedVer = null, hiddenAt = 0;
+    const getVer = () => fetch('/api/version', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(v => v && v.version).catch(() => null);
+    getVer().then(v => { loadedVer = v; });
+    document.addEventListener('visibilitychange', async () => {
+      if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
+      if (!hiddenAt || Date.now() - hiddenAt < 5 * 60e3) return;
+      hiddenAt = 0;
+      try { const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration(); if (reg) reg.update(); } catch (e) { /* なくてもよい */ }
+      const v = await getVer();
+      if (loadedVer && v && v !== loadedVer && !document.querySelector('dialog[open]')) location.reload();
+    });
+  }
 
   window.App = { api, toast, ROLE_LABEL };
 })();

@@ -126,7 +126,7 @@
         cs.micOn = on;
       } catch (e) {
         cs.micOn = false;
-        toast('マイクが使えません。ブラウザの設定でマイクを許可してください', 5000);
+        if (on && window.Mic) Mic.explain(e); else toast('マイクが使えません。ブラウザの設定でマイクを許可してください', 5000);
       }
       reportMedia(); render();
     }

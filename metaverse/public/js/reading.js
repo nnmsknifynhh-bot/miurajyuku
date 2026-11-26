@@ -366,6 +366,8 @@
 
     function startRec() {
       if (!SR || st.recording) return;
+      // iPhone・iPad のホーム画面アプリ：開いてから初めてのときは、先にマイクの許可だけもらう（もう一度押してもらう）
+      if (window.Mic && Mic.iosPwa() && !Mic.warm) { Mic.warmUpIfNeeded(); return; }
       if (window.speechSynthesis) speechSynthesis.cancel();
       st.finals = []; st.interim = ''; st.result = null; st.recording = true; st.startAt = Date.now(); st.lastAt = 0;
       const rec = new SR();
@@ -383,11 +385,15 @@
         if (g.score === 100) setTimeout(() => { if (st.recording) finish(); }, 800);
       };
       rec.onerror = (ev) => {
-        if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') { toast('マイクが使えません。ブラウザの設定でマイクを許可してください', 6000); stopRec(true); render(); }
+        if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed' || ev.error === 'audio-capture') {
+          stopRec(true); render();
+          if (window.Mic) Mic.explain({ name: ev.error, message: ev.message || '' }, 'マイク（聞き取り）');
+          else toast('マイクが使えません。ブラウザの設定でマイクを許可してください', 6000);
+        }
       };
       rec.onend = () => { if (st.recording && st.rec === rec) { try { rec.start(); } catch (e) { /* 次の機会に */ } } }; // iPhone は無音でとまるので、つづける
       st.rec = rec;
-      try { rec.start(); } catch (e) { toast('聞き取りを始められませんでした'); st.recording = false; }
+      try { rec.start(); } catch (e) { st.recording = false; if (window.Mic) Mic.explain(e, '聞き取り'); else toast('聞き取りを始められませんでした'); }
       clearInterval(st.timer);
       st.timer = setInterval(() => {
         const t = $('#rd-timer'); if (!t || !st.recording) return;
@@ -447,6 +453,7 @@
       if (st.recording || st.preparing || st.scoring) return;
       if (window.speechSynthesis) speechSynthesis.cancel();
       if (!prep || Date.now() - prep.at > 7 * 60e3) { prepareTest(); return; } // 準備ができたら、もう一度押してもらう
+      if (window.Mic && Mic.iosPwa() && !Mic.warm) { Mic.warmUpIfNeeded(); return; } // ホーム画面アプリ：先にマイクの許可
       const { sdk, tk } = prep;
       const ref = st.unit.lines.map(l => l.en).join(' ');
       const cfg = sdk.SpeechConfig.fromAuthorizationToken(tk.token, tk.region);
@@ -466,7 +473,7 @@
         if (run.length) pl.addPhrase(run.join(' '));
       } catch (e) { /* ヒントなしで続ける */ }
       st.segs = []; st.result = null; st.interim = ''; st.recording = true; st.startAt = Date.now(); st.lastEnd = 0;
-      st.rec = { azure: recog };
+      const myRec = st.rec = { azure: recog };
       st.heardAny = false;
       recog.recognizing = (_s, e) => { st.interim = e.result.text || ''; if (st.interim) st.heardAny = true; const live = $('#rd-live'); if (live) live.textContent = `🎧 ${st.interim.slice(-80)}`; };
       st.heardText = '';
@@ -489,8 +496,21 @@
         st.lastEnd = (e.result.offset + e.result.duration) / 1e7;
         const g = scoreTest(); if (g.completeness >= 100) setTimeout(() => { if (st.recording) finish(); }, 900);
       };
-      recog.canceled = (_s, e) => { if (e.reason === sdk.CancellationReason.Error) { toast('採点につながりませんでした：' + (e.errorDetails || ''), 7000); stopRec(true); render(); } };
-      recog.startContinuousRecognitionAsync(() => {}, (err) => { toast('マイクを使えませんでした。ブラウザでマイクを許可してください', 6000); stopRec(true); render(); });
+      recog.canceled = (_s, e) => {
+        if (e.reason !== sdk.CancellationReason.Error || st.rec !== myRec) return;
+        const det = String(e.errorDetails || '');
+        stopRec(true); render();
+        const mic = det.match(/NotAllowedError|NotFoundError|NotReadableError|AbortError|SecurityError|OverconstrainedError|PermissionDeniedError/);
+        if (mic && window.Mic) Mic.explain({ name: mic[0], message: det });
+        else toast('採点につながりませんでした：' + det, 7000);
+      };
+      recog.startContinuousRecognitionAsync(() => {}, (err) => {
+        if (st.rec !== myRec) return;
+        stopRec(true); render();
+        const det = String(err || ''), mic = det.match(/NotAllowedError|NotFoundError|NotReadableError|AbortError|SecurityError|OverconstrainedError|PermissionDeniedError|TypeError/);
+        if (window.Mic) Mic.explain({ name: mic ? mic[0] : (window.Mic.hasGUM() ? 'Error' : 'NoMediaDevices'), message: det });
+        else toast('マイクを使えませんでした。ブラウザでマイクを許可してください', 6000);
+      });
       clearInterval(st.timer);
       st.timer = setInterval(() => {
         const t = $('#rd-timer'); if (!t || !st.recording) return;
