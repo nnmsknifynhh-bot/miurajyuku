@@ -70,6 +70,17 @@
   .talk.kid .bub { background:#fff7e6; border-color:#f5d9a8; }
   .talk.mom .bub { background:#ffeef5; border-color:#f7c3d8; }
   .bball td { font-size:3.7mm; }
+  /* 4コマまんが */
+  .koma4 { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; flex: 1; }
+  .koma { background: #fff; border: .9mm solid #3a2e24; border-radius: 2.4mm; padding: 2.6mm 3.4mm; display: flex; flex-direction: column; gap: 2.4mm; justify-content: space-evenly; position: relative; box-shadow: 1.2mm 1.2mm 0 rgba(58,46,36,.18); }
+  .koma .kn { position: absolute; top: -.9mm; left: -.9mm; background: #3a2e24; color: #fff; font-weight: 900; font-size: 3.6mm; padding: .6mm 2.4mm; border-radius: 2.4mm 0 2.4mm 0; }
+  .koma .scene { font-size: 19mm; text-align: center; line-height: 1.15; margin-top: 3mm; letter-spacing: 1mm; }
+  .koma .say { align-self: center; background: #fff7d6; border: .6mm solid #e8b923; border-radius: 5mm; padding: 1.8mm 4mm; font-weight: 900; font-size: 5mm; position: relative; text-align: center; }
+  .koma .say::after { content: ''; position: absolute; left: 50%; top: -2.2mm; border: 1.4mm solid transparent; border-bottom-color: #e8b923; transform: translateX(-50%); }
+  .koma .rule { font-size: 4.1mm; line-height: 1.65; margin: 0; }
+  .koma .rule b { color: #c2410c; }
+  .who { display: flex; align-items: center; gap: 2.4mm; background: #fff; border: .6mm solid var(--line); border-radius: 4mm; padding: 2mm 3.4mm; font-size: 3.9mm; font-weight: 700; }
+  .who .face { font-size: 9mm; }
 </style>
 </head>
 <body>
@@ -85,21 +96,22 @@
     <div>🚪 はじめての冒険<span>3</span></div>
     <div>📸 今日最初のページを撮ろう<span>4</span></div>
     <div>🗺 塾の地図・部屋ガイド<span>5</span></div>
-    <div>⏱ 自習時間と🔥のしくみ<span>6</span></div>
-    <div>🎁 ポイントとアイテム<span>7</span></div>
-    <div>🌳 木・短冊・👑 VIP席<span>8</span></div>
-    <div>🎤 スピーキング・ライティング<span>9</span></div>
-    <div>📊 成績とテストの日<span>10</span></div>
-    <div>📋 テスト対策（中学生）<span>11</span></div>
-    <div>🗓 季節のクエスト 年間マップ<span>12</span></div>
-    <div>🎋🎅 1学期・2学期のクエスト<span>13</span></div>
-    <div>🎎 3学期 学年末クエスト<span>14</span></div>
-    <div>🎁 ひみつのイベント<span>15</span></div>
-    <div>📚 自習室のこだわり（見守りカメラ）<span>16</span></div>
-    <div>🏫 教室・飾り・窓<span>17</span></div>
-    <div>🧭 自習室のルール<span>18</span></div>
-    <div>👩‍🏫 先生とオーナー<span>19</span></div>
-    <div>🏠 おうちの方へ<span>20〜21</span></div>
+    <div>🎁 4コマ：ポイントでアイテム<span>6</span></div>
+    <div>🔥 4コマ：🔥でVIP席<span>7</span></div>
+    <div>🛍 アイテムと交換<span>8</span></div>
+    <div>🌳 学年の木と目標の短冊<span>9</span></div>
+    <div>🎤 スピーキング・ライティング<span>10</span></div>
+    <div>📊 成績とテストの日<span>11</span></div>
+    <div>📋 テスト対策（中学生）<span>12</span></div>
+    <div>🗓 季節のクエスト 年間マップ<span>13</span></div>
+    <div>🎋🎅 1学期・2学期のクエスト<span>14</span></div>
+    <div>🎎 3学期 学年末クエスト<span>15</span></div>
+    <div>🎁 ひみつのイベント<span>16</span></div>
+    <div>📚 自習室のこだわり（見守りカメラ）<span>17</span></div>
+    <div>🎃 季節の飾りと窓<span>18</span></div>
+    <div>🧭 自習室のルール<span>19</span></div>
+    <div>👩‍🏫 先生とオーナー<span>20</span></div>
+    <div>🏠 おうちの方へ<span>21〜22</span></div>
   </div>
   <span class="pnum">1</span>
 </section>
@@ -138,10 +150,11 @@
     <div style="display:flex;flex-direction:column;gap:3mm">
       <div class="box"><h2><span class="num">1</span>ログイン</h2><p>塾からもらったIDとパスワードで入るよ。アプリを入れなくても、スマホ・タブレット・パソコンのブラウザでOK。</p></div>
       <div class="box"><h2><span class="num">2</span>漢字テスト（4択）</h2><p>入る前に、漢検の読みが1問出るよ。正解でもまちがえても、正しい読みを見てから入れる。</p></div>
-      <div class="phone" style="height:62mm"><img src="img/kanji.jpg" alt="" style="object-position:center 30%"></div>
+      <div class="phone" style="height:48mm"><img src="img/kanji.jpg" alt="" style="object-position:center 30%"></div>
       <div class="box"><h2><span class="num">3</span>📸 今日のページを撮る</h2><p>その日はじめて入るときは、<b>今日最初に取り組むページ</b>を撮ってから入るよ（くわしくは次のページ）。</p></div>
       <div class="box"><h2><span class="num">4</span>「🏫 へや」で自習室へ</h2><p>小学生は「小学生自習室」、中学生は「中学生自習室」、高校生は「高校生自習室（カフェ）」へ。</p></div>
-      <div class="box"><h2><span class="num">5</span>席にすわって、勉強スタート！</h2><p>いすをタップするか「すわる」。すわると自習時間を数えはじめるよ。</p></div>
+      <div class="box"><h2><span class="num">5</span>📷 カメラをオン</h2><p>自習室に入ると「見守りカメラ」の画面が出るよ。<b>カメラをオン</b>にしてね（オフのままだと先生に知らせが届くよ）。</p></div>
+      <div class="box"><h2><span class="num">6</span>席にすわって、勉強スタート！</h2><p>いすをタップするか「すわる」。すわると自習時間を数えはじめるよ。</p></div>
     </div>
     <div style="display:flex;flex-direction:column;gap:3mm">
       <div class="phone" style="height:190mm"><img src="img/study.jpg" alt=""></div>
@@ -187,53 +200,58 @@
     <div class="shot" style="height:44mm"><img src="guide2/room_cafe.jpg" alt=""></div>
   </div>
   <div class="grid3">
-    <div class="box"><h2>🎤 テスト教室</h2><p>スピーキング・ライティングのテスト。前に<b>ブースが2つ</b>。うしろの席で自習しながら順番を待つ。</p></div>
-    <div class="box"><h2>🎒 小学生自習室</h2><p>小学生だけの、かわいい自習室。小学生の木もあるよ。すわって自習中に、入ってきた子へ<b>👋 あいさつ</b>（2人だけに見える・1日1回）。</p></div>
+    <div class="box"><h2>🎤 スピーキング・ライティング教室</h2><p>Ms. Miuraと英語の練習・テスト（p.10）。前のブースで先生と通話テストも。うしろの席は自習時間になるよ。</p></div>
+    <div class="box"><h2>🎒 小学生自習室</h2><p>小学生だけの、かわいい自習室。小学生の木、入ってきた子へ<b>👋 あいさつ</b>（1日1回）。授業・保護者会もここで（声と画面共有）。</p></div>
     <div class="box"><h2>🚶 ろうか</h2><p>部屋と部屋をつなぐ道。季節の飾りが出るよ。「🏫 へや」で一気に移動もできる。</p></div>
   </div>
   <span class="pnum">5</span>
 </section>
 
-<!-- つよくなる方法 1 -->
+<!-- 4コマ① ポイント -->
 <section class="page">
-  <div class="stage s-green"><span class="lv">STAGE 2</span><h1>⏱ 自習時間と🔥のしくみ</h1><p>どうしたら時間が数えられるの？</p></div>
-  <div class="box"><h2>✅ 時間が数えられる3つの条件</h2>
-    <div class="grid3" style="margin-top:1.4mm">
-      <div class="tip" style="text-align:center"><b style="font-size:4.4mm">① 自習室にいる</b><br>中学生は自習室、高校生は高校生自習室、テスト教室のうしろの席もOK</div>
-      <div class="tip" style="text-align:center"><b style="font-size:4.4mm">② 席にすわる</b><br>立ち歩いている間は数えないよ</div>
-      <div class="tip" style="text-align:center"><b style="font-size:4.4mm">③ 画面を開いたまま</b><br>アプリを閉じる・ほかのアプリを見ると止まる</div>
-    </div></div>
-  <div class="box"><h2>⏰ 2つの時間</h2>
-    <table class="t" style="margin-top:1.2mm">
-      <tr><th style="width:30%">時間</th><th style="width:34%">いつ数える？</th><th>何に使う？</th></tr>
-      <tr><td><b>📚 今日の勉強時間</b></td><td><b>いつでも</b>（夜おそくても、土日でも）</td><td>頭の上の「今日○分」、🔥、季節のクエスト、おうちの人の画面</td></tr>
-      <tr><td><b>🎁 ポイントになる時間</b></td><td><b>朝 6:00〜7:30</b>と<b>夜 19:00〜23:00</b>だけ（小学生は6:00〜7:30・15:00〜18:00、高校生は16:00〜23:00）。1日の上限まで</td><td>ポイント、学年の木、朝活</td></tr>
-    </table>
-    <div style="margin-top:2mm;border:.8mm solid #ff8a3d;border-radius:3mm;background:#fff4ea;padding:2.4mm 3.4mm;font-size:4.2mm;font-weight:900">🎁 ポイントの時間帯：🌅 朝 6:00〜7:30 ／ 🌙 夜 19:00〜23:00<br><span style="font-size:3.6mm">🎒 小学生は 6:00〜7:30・15:00〜18:00 ／ ☕ 高校生は 16:00〜23:00</span></div>
-    <p style="margin-top:1.4mm">時間帯の外に勉強しても、<b>「今日○分」と🔥にはちゃんと入る</b>よ。ショップの上に「今日 2時間10分（ポイントになる時間 1時間30分）」と両方出るよ。</p></div>
-  <div class="grid2" style="flex:1">
-    <div class="box"><h2>🔥 連続自習</h2><p>1日の最低時間をこえた日が続くと🔥がふえる！ 名前の横に出るよ。</p>
-      <table class="t" style="margin-top:1.4mm"><tr><th>学年</th><th>1日の最低時間</th></tr><tr><td>小学生</td><td>45分</td></tr><tr><td>中1</td><td>45分</td></tr><tr><td>中2</td><td>60分</td></tr><tr><td>中3</td><td>90分</td></tr><tr><td>高校生</td><td>週の合計で🥉4時間以上の週が続くと「🔥◯週」</td></tr></table>
-      <p style="margin-top:1.2mm"><b>授業の曜日・保護者会の日</b>は、自習できなくても🔥がとぎれないよ。</p></div>
-    <div style="display:flex;flex-direction:column;gap:1.6mm"><div class="shot" style="flex:1"><img src="img/study_wide.jpg" alt=""></div><div class="shot" style="background:#fff"><img src="guide2/hs_medal.jpg" alt="" style="height:auto"></div><div class="cap">高校生の画面：今週の時間と、次のメダルまで</div></div>
+  <div class="stage s-orange"><span class="lv">ROUTE A</span><h1>🎁 ポイントでアイテムがほしい！</h1><p>4コマでわかる</p></div>
+  <div class="who"><span class="face">🧑‍🎓</span><span>中2のはるとくん。ほしいのは <b>🦄 ユニコーン（180ポイント）</b>！</span></div>
+  <div class="koma4">
+    <div class="koma"><span class="kn">1</span><div class="scene">🌙🕖📱</div><div class="say">夜7時！ ポイントの時間だ</div>
+      <p class="rule">ポイントになるのは<b>決まった時間帯</b>だけ。<br>🌅 朝 6:00〜7:30 ／ 🌙 夜 19:00〜23:00<br>（🎒小学生 6:00〜7:30・15:00〜18:00 ／ ☕高校生 16:00〜23:00）</p></div>
+    <div class="koma"><span class="kn">2</span><div class="scene">🪑📚⬆</div><div class="say">すわって、カメラON！</div>
+      <p class="rule">自習室で<b>すわっている間</b>、<b>10分ごとに1ポイント</b>。左上が<b>⬆</b>ならいまふえている、<b>⏸</b>ならふえていない（時間帯の外・立ち歩き・アプリを閉じた など）。</p></div>
+    <div class="koma"><span class="kn">3</span><div class="scene">🌅✨🎤</div><div class="say">ボーナスもあるんだ！</div>
+      <p class="rule">🌅 朝活（朝30分）<b>＋3</b>／🎤 音読・ライティングのテスト合格 <b>＋5</b>〜／🤝 友だち紹介 <b>＋30</b>／☕高校生は週のメダル 🥉<b>＋10</b> 🥈<b>＋20</b> 🥇<b>＋30</b>。1日に数える時間には上限あり。</p></div>
+    <div class="koma"><span class="kn">4</span><div class="scene">🎁🦄😆</div><div class="say">たまった！ ユニコーンと交換！</div>
+      <p class="rule"><b>⏸のとき</b>にメニュー「🎁 ポイントと着せかえ」で交換。<b>⬆（ポイントアップ中）は着せかえを開けない</b>よ ── 勉強に集中！</p></div>
   </div>
+  <div class="tip"><b>計算してみよう</b>　ポイントの時間帯に毎日<b>1時間</b> → 1日6ポイント → <b>1か月で約180ポイント</b>。はるとくんも1か月で🦄ゲット！</div>
   <span class="pnum">6</span>
+</section>
+
+<!-- 4コマ② 🔥とVIP席 -->
+<section class="page">
+  <div class="stage s-red"><span class="lv">ROUTE B</span><h1>🔥 をふやしてVIP席へ！</h1><p>4コマでわかる</p></div>
+  <div class="who"><span class="face">👧</span><span>中1のさくらさん。めざすは <b>👑 VIP席（🔥30日）</b>！</span></div>
+  <div class="koma4">
+    <div class="koma"><span class="kn">1</span><div class="scene">📚⏱✅</div><div class="say">今日は45分がんばった！</div>
+      <p class="rule">1日の<b>最低時間</b>をこえると<b>🔥＋1</b>。<br>🎒小学生・中1 <b>45分</b>／中2 <b>60分</b>／中3 <b>90分</b>。<br><b>時間帯は関係なし</b>。夜おそくても、土日でもOK！</p></div>
+    <div class="koma"><span class="kn">2</span><div class="scene">🔥🔥🔥</div><div class="say">毎日つづけて🔥10！</div>
+      <p class="rule">🔥は名前の横に出るよ。<b>10日</b>をこえると、左上に「👑 VIP席まで 🔥10/30日」と出る。</p></div>
+    <div class="koma"><span class="kn">3</span><div class="scene">😴💤🔥?</div><div class="say">1日休んだら…0にもどる！？</div>
+      <p class="rule">数える日に休むと<b>🔥は0</b>に。でも <b>授業の曜日・祝日・保護者会の日</b> は、休んでも<b>とぎれない</b>よ。</p></div>
+    <div class="koma"><span class="kn">4</span><div class="scene">👑🪑✨</div><div class="say">🔥30！ VIP席ゲット！</div>
+      <p class="rule">好きな席を<b>VIP席</b>にできる。<b>金色の名前プレート</b>がついて、入ると自動で案内。🔥がとぎれたらお休みに。</p></div>
+  </div>
+  <div class="grid2" style="grid-template-columns:1.3fr 1fr;align-items:center">
+    <div class="tip"><b>☕ 高校生は「週」で数える</b>　月〜日の合計が<b>🥉4時間以上</b>の週が続くと「🔥◯週」。<b>4週</b>続くとVIP席！<br><b>ポイントとのちがい</b>　🔥は<b>いつ勉強しても</b>数える。ポイントは<b>時間帯の中だけ</b>。</div>
+    <div><div class="shot" style="height:40mm"><img src="guide2/myseat_room.jpg" alt=""></div><div class="cap">すわると光るVIP席</div></div>
+  </div>
+  <span class="pnum">7</span>
 </section>
 
 <!-- ポイント -->
 <section class="page">
-  <div class="stage s-orange"><span class="lv">ITEM</span><h1>🎁 ポイントとアイテム</h1><p>がんばった分だけ、おしゃれに！</p></div>
+  <div class="stage s-orange"><span class="lv">ITEM</span><h1>🛍 アイテムと交換</h1><p>がんばった分だけ、おしゃれに！</p></div>
   <div class="grid2" style="grid-template-columns:1.35fr 1fr">
     <div style="display:flex;flex-direction:column;gap:2.6mm">
-      <div class="box"><h2>💰 ポイントのもらい方</h2>
-        <table class="t" style="margin-top:1.2mm">
-          <tr><th>こうすると</th><th style="width:28%">もらえる</th></tr>
-          <tr><td>ポイントの時間帯に<b>10分</b>自習</td><td><b>1ポイント</b></td></tr>
-          <tr><td>🌅 朝6:00〜7:30に30分自習（朝活）</td><td><b>＋3ポイント</b></td></tr>
-          <tr><td>☕ 高校生：週のメダル 🥉4時間／🥈6時間／🥇9時間</td><td><b>＋10／＋20／＋30</b></td></tr>
-          <tr><td>🤝 紹介した友だちと7日間2人とも🔥</td><td><b>＋30ポイント</b></td></tr>
-        </table></div>
-      <div class="box"><h2>🧮 どのくらいでもらえる？</h2><p>毎日<b>1時間</b>自習すると、1日6ポイント。<br>1週間で<b>42ポイント</b> → 帽子やメガネ。<br>1か月で<b>約180ポイント</b> → ユニコーンやよろい。<br>コツコツ続けると、<b>王様のマント（800）</b>や<b>自習王のトロフィー（1000）</b>も！</p></div>
+      <div class="box"><h2>🧮 どのくらいで買える？</h2><p>（ポイントのもらい方は前の4コマ）<br>1週間で<b>42ポイント</b> → 帽子やメガネ。<br>1か月で<b>約180ポイント</b> → ユニコーンやよろい。<br>コツコツ続けると、<b>王様のマント（800）</b>や<b>自習王のトロフィー（1000）</b>も！</p></div>
       <div class="box"><h2>🛍 交換のしかた</h2><p>メニュー「🎁 ポイントと着せかえ」→ ほしいアイテムを「交換」→「着る」。帽子・洋服・眼鏡・杖や剣・ペット・着ぐるみの6種類（20〜1000ポイント）。</p></div>
     </div>
     <div class="phone" style="align-self:start"><img src="img/shop.jpg" alt="" style="height:auto"></div>
@@ -241,26 +259,21 @@
   <div class="box"><h2>🌟 お店では買えない特別アイテム</h2><p>🎂ケーキの帽子（誕生日）、🎅サンタ帽・🎋笹かざり（季節のクエスト）、🐥おそろいひよこ・💫きらきら星（友だち紹介）。<br>もらったときに出るカードの<b>「🎁 今すぐつける」</b>を押せば、<b>お店に行かなくてもその場でつけられる</b>よ。着せかえ期間の外でもつけられて、みんなに見える！</p></div>
   <div class="box"><h2>🎯 まずはここから！ おすすめの目標</h2><p>① 最初の1週間で <b>🐤ひよこ（40）</b>をゲット → ② 1か月で <b>🦄ユニコーン（180）</b> → ③ 夏休みまでに <b>🐲ドラゴン（250）</b>や<b>🥷忍者の服（300）</b>。</p></div>
   <div class="tip"><b>🎒 小学生は</b>　小学生ショップのアイテムが、半分くらいのポイントで買えるよ（1か月に1回まで）。🔒のアイテムは中学生になったら買えるよ！<br><b>知っておこう</b>　ポイントとアイテムは、<b>学年が変わっても消えない</b>よ。着せかえは塾が決めた「着せかえ期間」（冬休みなど）に、買ったり着たりできるよ。</div>
-  <div class="tip"><b>勉強に集中！</b>　左上が<b>⬆（ポイントアップ中）</b>のあいだは、着せかえは開けないよ。⏸のときに見てね。高いアイテムは⚡が光る・🐉が火をふくなど<b>動きつき</b>！</div>
+  <div><div class="shot" style="height:22mm;background:#c9a77c"><img src="guide2/v2_items.jpg" alt="" style="object-fit:contain"></div><div class="cap">高いアイテムは動きつき（⚡が光る・🐉が火をふく・🐳が潮をふく など）</div></div>
   
-  <span class="pnum">7</span>
+  <span class="pnum">8</span>
 </section>
 
 <!-- つよくなる方法 2 -->
 <section class="page">
-  <div class="stage s-green"><span class="lv">STAGE 2</span><h1>🌳 学年の木・短冊・VIP席</h1><p>みんなで育てる・自分の席</p></div>
+  <div class="stage s-green"><span class="lv">STAGE 2</span><h1>🌳 学年の木と目標の短冊</h1><p>みんなで育てる・目標をかざる</p></div>
   <div class="box"><h2>🌳 学年の木（みんなで育てる）</h2><p>自習室の真ん中に、<b>中1・中2・中3の木</b>（高校生自習室には高校生の木）。学年の<b>1人あたりの平均</b>自習時間で、<b>芽 → 若葉 → 若木 → 大きな木 → 花 → 実り</b>と育つよ。競争じゃなくて<b>協力</b>。木をタップすると、くわしく見られる。</p></div>
   <div class="box"><h2>🎋 目標の短冊</h2><p>メニュー「🎯 今学期の目標」に目標を書くと、<b>先生が確認</b>してから、自分の学年の木に<b>短冊</b>としてかざられるよ。目標を<b>達成すると、短冊が⭐に</b>変わる！</p></div>
   <div class="grid2" style="grid-template-columns:1fr 1fr">
-    <div><div class="shot" style="height:92mm"><img src="guide2/tanzaku.jpg" alt="" style="object-position:left top"></div><div class="cap">木にかざられた短冊。⭐は目標を達成した印</div></div>
-    <div><div class="phone" style="height:92mm"><img src="img/trees.jpg" alt="" style="object-position:center 25%"></div><div class="cap">木をタップ → みんなの目標が読める</div></div>
+    <div><div class="shot" style="height:150mm"><img src="guide2/tanzaku.jpg" alt="" style="object-position:left top"></div><div class="cap">木にかざられた短冊。⭐は目標を達成した印</div></div>
+    <div><div class="phone" style="height:150mm"><img src="img/trees.jpg" alt="" style="object-position:center 25%"></div><div class="cap">木をタップ → みんなの目標が読める</div></div>
   </div>
-  <div class="grid2" style="grid-template-columns:1.1fr 1fr;flex:1">
-    <div class="box"><h2>👑 VIP席（自分だけの指定席）</h2><p>🔥が<b>30日</b>（高校生は4週）続くと、好きな席を「VIP席」にできる！ <b>金色の名前プレート</b>がついて、すわると光るよ。入ると自動でVIP席へ案内。🔥がとぎれたら返すから、続けよう。</p></div>
-    <div class="shot"><img src="guide2/myseat_room.jpg" alt=""></div>
-  </div>
-  <div class="tip"><b>攻略のコツ</b>　🔥が10日をこえると、画面の左上に「👑 VIP席まで 🔥22/30日」と出るよ。</div>
-  <span class="pnum">8</span>
+  <span class="pnum">9</span>
 </section>
 
 <!-- 英語スピーキング・ライティング -->
@@ -286,7 +299,7 @@
   </div>
   <div class="box"><h2>✍️ ライティング（音読テストに合格した単元）</h2><p>日本語訳を見て<b>ノートに英文を書く</b> → 📸 撮る → AIが文字を読み取って採点。<b>大文字・小文字、ピリオド・？・アポストロフィ</b>もまちがいになるよ。書く練習で<b>100点</b>をとったら、ライティングテストへ。テストは<b>授業の日の 19:30〜20:00・22:00〜22:30 に塾で</b>受けよう（時間は無制限）。</p></div>
   <div class="tip"><b>ポイント</b>　スピーキングもライティングも、テストに合格すると <b>1回目+5・2回目+4・3回目から+3</b>。クリアした単元は、📋テスト対策の「🗣 スピーキング・ライティング」にも<b>自動で✅🤖</b>がつくよ。</div>
-  <span class="pnum">9</span>
+  <span class="pnum">10</span>
 </section>
 
 <!-- 成績とテストの日 -->
@@ -305,7 +318,7 @@
     <div><div class="shot" style="height:44mm"><img src="guide2/v2_testchip.jpg" alt="" style="object-position:left top"></div><div class="cap">画面の左上にカウントダウン</div></div>
     <div class="box"><h2>📅 テストの日 → カウントダウン</h2><p>テストの日は<b>塾が学校ごとに入れておく</b>よ（学校の日程がないときは自分で入れる）。テストの<b>60日前</b>から左上に「📅 期末テストまで あと14日」。1週間前から赤くなる。テストが終わって<b>2週間</b>たっても成績を入れていないと「✏️ 成績を入れてね」。</p></div>
   </div>
-  <span class="pnum">10</span>
+  <span class="pnum">11</span>
 </section>
 
 <!-- テスト対策 -->
@@ -326,7 +339,7 @@
     <tr><td>前日</td><td>サポートテスト</td><td>サポートテスト</td></tr>
   </table>
   <div class="tip"><b>攻略のコツ</b>　🗣 スピーキング・ライティングは<b>5週間前の週のうちに</b>。テスト教室で合格すると、Unitに<b>自動で✅🤖</b>がつくよ。遅れがあると左上に「⚠️ テスト対策の遅れ」と出る。おうちの方も同じ画面を見られるよ。</div>
-  <span class="pnum">11</span>
+  <span class="pnum">12</span>
 </section>
 
 <!-- 4 年間マップ -->
@@ -347,7 +360,7 @@
   </div>
   <div class="grid2" style="grid-template-columns:1.6fr 1fr;align-items:center"><div class="shot" style="height:52mm"><img src="guide2/santa_seat.jpg" alt=""></div><div class="box"><h2>🪑 すわっても いっしょ</h2><p>席にすわると、仲間は左右にならんで、いっしょに勉強してくれるよ。</p></div></div>
   <div class="tip"><b>攻略のコツ</b>　1か月で15日＝<b>2日に1回</b>より少し多いくらい。テスト前の毎日の自習で、だれでもクリアできるよ！</div>
-  <span class="pnum">12</span>
+  <span class="pnum">13</span>
 </section>
 
 <!-- 5 1学期・2学期 -->
@@ -370,7 +383,7 @@
     </div>
   </div>
   <div class="tip"><b>攻略のコツ</b>　手紙は「読んだよ！」を押すまで、入るたびに届くよ。手紙の「🎁 今すぐつける」で、もらったアイテムをその場でつけられる！</div>
-  <span class="pnum">13</span>
+  <span class="pnum">14</span>
 </section>
 
 <!-- 6 3学期 -->
@@ -386,14 +399,13 @@
   <div class="shot" style="height:114mm"><img src="guide2/hina_0303.jpg" alt=""></div>
   <div class="cap">3/3 ひな祭り：五人囃子までそろった子に、ひなあられがふる</div>
   <div class="tip"><b>攻略のコツ</b>　画面の左上に「あと3日で三人官女」のように、次の仲間まであと何日か出るよ。学年末テストの前にラストスパート！</div>
-  <span class="pnum">14</span>
+  <span class="pnum">15</span>
 </section>
 
 <!-- 7 ひみつのイベント -->
 <section class="page">
   <div class="stage s-orange"><span class="lv">SECRET</span><h1>🎁 ひみつのイベント・いろいろ</h1><p>知っているとちょっと楽しい</p></div>
-  <div class="grid3">
-    <div class="box"><h2>🌅 朝活</h2><p>朝6:00〜7:30に30分自習すると、早起きスタンプと3ポイント！ ロビーの「今日の朝活 成功者」に名前がのって、名札に🌅がつくよ。</p></div>
+  <div class="grid2">
     <div class="box"><h2>🎂 誕生日</h2><p>誕生日に入るとお祝いカード。名札が金色に、特別な帽子も。</p></div>
     <div class="box"><h2>📝 先生の黒板</h2><p>ロビーの黒板に、先生からメッセージ。タップで読める。</p></div>
   </div>
@@ -402,16 +414,14 @@
     <div><div class="shot" style="height:64mm"><img src="guide2/board.jpg" alt=""></div><div class="cap">ロビーの先生の黒板</div></div>
   </div>
   <div class="grid2">
-    <div class="box"><h2>🎤 テスト教室</h2><p>スピーキング・ライティングのテストは順番待ち。呼ばれたらブースへ。待っている間も自習時間になるよ。</p>
-      <div class="shot" style="height:40mm;margin-top:1.4mm"><img src="guide2/test_booth.jpg" alt="" style="object-position:center 70%"></div></div>
-    <div class="box"><h2>🌅 今日の朝活 成功者</h2><p>ロビーの壁の掲示板に、朝活に成功した順で名前がのるよ。タップで全員。</p>
+<div class="box"><h2>🌅 朝活と「成功者」の掲示板</h2><p>朝6:00〜7:30に30分自習すると🌅朝活成功（＋3ポイント）。ロビーの掲示板に成功した順で名前がのって、名札に🌅がつくよ。</p>
       <div class="shot" style="height:40mm;margin-top:1.4mm"><img src="guide2/asa_board.jpg" alt="" style="object-position:center 15%"></div></div>
   </div>
   <div class="grid2">
     <div class="box"><h2>🤝 友だちを招待</h2><p>メニュー「🤝 友だちを招待」でLINEに招待カード。友だちが入塾したら、2人におそろいの🐥！ 7日間2人とも🔥で、きらきら星💫と30ポイント。</p></div>
     <div class="phone" style="height:46mm"><img src="guide2/invite.jpg" alt="" style="object-position:center 35%"></div>
   </div>
-  <span class="pnum">15</span>
+  <span class="pnum">16</span>
 </section>
 
 <!-- 自習室の見守り -->
@@ -446,27 +456,21 @@
     <div class="box"><h2>📚 今日○分</h2><p>頭の上に今日の時間。みんなのがんばりが見える。</p></div>
   </div>
   <div class="tip"><b>安心してね</b>　カメラはオーナーが「オン」にしたときだけ動きます。保護者の方と生徒の同意をいただいてから使います。</div>
-  <span class="pnum">16</span>
+  <span class="pnum">17</span>
 </section>
 
 <!-- 教室と飾り -->
 <section class="page">
-  <div class="stage s-purple"><span class="lv">ROOM</span><h1>🏫 教室・飾り・窓</h1><p>塾の中を探検しよう</p></div>
-  <div class="grid2">
-    <div class="box"><h2>🎤 スピーキング・ライティング教室</h2><p>前に<b>テスト用ブースが2つ</b>。「🎤 テストに並ぶ」で順番待ち、呼ばれると自動でブースへ。スピーキングは先生と通話でテスト。<b>待っている間も、うしろの席で自習時間になる</b>よ。</p>
-      <div class="shot" style="height:46mm;margin-top:1.6mm"><img src="guide2/room_test.jpg" alt=""></div></div>
-    <div class="box"><h2>🎒 小学生自習室（授業・保護者会も）</h2><p>小学生だけが入れる、カラフルな自習室。授業のときは先生の<b>声と画面共有</b>が届くよ（質問は✋挙手）。画面共有で資料を映せるので、<b>保護者会もこの教室で</b>行えます。</p>
-      <div class="shot" style="height:46mm;margin-top:1.6mm"><img src="guide2/room_class2.jpg" alt=""></div></div>
-  </div>
+  <div class="stage s-purple"><span class="lv">ROOM</span><h1>🎃 季節の飾りと窓</h1><p>塾の中を探検しよう</p></div>
   <div class="box"><h2>🎃 季節の飾り（1年中なにかが出る！）</h2><p>ロビー・ろうか・自習室に、季節ごとの飾りが出るよ。全部で<b>23種類</b>。お正月・節分・バレンタイン・ひな祭り・お花見・こどもの日・あじさい・七夕・夏祭りと花火・お月見・ハロウィン・紅葉・秋の収穫祭・クリスマス…。木の葉の色も季節で変わるよ。</p>
-    <div class="shot" style="height:42mm;margin-top:1.6mm"><img src="guide2/deco_hall.jpg" alt=""></div></div>
+    <div class="shot" style="height:80mm;margin-top:1.6mm"><img src="guide2/deco_hall.jpg" alt=""></div></div>
   <div class="box" style="flex:1;display:flex;flex-direction:column"><h2>🪟 季節と時間で変わる窓</h2><p>朝焼け（5〜7時）・青空（雲が流れる）・夕焼け（16〜18時半）・夜（星と月）。春は桜の花びら、夏は入道雲、秋は紅葉、冬は雪。日本の時間で動くよ。</p>
     <div class="grid3" style="flex:1;margin-top:1.6mm">
-      <div style="display:flex;flex-direction:column"><div class="shot" style="height:50mm"><img src="guide2/win_spring.jpg" alt="" style="object-position:left center"></div><div class="cap">春の昼</div></div>
-      <div style="display:flex;flex-direction:column"><div class="shot" style="height:50mm"><img src="guide2/win_dusk.jpg" alt="" style="object-position:left center"></div><div class="cap">夕焼け</div></div>
-      <div style="display:flex;flex-direction:column"><div class="shot" style="height:50mm"><img src="guide2/win_night.jpg" alt="" style="object-position:left center"></div><div class="cap">冬の夜</div></div>
+      <div style="display:flex;flex-direction:column"><div class="shot" style="height:95mm"><img src="guide2/win_spring.jpg" alt="" style="object-position:left center"></div><div class="cap">春の昼</div></div>
+      <div style="display:flex;flex-direction:column"><div class="shot" style="height:95mm"><img src="guide2/win_dusk.jpg" alt="" style="object-position:left center"></div><div class="cap">夕焼け</div></div>
+      <div style="display:flex;flex-direction:column"><div class="shot" style="height:95mm"><img src="guide2/win_night.jpg" alt="" style="object-position:left center"></div><div class="cap">冬の夜</div></div>
     </div></div>
-  <span class="pnum">17</span>
+  <span class="pnum">18</span>
 </section>
 
 <!-- ルール -->
@@ -474,7 +478,7 @@
   <div class="stage s-red"><span class="lv">RULE</span><h1>🧭 自習室のルール</h1><p>みんなが集中できるように</p></div>
   <div class="grid2" style="grid-template-columns:1.25fr 1fr">
     <div style="display:flex;flex-direction:column;gap:2.6mm">
-      <div class="box"><h2>📷 見守りカメラ</h2><p>自習室ではカメラをオン。<b>ランダムな時間</b>に写真が<b>先生にだけ</b>届くよ（くわしくは前のページ）。</p></div>
+      <div class="box"><h2>📷 見守りカメラ</h2><p>自習室ではカメラをオン。<b>ランダムな時間</b>に写真が<b>先生にだけ</b>届くよ（くわしくはp.17）。</p></div>
       <div class="box"><h2>🪑 席にすわろう</h2><p>自習室で<b>10秒以上立ち歩く</b>と「立ち歩きが10秒をこえたよ。席にすわって勉強しよう！」と出て、空いている席がえらべるよ。「近くの席にすわる」でもOK。</p></div>
     </div>
     <div class="phone" style="height:100mm"><img src="guide2/cam.jpg" alt="" style="object-position:center bottom"></div>
@@ -490,7 +494,7 @@
       <div class="box"><h2>🌙 省電力画面</h2><p>すわって1分さわらないと、黒い画面になって<b>電池を節約</b>。時間はそのまま数えるよ。長い自習は充電しながらね。</p></div>
     </div>
   </div>
-  <span class="pnum">18</span>
+  <span class="pnum">19</span>
 </section>
 
 <!-- 先生とオーナー -->
@@ -508,7 +512,7 @@
     <div class="box"><h2>📊 ひとりひとりの勉強時間</h2><p>先生・オーナーは、みんなの<b>今日・今週・今学期</b>の勉強時間、<b>最近14日のグラフ</b>、ポイント、🔥をいつでも確認できるよ。<br>がんばった日は、ちゃんと伝わっている！</p></div>
     <div class="shot" style="background:#fff"><img src="guide2/study_detail.jpg" alt="" style="object-fit:contain;object-position:top"></div>
   </div>
-  <span class="pnum">19</span>
+  <span class="pnum">20</span>
 </section>
 
 <!-- おうちの人へ 1 -->
@@ -532,7 +536,7 @@
   </div>
   <div class="box"><h2>🏫 保護者会の日（三浦塾の見学）</h2><p>保護者会は、画面共有ができる<b>小学生自習室</b>で行えます。その時間は<b>自習室・テスト教室など全部の教室を見学</b>でき、お子さまと同じルールで席にすわる体験も。<b>面談ブース</b>（オーナーのほかに3人まで）では通話と画面共有で個別面談もできます。</p></div>
   <div class="tip"><b>安心のために</b>　保護者の方のお名前は子どもには出ず「🏠 保護者」とだけ表示。ほかのお子さまの名前も保護者には表示されません。</div>
-  <span class="pnum">20</span>
+  <span class="pnum">21</span>
 </section>
 
 <!-- おうちの人へ 2 -->
@@ -556,7 +560,7 @@
     <li>自習室では<b>先生が見守り</b>、見守りカメラ・着席のうながしで集中できるしくみになっています。</li>
   </ul></div>
   <div class="tip"><b>おすすめの声かけ</b>　時間が短い日も、まずはスタンプ1つ。「来ただけでえらい」が、毎日の習慣をつくります。</div>
-  <span class="pnum">21</span>
+  <span class="pnum">22</span>
 </section>
 
 </body>
