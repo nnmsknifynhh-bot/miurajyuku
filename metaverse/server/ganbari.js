@@ -639,15 +639,22 @@ function streak(userId, date = new Date()) {
   // 保護者会の日・その生徒の授業の曜日も、とばしてつなげる
   // 祝日も、とばしてつなげる（休んでも🔥は消えない。勉強した日は1日に数える）
   const off = (d) => !ruleFor(d, c).on || md.has(d) || classDays.has(weekdayOf(d)) || isHoliday(d);
-  let day = today;
-  if (!ok.has(day)) day = addDays(day, -1);
-  let n = 0;
-  for (let i = 0; i < 400; i++, day = addDays(day, -1)) {
-    if (ok.has(day)) n++;
-    else if (!off(day)) break;
-  }
-  return n;
+  // VIP席の子（🔥30日以上）は、1日だけ休んでも、次の日にまた来れば🔥20から（2日以上休むと0から）
+  const lim = { left: 800 };
+  const runFrom = (start) => {
+    let day = start, n = 0;
+    while (lim.left-- > 0) {
+      if (ok.has(day)) n++;
+      else if (!off(day)) break; // 休んだ日（数える日）
+      day = addDays(day, -1);
+    }
+    if (n === 0 || lim.left <= 0) return n;
+    const before = runFrom(addDays(day, -1)); // 休んだ日の前の日までの🔥（その日も休みなら0）
+    return before >= VIP_DAYS ? VIP_BACK - 1 + n : n;
+  };
+  return runFrom(ok.has(today) ? today : addDays(today, -1));
 }
+const VIP_DAYS = 30, VIP_BACK = 20; // 🔥30でVIP席。VIP席の子が1日休んだら、次の日から🔥20
 
 // ───────── ポイントと着せかえ ─────────
 const SHOP = [

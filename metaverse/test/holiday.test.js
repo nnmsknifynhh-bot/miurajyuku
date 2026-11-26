@@ -75,3 +75,33 @@ test('祝日は、休んでも🔥がとぎれない（勉強した祝日は1日
   assert.equal(G.streak(id, new Date('2026-11-24T12:00:00+09:00')), 3, '祝日に勉強すれば1日ふえる');
   assert.equal(G.streak(id, new Date('2026-11-21T23:00:00+09:00')), 1);
 });
+
+test('VIP席の子（🔥30以上）は、1日休んでも次の日にまた来れば🔥20から。2日休んだら0から', async () => {
+  const owner = (await http('POST', '/api/login', { loginId: 'owner', password: 'ownerpass1' })).cookie;
+  const id = (await http('POST', '/api/admin/users', { role: 'student', loginId: 'vip', displayName: 'v', grade: '中1', password: 'password123' }, owner)).data.user.id;
+  const { db } = require('../server/db.js');
+  const put = (day) => db.prepare('INSERT INTO study_days (user_id, day, auto_min, all_min) VALUES (?, ?, 60, 60) ON CONFLICT (user_id, day) DO UPDATE SET all_min = 60').run(id, day);
+  const day = (n) => G.addDays('2027-03-01', n);
+  for (let i = 0; i < 35; i++) put(day(i)); // 3/1〜4/4 の35日
+  const at = (n, h = 20) => new Date(`${day(n)}T${String(h).padStart(2, '0')}:00:00+09:00`);
+  const holi = (n) => require('../server/holidays.js').isHoliday(day(n));
+  assert.ok(G.streak(id, at(34)) >= 35);
+  // 35日目（4/5）を休む → 36日目（4/6）に来ると🔥20
+  assert.ok(!holi(35) && !holi(36) && !holi(37), 'テストの日が祝日でない');
+  put(day(36));
+  assert.equal(G.streak(id, at(36)), 20, '次の日に来れば🔥20');
+  put(day(37));
+  assert.equal(G.streak(id, at(37)), 21);
+  // 2日休む → 0から
+  const id2 = (await http('POST', '/api/admin/users', { role: 'student', loginId: 'vip2', displayName: 'v2', grade: '中1', password: 'password123' }, owner)).data.user.id;
+  const put2 = (d) => db.prepare('INSERT INTO study_days (user_id, day, auto_min, all_min) VALUES (?, ?, 60, 60)').run(id2, d);
+  for (let i = 0; i < 35; i++) put2(day(i));
+  put2(day(37));
+  assert.equal(G.streak(id2, at(37)), 1, '2日休んだら0から');
+  // 🔥30未満の子は今までどおり0から
+  const id3 = (await http('POST', '/api/admin/users', { role: 'student', loginId: 'vip3', displayName: 'v3', grade: '中1', password: 'password123' }, owner)).data.user.id;
+  const put3 = (d) => db.prepare('INSERT INTO study_days (user_id, day, auto_min, all_min) VALUES (?, ?, 60, 60)').run(id3, d);
+  for (let i = 10; i < 35; i++) put3(day(i));
+  put3(day(36));
+  assert.equal(G.streak(id3, at(36)), 1);
+});
