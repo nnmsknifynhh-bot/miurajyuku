@@ -27,6 +27,13 @@ const ROOM_TYPES = new Set(['classroom', 'study']);
 
 let io = null;
 const online = new Map();  // userId -> presence
+// 🪑 小学生：席を変えられるのは10分に1回（椅子取りゲームにならないように）。userId -> { seat, at }。つなぎ直しても消えない
+const KID_SEAT_GAP_MS = Number(process.env.KID_SEAT_GAP_MS || 10 * 60e3);
+const kidLastSeat = new Map();
+const isKid = (p) => p.user.role === 'student' && /^小[1-6]$/.test(p.user.grade || '');
+// 🌱 小学生：すわり続けると席に花が育つ（15分🌱・30分🌷・45分🌻）。立つと最初から
+const SPROUT_MIN = Number(process.env.SPROUT_STEP_MS || 15 * 60e3);
+const sproutOf = (p) => { if (!isKid(p) || !p.seat || p.seat !== p.sitSeat || !p.sitSince) return 0; return Math.min(3, Math.floor((Date.now() - p.sitSince) / SPROUT_MIN)); };
 const lastPos = new Map(); // userId -> { x, y }（再接続時に元の場所へ）
 const lastOffline = new Map(); // userId -> 切断した時刻（すぐ入り直したときは入室の通知をしない）
 // 自習中に通信が切れた生徒：{ at, seat }。STUDY_GAP_MS 以内につながり直したら、元の席にもどし、切れていた間も自習時間に数える
@@ -59,7 +66,8 @@ function pub(p) {
     inPrivate: inActiveCall(p), away: p.away || null, studyCam: !!p.studyCam, topic: p.topic || null, today: p.today10 ?? null,
     bday: !!(p.bday && p.bday.public), // 誕生日（ほかの生徒にも見せる設定のときだけ。先生だけの設定は staff にだけ別に送る）
     cakes: p.bday && p.bday.public && p.cakes && p.cakes.n ? p.cakes : null, // 今日もらった🎂 { n, gold }
-    kid: p.user.role === 'student' && /^小[1-6]$/.test(p.user.grade || ''), // 小学生（🎂は先生からだけ）
+    kid: isKid(p), // 小学生（🎂は先生からだけ）
+    sprout: p.sprout || 0, // 🌱 小学生：すわり続けて育った席の花（0〜3）
     hs: !!p.hs, title: p.title || null, plan: p.plan || null, // 高校生：称号・今日やること（🔥は週で数える）
     equip: equipView(p.equip), streak: p.streak || 0, trial: !!p.user.trial_until,
     asa: !!p.asa, // 🌅 今日の朝活に成功
@@ -619,6 +627,20 @@ function attach(httpServer) {
       if (SM.tileAt(sx, sy) === 'O' && p.user.role === 'student') return ack({ ok: false, error: 'ソファは保護者の方の席です' });
       // テストのブースは、先生に呼ばれた生徒だけ
       if (SM.isBoothSeat(id) && p.user.role === 'student' && boothOf(p.id) !== id) return ack({ ok: false, error: 'テストのブースは、先生に呼ばれたらすわれます' });
+      // 小学生：前の席から10分たつまでは、ほかの席に変えられない（前の席がうまっていたら、変えてよい。自分のVIP席はいつでも）
+      if (isKid(p)) {
+        const prev = kidLastSeat.get(p.id), t = Date.now();
+        const prevTaken = prev && [...online.values()].some(o => o !== p && o.seat === prev.seat);
+        const vip = (myseat.statusOf(p.id) || {}).seat === id;
+        if (prev && prev.seat !== id && t - prev.at < KID_SEAT_GAP_MS && !prevTaken && !vip) {
+          const m = Math.max(1, Math.ceil((KID_SEAT_GAP_MS - (t - prev.at)) / 60e3));
+          return ack({ ok: false, error: `🪑 席を変えられるのは10分に1回だよ。あと${m}分まってね（さっきの席にはすわれるよ）` });
+        }
+        if (!prev || prev.seat !== id) kidLastSeat.set(p.id, { seat: id, at: t });
+        if (kidLastSeat.size > 5000) kidLastSeat.clear();
+      }
+      p.sitSeat = id; p.sitSince = Date.now();
+      if (p.sprout) { p.sprout = 0; io.emit('user-updated', { id: p.id, sprout: 0 }); }
       p.seat = id; p.x = c.x; p.y = c.y; p.dir = SM.seatFacing(sx, sy); p.moving = false;
       ack({ ok: true, x: p.x, y: p.y, dir: p.dir });
       socket.broadcast.emit('user-updated', { id: p.id, seat: id, x: p.x, y: p.y, dir: p.dir, moving: false });
@@ -1066,6 +1088,8 @@ function attach(httpServer) {
       }
       { const mb = fun.morningBoard(); const key = mb ? mb.day + mb.names.join(',') + mb.over + (mb.bdays || []).join(',') : ''; if (key !== lastMorningKey) { lastMorningKey = key; for (const o of online.values()) o.socket.emit('morning-board', mb && o.user.trial_until ? { ...mb, names: mb.names.map(() => '生徒'), bdays: [] } : mb); } }
       for (const p of online.values()) { updateToday(p); refreshBirthday(p); refreshHS(p); refreshFollow(p); } // 日付が変わったときも 0 にもどる
+      // 🌱 小学生：すわり続けた時間で、席の花を育てる（立ったら 0 にもどる）
+      for (const p of online.values()) { const sp = sproutOf(p); if (sp !== (p.sprout || 0)) { const up = sp > (p.sprout || 0); p.sprout = sp; io.emit('user-updated', { id: p.id, sprout: sp }); if (up) p.socket.emit('sprout-up', { stage: sp }); } }
       { const day = ganbari.jst().day; if (lastGiftDay && lastGiftDay !== day) for (const p of online.values()) if (p.user.role === 'student' && !p.user.trial_until) offerParentGift(p); lastGiftDay = day; }
       // 決めた曜日・時刻を過ぎても来ていない高校生を、先生に知らせる
       for (const s of ganbari.lateStudents(new Set(online.keys()))) notify.studentLate(s, online).catch(e => console.error('遅れの通知に失敗:', e.message));

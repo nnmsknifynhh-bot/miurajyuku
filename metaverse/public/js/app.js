@@ -335,6 +335,8 @@
     });
     // 生徒がテストを終えた（先生・オーナーだけに届く）
     socket.on('activity-result', (d) => { if (d && d.text) toast(`${d.name}さん：${d.text}`, 6000); });
+    // 🌱 小学生：すわり続けて席の花が育った
+    socket.on('sprout-up', ({ stage }) => { const m = { 1: '🌱 15分すわって集中できたね！席に芽が出たよ', 2: '🌷 30分！つぼみが花になったよ', 3: '🌻 45分！ひまわりがさいたよ。すごい！' }[stage]; if (m) toast(m, 5000); });
     socket.on('user-updated', (d) => {
       const u = d.id === state.me.id ? state.me : state.others.get(d.id);
       if (!u) return;
@@ -448,7 +450,8 @@
   function standUp() {
     exitOverview();
     if (!state.me.seat) return;
-    state.me.seat = null;
+    if (state.me.sprout) toast('🌱 立ったので、席の花は最初からになったよ', 3500);
+    state.me.seat = null; state.me.sprout = 0;
     state.socket.emit('stand');
     updateAll();
   }

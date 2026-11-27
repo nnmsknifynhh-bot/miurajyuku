@@ -720,6 +720,18 @@
       ctx.font = '15px sans-serif'; ctx.fillText('🎈', x + 19 + sway, y - 13); ctx.fillText('🎈', x + 29 + sway, y - 8);
       ctx.restore();
     }
+    // 🌱 小学生：すわり続けると、机の横に花が育つ（15分🌱・30分🌷・45分🌻）
+    if (u.sprout && u.seat && !opts.noTag) {
+      ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#000'; ctx.globalAlpha = 1;
+      const k = Math.min(3, u.sprout), size = 12 + k * 3, sway = Math.sin(t * 1.2 + (u.id || 0)) * 0.08;
+      // 小さな植木ばち
+      ctx.fillStyle = '#c9784a'; ctx.beginPath(); ctx.roundRect(x - 27, y + 4, 10, 8, 2); ctx.fill();
+      ctx.fillStyle = '#a85f36'; ctx.fillRect(x - 28, y + 3, 12, 3);
+      ctx.translate(x - 22, y + 3); ctx.rotate(sway);
+      ctx.fillStyle = '#000'; ctx.font = size + 'px sans-serif';
+      ctx.fillText(['', '🌱', '🌷', '🌻'][k], 0, -size / 2);
+      ctx.restore();
+    }
     // 帽子・かざりをつけているときは、名札を少し上へ（アイテムがかくれないように）
     const byTag = by - ((u.equip && u.equip.head && !(u.equip.costume)) || (u.equip && u.equip.costume) ? 12 : (hair && TALL_HAIR.has(hair) ? 8 : 0));
     if (opts.noTag) return; // 招待カードなど：アバターだけ
