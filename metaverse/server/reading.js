@@ -16,6 +16,11 @@ if (!db.prepare('PRAGMA table_info(reading_units)').all().some(c => c.name === '
 // 単元のならび順（先生が ↑↓ で決める。決めていない単元は、名前の数字の順：Unit1-2 → Unit1-10 → Unit2-1）
 // 📘 教科書（空なら全員に出る。学校に結びつけた教科書の単元だけが、その学校の生徒に出る）
 if (!db.prepare('PRAGMA table_info(reading_units)').all().some(c => c.name === 'textbook')) db.exec('ALTER TABLE reading_units ADD COLUMN textbook TEXT');
+// 1回だけ：いま登録してある中学生の単元（教科書なし）を、ぜんぶ「ニュークラウン」にする（オーナーの依頼 11/27）
+if (getSetting('reading_tb_nc_once', '') !== '1') {
+  db.prepare("UPDATE reading_units SET textbook = 'ニュークラウン' WHERE textbook IS NULL AND grade IN ('中1', '中2', '中3')").run();
+  setSetting('reading_tb_nc_once', '1');
+}
 if (!db.prepare('PRAGMA table_info(reading_units)').all().some(c => c.name === 'sort_order')) db.exec('ALTER TABLE reading_units ADD COLUMN sort_order INTEGER');
 // 練習が「英文を見て」か「訳だけで」か（テストを受けられるのは、訳だけで合格したとき）
 if (!db.prepare('PRAGMA table_info(reading_practice)').all().some(c => c.name === 'ja_only')) db.exec('ALTER TABLE reading_practice ADD COLUMN ja_only INTEGER NOT NULL DEFAULT 0');
