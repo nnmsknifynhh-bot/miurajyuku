@@ -243,13 +243,13 @@ app.post('/api/prep/check', auth.requireAuth, (req, res) => {
   res.json(r);
 });
 // 🏫 学校名の一覧（教室の設定）
-app.get('/api/admin/schools', auth.requireAuth, (req, res) => { if (!staffOnly(req, res)) return; res.json({ schools: prep.schoolList() }); });
+app.get('/api/admin/schools', auth.requireAuth, (req, res) => { if (!staffOnly(req, res)) return; res.json({ schools: prep.schoolList(), textbooks: prep.textbookList() }); });
 app.post('/api/admin/schools', auth.requireAuth, (req, res) => {
   if (!can(req.user, 'manage_classroom') && req.user.role !== 'owner') return bad(res, '教室の設定の権限がありません', 403);
   const b = req.body || {};
-  const r = b.action === 'dates' ? prep.setSchoolDates(b.name, b.dates, req.user.id) : b.action === 'rename' ? prep.renameSchool(b.from, b.to, req.user.id) : b.action === 'remove' ? prep.removeSchool(b.name, req.user.id) : prep.addSchool(b.name, req.user.id);
+  const r = b.action === 'textbook' ? prep.setSchoolTextbook(b.name, b.textbook, req.user.id) : b.action === 'tb-add' ? prep.addTextbook(b.name, req.user.id) : b.action === 'tb-rename' ? prep.renameTextbook(b.from, b.to, req.user.id) : b.action === 'tb-remove' ? prep.removeTextbook(b.name, req.user.id) : b.action === 'dates' ? prep.setSchoolDates(b.name, b.dates, req.user.id) : b.action === 'rename' ? prep.renameSchool(b.from, b.to, req.user.id) : b.action === 'remove' ? prep.removeSchool(b.name, req.user.id) : prep.addSchool(b.name, req.user.id);
   if (r.error) return bad(res, r.error);
-  res.json({ ...r, schools: prep.schoolList() });
+  res.json({ ...r, schools: prep.schoolList(), textbooks: prep.textbookList() });
 });
 app.get('/api/admin/prep', auth.requireAuth, (req, res) => {
   if (!staffOnly(req, res)) return;
@@ -1035,7 +1035,7 @@ admin.patch('/ganbari/config', requireOwner, (req, res) => {
   realtime.refreshAllGanbari();
   res.json({ config: ganbari.getConfig() });
 });
-admin.get('/reading', requireOwner, (req, res) => res.json({ units: reading.listUnits(), config: reading.getConfig(), summary: reading.practiceSummary(), tests: reading.testSummary(), writing: writing.summary(), visionReady: writing.visionReady(), grades: ganbari.GRADES, adults: db.prepare("SELECT id, display_name AS name FROM users WHERE role = 'student' AND grade = '大人' AND is_active = 1 ORDER BY display_name").all(), speechReady: !!(process.env.AZURE_SPEECH_KEY && process.env.AZURE_SPEECH_REGION) }));
+admin.get('/reading', requireOwner, (req, res) => res.json({ textbooks: prep.textbookList(), units: reading.listUnits(), config: reading.getConfig(), summary: reading.practiceSummary(), tests: reading.testSummary(), writing: writing.summary(), visionReady: writing.visionReady(), grades: ganbari.GRADES, adults: db.prepare("SELECT id, display_name AS name FROM users WHERE role = 'student' AND grade = '大人' AND is_active = 1 ORDER BY display_name").all(), speechReady: !!(process.env.AZURE_SPEECH_KEY && process.env.AZURE_SPEECH_REGION) }));
 admin.post('/reading/units', requireOwner, (req, res) => { const r = reading.addUnit(req.body || {}, req.user.id); if (r.error) return bad(res, r.error); res.status(201).json(r); });
 admin.patch('/reading/units/:id', requireOwner, (req, res) => { const r = reading.updateUnit(Number(req.params.id), req.body || {}, req.user.id); if (r.error) return bad(res, r.error); res.json(r); });
 admin.post('/reading/units/:id/move', requireOwner, (req, res) => { const r = reading.moveUnit(Number(req.params.id), req.body.dir === 'up' ? 'up' : 'down', req.user.id); if (r.error) return bad(res, r.error); res.json(r); });

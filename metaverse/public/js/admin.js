@@ -404,8 +404,8 @@
   // 🏫 学校名の一覧（ユーザーの編集でプルダウンに出る）
   async function loadSchools() {
     const box = $('#school-sec'); box.textContent = '';
-    let list = [];
-    try { list = (await api('GET', '/api/admin/schools')).schools; } catch (e) { return; }
+    let list = [], tbs = [];
+    try { const r = await api('GET', '/api/admin/schools'); list = r.schools; tbs = r.textbooks || []; } catch (e) { return; }
     box.append(el('h3', 'sec', '🏫 学校名'), el('p', 'muted', 'ここで作った学校が、「👥 ユーザー」の生徒の編集でプルダウンに出ます（テスト対策の学校ごとの日程に使います）。名前を変えると、生徒の学校名と学校の日程もいっしょに変わります。'));
     const add = el('div', 'gb-row'); const inp = el('input'); inp.placeholder = '学校名（例：〇〇中学校）'; inp.maxLength = 30;
     const ab = el('button', 'btn small', '＋ 追加'); ab.type = 'button';
@@ -421,7 +421,10 @@
       rb.onclick = () => { if (nm.value.trim() && nm.value.trim() !== s.name) post({ action: 'rename', from: s.name, to: nm.value }, '名前を変えました'); };
       const db2 = el('button', 'btn small danger', '消す'); db2.type = 'button'; db2.disabled = s.students > 0; db2.title = s.students ? '生徒がいる学校は消せません' : '';
       db2.onclick = () => { if (confirm(`「${s.name}」を消しますか？`)) post({ action: 'remove', name: s.name }, '消しました'); };
-      row.append(nm, el('small', 'muted', `生徒 ${s.students}人`), rb, db2); ul.append(row);
+      // 📘 この学校の英語の教科書（音読の単元を、その教科書のものだけにする）
+      const ts = el('select'); ts.title = '英語の教科書'; [['', '📘 教科書：未設定'], ...tbs.map(n => [n, '📘 ' + n])].forEach(([v, t]) => { const o = el('option', null, t); o.value = v; ts.append(o); }); ts.value = s.textbook || '';
+      ts.onchange = () => post({ action: 'textbook', name: s.name, textbook: ts.value || null }, ts.value ? `${s.name}の教科書を「${ts.value}」にしました` : `${s.name}の教科書を外しました`);
+      row.append(nm, el('small', 'muted', `生徒 ${s.students}人`), ts, rb, db2); ul.append(row);
       // 📅 この学校の定期テストの日（全学年共通）
       const det = el('details', 'school-dates');
       const filled = Object.keys(s.dates || {}).length;
@@ -442,6 +445,25 @@
     }
     if (!list.length) ul.append(el('p', 'muted', 'まだ学校がありません。上から追加してください。'));
     box.append(ul);
+    // 📘 英語の教科書の一覧（学校に結びつける・音読の単元を登録するときにえらぶ）
+    box.append(el('h3', 'sec', '📘 英語の教科書'), el('p', 'muted', '学校名の横の「📘 教科書」でえらぶと、その学校の生徒には、その教科書の単元（と教科書なしの単元）だけが出ます。教科書が未設定の学校の生徒には、今まで通り学年の単元が全部出ます。単元は「🎤 英語の音読」で教科書をえらんで登録します。'));
+    const tadd = el('div', 'gb-row'); const tin = el('input'); tin.placeholder = '教科書の名前（例：ニュークラウン）'; tin.maxLength = 30;
+    const tab = el('button', 'btn small', '＋ 追加'); tab.type = 'button';
+    tab.onclick = () => { if (tin.value.trim()) post({ action: 'tb-add', name: tin.value }, '追加しました'); };
+    tin.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); tab.click(); } };
+    tadd.append(tin, tab); box.append(tadd);
+    const tl = el('div', 'school-list');
+    for (const n of tbs) {
+      const r = el('div', 'gb-row school-row');
+      const inp2 = el('input'); inp2.value = n; inp2.maxLength = 30;
+      const used = list.filter(x => x.textbook === n).map(x => x.name);
+      const rb2 = el('button', 'btn small secondary', '名前を変える'); rb2.type = 'button';
+      rb2.onclick = () => { if (inp2.value.trim() && inp2.value.trim() !== n) post({ action: 'tb-rename', from: n, to: inp2.value }, '名前を変えました'); };
+      const xb = el('button', 'btn small danger', '消す'); xb.type = 'button';
+      xb.onclick = () => { if (confirm(`「${n}」を消しますか？`)) post({ action: 'tb-remove', name: n }, '消しました'); };
+      r.append(inp2, el('small', 'muted', used.length ? `${used.join('・')}` : '学校：まだなし'), rb2, xb); tl.append(r);
+    }
+    box.append(tl);
   }
   async function loadRooms() {
     loadSchools();

@@ -14,6 +14,8 @@ CREATE INDEX IF NOT EXISTS idx_reading_tests_user ON reading_tests(user_id, unit
 // 大人英会話：その人だけの文（user_id があれば、その人だけに見える）
 if (!db.prepare('PRAGMA table_info(reading_units)').all().some(c => c.name === 'user_id')) db.exec('ALTER TABLE reading_units ADD COLUMN user_id INTEGER');
 // 単元のならび順（先生が ↑↓ で決める。決めていない単元は、名前の数字の順：Unit1-2 → Unit1-10 → Unit2-1）
+// 📘 教科書（空なら全員に出る。学校に結びつけた教科書の単元だけが、その学校の生徒に出る）
+if (!db.prepare('PRAGMA table_info(reading_units)').all().some(c => c.name === 'textbook')) db.exec('ALTER TABLE reading_units ADD COLUMN textbook TEXT');
 if (!db.prepare('PRAGMA table_info(reading_units)').all().some(c => c.name === 'sort_order')) db.exec('ALTER TABLE reading_units ADD COLUMN sort_order INTEGER');
 // 練習が「英文を見て」か「訳だけで」か（テストを受けられるのは、訳だけで合格したとき）
 if (!db.prepare('PRAGMA table_info(reading_practice)').all().some(c => c.name === 'ja_only')) db.exec('ALTER TABLE reading_practice ADD COLUMN ja_only INTEGER NOT NULL DEFAULT 0');
@@ -81,7 +83,7 @@ const limitSec = (words, grade, c = getConfig()) => Math.max(10, Math.ceil((word
 function view(u, c = getConfig(), grade = u.grade) {
   const lines = JSON.parse(u.lines);
   const words = lines.reduce((n, l) => n + wordsOf(l.en).length, 0);
-  return { id: u.id, grade: u.grade, title: u.title, lines, words, limit: limitSec(words, grade || u.grade, c), active: !!u.active, userId: u.user_id || null, userName: u.user_name || null };
+  return { id: u.id, grade: u.grade, title: u.title, lines, words, limit: limitSec(words, grade || u.grade, c), active: !!u.active, textbook: u.textbook || null, userId: u.user_id || null, userName: u.user_name || null };
 }
 
 // 大人英会話：だれ用の文か（userId が空なら、大人みんな）
@@ -90,8 +92,15 @@ function personOf(p, grade = p.grade) {
   const u = db.prepare("SELECT id FROM users WHERE id = ? AND role = 'student' AND grade = '大人'").get(Number(p.userId));
   return u ? { id: u.id } : { error: '大人英会話の生徒をえらんでください' };
 }
+// 単元の教科書（大人はなし）。空なら null＝全員に出る
+function textbookFor(p, grade) {
+  if (grade === '大人' || p.textbook == null || p.textbook === '') return { tb: null };
+  const t = String(p.textbook).trim();
+  return require('./prep').textbookList().includes(t) ? { tb: t } : { error: '教科書が見つかりません（「🏫 教室の設定」で作れます）' };
+}
 function addUnit(p, actorId) {
   if (!G.GRADES.includes(p.grade)) return { error: '学年をえらんでください' };
+  const tbr = textbookFor(p, p.grade); if (tbr.error) return tbr;
   // 大人英会話：名前が空なら「11/24の週」（毎週の3文）
   const j = G.jst();
   const title = clean(p.title, 60) || (p.grade === '大人' ? `${Number(j.day.slice(5, 7))}/${Number(j.day.slice(8))}の文` : '');
@@ -101,8 +110,8 @@ function addUnit(p, actorId) {
   const lines = parseText(p.text);
   if (!lines.length) return { error: '英語の本文を入れてください' };
   if (lines.length > 60) return { error: '本文が長すぎます（60行まで）' };
-  const r = db.prepare('INSERT INTO reading_units (grade, title, lines, created_at, user_id) VALUES (?, ?, ?, ?, ?)').run(p.grade, title, JSON.stringify(lines), now(), who.id);
-  audit(actorId, 'reading.unit_added', title, { grade: p.grade });
+  const r = db.prepare('INSERT INTO reading_units (grade, title, lines, created_at, user_id, textbook) VALUES (?, ?, ?, ?, ?, ?)').run(p.grade, title, JSON.stringify(lines), now(), who.id, tbr.tb);
+  audit(actorId, 'reading.unit_added', title, { grade: p.grade, textbook: tbr.tb });
   return { ok: true, id: Number(r.lastInsertRowid) };
 }
 function updateUnit(id, p, actorId) {
@@ -117,7 +126,9 @@ function updateUnit(id, p, actorId) {
   const active = p.active !== undefined ? (p.active ? 1 : 0) : u.active;
   const who = p.userId !== undefined ? personOf(p, grade) : { id: grade === '大人' ? u.user_id : null };
   if (who.error) return who;
-  db.prepare('UPDATE reading_units SET grade = ?, title = ?, lines = ?, active = ?, user_id = ? WHERE id = ?').run(grade, title, JSON.stringify(lines), active, who.id, id);
+  const tbr = p.textbook !== undefined ? textbookFor(p, grade) : { tb: grade === '大人' ? null : u.textbook };
+  if (tbr.error) return tbr;
+  db.prepare('UPDATE reading_units SET grade = ?, title = ?, lines = ?, active = ?, user_id = ?, textbook = ? WHERE id = ?').run(grade, title, JSON.stringify(lines), active, who.id, tbr.tb, id);
   audit(actorId, 'reading.unit_updated', title, null);
   return { ok: true };
 }
@@ -155,12 +166,15 @@ function moveUnit(id, dir, actorId) {
 function unitsFor(user) {
   const c = getConfig();
   const staff = user.role === 'owner' || user.role === 'teacher';
-  const rows = staff ? sortUnits(db.prepare('SELECT * FROM reading_units WHERE active = 1').all())
+  let rows = staff ? sortUnits(db.prepare('SELECT * FROM reading_units WHERE active = 1').all())
     : /^小[1-6]$/.test(user.grade || '') // 小学生は、自分の学年の単元と「中1」の単元をえらべる
       ? db.prepare("SELECT * FROM reading_units WHERE active = 1 AND grade IN (?, '中1')").all(user.grade).sort((a, b) => ((a.grade === user.grade ? 0 : 1) - (b.grade === user.grade ? 0 : 1)) || byOrder(a, b))
       : user.grade === '大人' // 大人：自分の文（と大人みんなの文）。新しいものが上
         ? db.prepare("SELECT * FROM reading_units WHERE active = 1 AND grade = '大人' AND (user_id IS NULL OR user_id = ?) ORDER BY id DESC").all(user.id)
         : db.prepare('SELECT * FROM reading_units WHERE active = 1 AND grade = ?').all(user.grade || '').sort(byOrder);
+  // 📘 学校に教科書が結びついている生徒：その教科書の単元と、教科書なしの単元だけ（結びついていなければ今まで通り全部）
+  const tb = staff ? null : require('./prep').textbookOf(user);
+  if (tb) rows = rows.filter(u => !u.textbook || u.textbook === tb);
   return rows.map(u => {
     const best = db.prepare(`SELECT COUNT(*) AS n, MAX(CASE WHEN ja_only = 1 THEN score END) AS best, MAX(CASE WHEN ja_only = 1 THEN passed END) AS passed,
       MAX(CASE WHEN ja_only = 0 THEN score END) AS enBest, MAX(CASE WHEN ja_only = 0 THEN passed END) AS enPassed FROM reading_practice WHERE user_id = ? AND unit_id = ?`).get(user.id, u.id);

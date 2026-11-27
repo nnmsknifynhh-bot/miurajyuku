@@ -269,7 +269,8 @@ function schoolList() {
   const count = new Map(db.prepare("SELECT school, COUNT(*) AS n FROM users WHERE role = 'student' AND is_active = 1 AND school IS NOT NULL GROUP BY school").all().map(r => [r.school, r.n]));
   const dates = new Map();
   for (const r of db.prepare('SELECT school, term, start_day AS start, end_day AS end FROM school_test_dates').all()) { if (!dates.has(r.school)) dates.set(r.school, {}); dates.get(r.school)[r.term] = { start: r.start, end: r.end }; }
-  return list.map(name => ({ name, students: count.get(name) || 0, dates: dates.get(name) || {} }));
+  const tbs = schoolTextbooks();
+  return list.map(name => ({ name, students: count.get(name) || 0, dates: dates.get(name) || {}, textbook: tbs[name] || null }));
 }
 function addSchool(name, actorId) {
   const n = normSchool(name); if (!n) return { error: '学校名を入れてください' };
@@ -315,6 +316,7 @@ function renameSchool(from, to, actorId) {
     db.exec('COMMIT');
   } catch (e) { db.exec('ROLLBACK'); throw e; }
   setSetting('schools', JSON.stringify(list.map(x => x === a ? b : x).sort((x, y) => x.localeCompare(y, 'ja'))));
+  { const m = schoolTextbooks(); if (a !== b && m[a]) { m[b] = m[a]; delete m[a]; saveSchoolTextbooks(m); } }
   audit(actorId, 'school.renamed', a, { to: b });
   return { ok: true };
 }
@@ -326,7 +328,60 @@ function removeSchool(name, actorId) {
   if (s.students) return { error: `この学校の生徒が${s.students}人います。先に生徒の学校名を変えてください` };
   setSetting('schools', JSON.stringify(list.map(x => x.name).filter(x => x !== n)));
   db.prepare('DELETE FROM school_test_dates WHERE school = ?').run(n);
+  { const m = schoolTextbooks(); if (m[n]) { delete m[n]; saveSchoolTextbooks(m); } }
   audit(actorId, 'school.removed', n, null);
   return { ok: true };
 }
-module.exports = { setSchoolDates, effective, schoolList, addSchool, renameSchool, removeSchool, swTable, DEFAULT_TEMPLATE, GRADES, TERMS, TERM_NAME, parseTemplate, parseUnits, templateText, setTemplate, schoolTests, setSchoolTest, datesFor, jukuHas, stagesOf, scheduleFor, setCheck, overview };
+// ───────── 📘 英語の教科書（教室の設定で一覧を持つ。学校ごとに1つ結びつける → 音読の単元をその学校の生徒に出し分ける） ─────────
+const DEFAULT_TEXTBOOKS = ['ニューホライズン', 'ニュークラウン', 'サンシャイン', 'ワンワールド', 'ヒアウィーゴー', 'ブルースカイ'];
+const normTb = (s) => clean(s, 30).replace(/\s+/g, ' ');
+function textbookList() {
+  let list = null; try { list = JSON.parse(getSetting('textbooks', 'null')); } catch (e) { list = null; }
+  return Array.isArray(list) ? list : DEFAULT_TEXTBOOKS.slice();
+}
+function schoolTextbooks() { try { const m = JSON.parse(getSetting('school_textbooks', '{}')); return m && typeof m === 'object' ? m : {}; } catch (e) { return {}; } }
+const saveSchoolTextbooks = (m) => setSetting('school_textbooks', JSON.stringify(m));
+/** 生徒の教科書（学校に結びつけたもの。なければ null） */
+function textbookOf(user) { return (user && user.school && schoolTextbooks()[user.school]) || null; }
+function addTextbook(name, actorId) {
+  const n = normTb(name); if (!n) return { error: '教科書の名前を入れてください' };
+  const list = textbookList();
+  if (list.includes(n)) return { error: `「${n}」はもうあります` };
+  if (list.length >= 30) return { error: '教科書は30までです' };
+  setSetting('textbooks', JSON.stringify([...list, n]));
+  audit(actorId, 'textbook.added', n, null);
+  return { ok: true };
+}
+/** 名前を変える：単元・学校の結びつきもいっしょに変える */
+function renameTextbook(from, to, actorId) {
+  const a = normTb(from), b = normTb(to), list = textbookList();
+  if (!b) return { error: '新しい名前を入れてください' };
+  if (!list.includes(a)) return { error: '教科書が見つかりません' };
+  if (a !== b && list.includes(b)) return { error: `「${b}」はもうあります` };
+  db.prepare('UPDATE reading_units SET textbook = ? WHERE textbook = ?').run(b, a);
+  const m = schoolTextbooks(); for (const k of Object.keys(m)) if (m[k] === a) m[k] = b; saveSchoolTextbooks(m);
+  setSetting('textbooks', JSON.stringify(list.map(x => x === a ? b : x)));
+  audit(actorId, 'textbook.renamed', a, { to: b });
+  return { ok: true };
+}
+/** 一覧から消す（その教科書の単元があるときは消せない） */
+function removeTextbook(name, actorId) {
+  const n = normTb(name), list = textbookList();
+  if (!list.includes(n)) return { error: '教科書が見つかりません' };
+  const units = db.prepare('SELECT COUNT(*) AS n FROM reading_units WHERE textbook = ?').get(n).n;
+  if (units) return { error: `この教科書の単元が${units}こあります。先に単元を消すか、ほかの教科書に変えてください` };
+  const m = schoolTextbooks(); for (const k of Object.keys(m)) if (m[k] === n) delete m[k]; saveSchoolTextbooks(m);
+  setSetting('textbooks', JSON.stringify(list.filter(x => x !== n)));
+  audit(actorId, 'textbook.removed', n, null);
+  return { ok: true };
+}
+/** 学校に教科書を結びつける（空なら外す） */
+function setSchoolTextbook(name, tb, actorId) {
+  const n = normSchool(name), t = tb ? normTb(tb) : '';
+  if (!schoolList().some(s => s.name === n)) return { error: '学校が見つかりません' };
+  if (t && !textbookList().includes(t)) return { error: '教科書が見つかりません' };
+  const m = schoolTextbooks(); if (t) m[n] = t; else delete m[n]; saveSchoolTextbooks(m);
+  audit(actorId, 'school.textbook', n, { textbook: t || null });
+  return { ok: true };
+}
+module.exports = { textbookList, textbookOf, schoolTextbooks, addTextbook, renameTextbook, removeTextbook, setSchoolTextbook, setSchoolDates, effective, schoolList, addSchool, renameSchool, removeSchool, swTable, DEFAULT_TEMPLATE, GRADES, TERMS, TERM_NAME, parseTemplate, parseUnits, templateText, setTemplate, schoolTests, setSchoolTest, datesFor, jukuHas, stagesOf, scheduleFor, setCheck, overview };

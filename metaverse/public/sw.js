@@ -1,5 +1,5 @@
 // オフライン時の表示用キャッシュ。API は常にネットワークから取得し、保存しない。
-const CACHE = 'juku-v128';
+const CACHE = 'juku-v129';
 const ASSETS = [
   '/', '/app', '/admin', '/css/common.css', '/css/login.css', '/css/app.css', '/css/admin.css',
   '/js/compat.js', '/js/api.js', '/js/mic.js', '/js/login.js', '/js/app.js', '/js/render.js', '/js/admin.js', '/js/classcall.js', '/js/privatecall.js', '/js/studycam.js', '/js/ganbari.js', '/js/study-detail.js', '/js/tour.js', '/js/reading.js', '/js/admin-reading.js', '/js/scores.js', '/js/admin-scores.js', '/js/prep.js', '/js/admin-prep.js', '/shared/map.js',

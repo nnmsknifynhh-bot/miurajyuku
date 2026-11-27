@@ -28,19 +28,23 @@
     const title = el('input'); title.placeholder = '単元の名前（例：Unit 1 Part 1）。大人は空なら「11/24の文」'; title.maxLength = 60;
     // 大人英会話：だれ用の文か（1人ずつ自由に入れられる）
     const psel = el('select'); [['', '👥 大人みんな'], ...(d.adults || []).map(a => [String(a.id), '👤 ' + a.name + 'さんだけ'])].forEach(([v, t]) => { const o = el('option', null, t); o.value = v; psel.append(o); });
-    const syncP = () => { psel.hidden = gsel.value !== '大人'; };
+    // 📘 教科書（一度えらぶと、この端末で覚えておく → 続けて同じ教科書の単元を登録できる）
+    const tsel = el('select'); tsel.title = '教科書'; [['', '📘 教科書なし（全員に出る）'], ...(d.textbooks || []).map(n => [n, '📘 ' + n])].forEach(([v, t]) => { const o = el('option', null, t); o.value = v; tsel.append(o); });
+    try { const keep = localStorage.getItem('juku-unit-textbook'); if (keep && (d.textbooks || []).includes(keep)) tsel.value = keep; } catch (e) { /* なくてもよい */ }
+    tsel.onchange = () => { try { localStorage.setItem('juku-unit-textbook', tsel.value); } catch (e) { /* なくてもよい */ } };
+    const syncP = () => { psel.hidden = gsel.value !== '大人'; tsel.hidden = gsel.value === '大人'; };
     const ta = el('textarea', 'gb-out'); ta.rows = 12; ta.placeholder = "Jin: I'm sorry I'm late.\n遅れてごめんなさい。\nSho: Don't worry. We've just arrived, too.\n気にしないで。ぼくたちもちょうど着いたところだよ。";
     const pv = el('p', 'muted');
     const upd = () => { const ls = parse(ta.value), w = ls.reduce((n, l) => n + wordsOf(l.en).length, 0); pv.textContent = ls.length ? `${ls.length}行・${w}語 → ${gsel.value}の制限時間 ${mmss(limitOf(w, gsel.value))}${ls.some(l => !l.ja) ? '（訳がない行があります）' : ''}` : ''; };
     ta.oninput = upd; gsel.onchange = () => { upd(); syncP(); }; syncP();
     let editing = null;
     const save = el('button', 'btn', '登録する'), cancel = el('button', 'btn secondary', 'やめる'); cancel.hidden = true;
-    const row = el('div', 'gb-row'); row.append(gsel, psel, title);
+    const row = el('div', 'gb-row'); row.append(gsel, tsel, psel, title);
     fs.append(row, ta, pv, (() => { const r = el('div', 'gb-row'); r.append(save, cancel); return r; })());
-    cancel.onclick = () => { editing = null; save.textContent = '登録する'; cancel.hidden = true; ta.value = ''; title.value = ''; psel.value = ''; upd(); };
+    cancel.onclick = () => { editing = null; save.textContent = '登録する'; cancel.hidden = true; ta.value = ''; title.value = ''; psel.value = ''; try { tsel.value = localStorage.getItem('juku-unit-textbook') || ''; } catch (e) { tsel.value = ''; } upd(); };
     save.onclick = async () => {
       try {
-        const body = { grade: gsel.value, title: title.value, text: ta.value, userId: gsel.value === '大人' && psel.value ? Number(psel.value) : null };
+        const body = { grade: gsel.value, title: title.value, text: ta.value, userId: gsel.value === '大人' && psel.value ? Number(psel.value) : null, textbook: gsel.value === '大人' ? null : (tsel.value || null) };
         if (editing) await api('PATCH', `/api/admin/reading/units/${editing}`, body);
         else await api('POST', '/api/admin/reading/units', body);
         toast(editing ? '直しました' : '登録しました'); load(root, { api, toast });
@@ -48,7 +52,7 @@
     };
 
     // ── 単元の一覧 ──
-    const ls = section('📚 登録した単元', '生徒は、自分の学年の単元だけ練習できます（小学生は中1も。大人は「自分だけ」の文と「大人みんな」の文。先生・オーナーは全部）。');
+    const ls = section('📚 登録した単元', '生徒は、自分の学年の単元だけ練習できます（小学生は中1も。大人は「自分だけ」の文と「大人みんな」の文。先生・オーナーは全部）。📘 教科書をえらんだ単元は、その教科書を結びつけた学校の生徒にだけ出ます（学校と教科書は「🏫 教室の設定」で結びつけます）。教科書なしの単元は全員に出ます。');
     const tw = el('div', 'table-wrap'); ls.append(tw);
     const t = el('table', 'logs'); const h = el('tr'); ['順', '学年', '単元', '語数', '制限時間', '', ''].forEach(x => h.append(el('th', null, x))); t.append(el('thead')); t.firstChild.append(h);
     const tb = el('tbody');
@@ -56,9 +60,9 @@
       const tr = el('tr'); if (!u.active) tr.style.opacity = '.5';
       // ↑↓：同じ学年の中のならび順（生徒の画面もこの順）
       { const td = el('td', 'rd-move'); for (const [dir, ic] of [['up', '↑'], ['down', '↓']]) { const b = el('button', 'btn small secondary', ic); b.type = 'button'; b.title = dir === 'up' ? '上へ' : '下へ'; b.onclick = async () => { try { await api('POST', `/api/admin/reading/units/${u.id}/move`, { dir }); load(root, { api, toast }); } catch (e) { toast(e.message); } }; td.append(b); } tr.append(td); }
-      [u.grade + (u.grade === '大人' ? (u.userName ? `（${u.userName}さん）` : '（みんな）') : ''), u.title, `${u.words}語`, mmss(u.limit)].forEach(v => tr.append(el('td', null, v)));
+      [u.grade + (u.grade === '大人' ? (u.userName ? `（${u.userName}さん）` : '（みんな）') : '') + (u.textbook ? `・📘${u.textbook}` : ''), u.title, `${u.words}語`, mmss(u.limit)].forEach(v => tr.append(el('td', null, v)));
       const a = el('td'); const eb = el('button', 'btn small secondary', '直す');
-      eb.onclick = () => { editing = u.id; gsel.value = u.grade; psel.value = u.userId ? String(u.userId) : ''; syncP(); title.value = u.title; ta.value = toText(u.lines); save.textContent = '直す'; cancel.hidden = false; upd(); fs.scrollIntoView({ behavior: 'smooth' }); };
+      eb.onclick = () => { editing = u.id; gsel.value = u.grade; tsel.value = u.textbook || ''; psel.value = u.userId ? String(u.userId) : ''; syncP(); title.value = u.title; ta.value = toText(u.lines); save.textContent = '直す'; cancel.hidden = false; upd(); fs.scrollIntoView({ behavior: 'smooth' }); };
       const hb = el('button', 'btn small secondary', u.active ? 'かくす' : '出す');
       hb.onclick = async () => { try { await api('PATCH', `/api/admin/reading/units/${u.id}`, { active: !u.active }); load(root, { api, toast }); } catch (e) { toast(e.message); } };
       a.append(eb, hb); tr.append(a);
