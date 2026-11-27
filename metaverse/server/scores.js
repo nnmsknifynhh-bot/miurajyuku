@@ -75,6 +75,24 @@ function setTypes(list, actorId) {
   audit(actorId, 'scores.moshi_types', null, { count: out.length });
   return { ok: true, types: out };
 }
+// 1回だけ：オーナーから受け取った志望校と判定ライン（S〜E）を、模試の種類に入れる（同じ学校名は上書き。ほかの学校はそのまま）
+// 入れる先：名前に「V」がある模試 → なければ最初の模試 → 1つもなければ「Vもぎ」を作る。E判定の段階がなければ足す
+if (getSetting('moshi_seed_1127', '') !== '1') {
+  try {
+    const seed = require('./moshi_seed'), LV = ['S', 'A', 'B', 'C', 'D', 'E'];
+    const types = getTypes();
+    let t = types.find(x => /V|Ｖ/i.test(x.name)) || types[0];
+    if (!t) { t = { name: 'Vもぎ', levels: DEFAULT_LEVELS.map(l => ({ ...l })), schools: [] }; types.push(t); }
+    for (const n of LV) if (!t.levels.some(l => l.name === n)) t.levels.push({ name: n, pct: { S: 90, A: 80, B: 60, C: 40, D: 20, E: 10 }[n] });
+    for (const [name, ...devs] of seed) {
+      const d = {}; LV.forEach((n, i) => { d[n] = devs[i]; });
+      const ex = t.schools.find(x => x.name === name);
+      if (ex) ex.devs = { ...ex.devs, ...d }; else t.schools.push({ name, devs: d });
+    }
+    const r = setTypes(types, null);
+    if (r.error) console.error('志望校の読みこみに失敗:', r.error); else setSetting('moshi_seed_1127', '1');
+  } catch (e) { console.error('志望校の読みこみに失敗:', e.message); }
+}
 /** 合計の偏差値から、その学校の判定（いちばん上の段階から順に、判定ラインをこえているか） */
 function judgeOf(type, schoolName, dev) {
   const sc = type.schools.find(x => x.name === schoolName);
