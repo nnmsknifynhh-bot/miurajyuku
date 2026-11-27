@@ -64,7 +64,7 @@
           }
           row.append(units); s.append(row);
         }
-        if (lateSw) s.append(el('p', 'pp-late-msg', '締切をすぎたUnitがあります'));
+        if (lateSw) s.append(el('p', 'pp-late-msg', '締切をすぎたLessonがあります'));
         if ([...sw.speaking, ...sw.writing].some(x => x.by === 'app')) s.append(el('p', 'pp-hint', '🤖＝テスト教室で合格したので、アプリが自動で✅をつけました'));
         box.append(s);
       }

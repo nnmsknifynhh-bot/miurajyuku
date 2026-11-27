@@ -40,7 +40,7 @@
     table();
 
     // ── ② 学校のテスト日程 ──
-    const ss = section('🏫 学年ごとの課題・範囲（学校×学年×テスト）', 'テストの日は「🏫 教室の設定」→ 学校名の「📅 定期テストの日」で、学校ごとに先に入れておけます（その学校の生徒ぜんいんに反映）。ここでは学年ごとのスピーキング・ライティングの課題と範囲を入れます。学年だけ日がちがうときは、ここに日付を入れるとそちらが先になります。生徒の学校名は「👥 ユーザー」で入れます。スピーキング・ライティングの課題は「Unit6-1　Unit6-2」のように、改行・「、」・スペース2つで区切ります。音読に登録した単元と同じ名前にすると、テスト教室で合格したときに自動で✅がつきます。');
+    const ss = section('🏫 学年ごとの課題・範囲（学校×学年×テスト）', 'テストの日は「🏫 教室の設定」→ 学校名の「📅 定期テストの日」で、学校ごとに先に入れておけます（その学校の生徒ぜんいんに反映）。ここでは学年ごとのスピーキング・ライティングの課題と範囲を入れます。学年だけ日がちがうときは、ここに日付を入れるとそちらが先になります。生徒の学校名は「👥 ユーザー」で入れます。スピーキング・ライティングの課題は「Lesson6-1　Lesson6-2」のように、改行・「、」・スペース2つで区切ります。音読に登録した単元と同じ名前にすると、テスト教室で合格したときに自動で✅がつきます。');
     const form = el('div', 'pp-form');
     // 学校は「🏫 教室の設定」で作ったものからえらぶ
     const school = el('select'); school.append(new Option('学校をえらぶ', ''));
@@ -51,8 +51,8 @@
     const start = el('input'); start.type = 'date'; const end = el('input'); end.type = 'date';
     const r1 = el('div', 'gb-row'); r1.append(school, dl, grade, term);
     const r2 = el('div', 'gb-row'); r2.append(el('span', null, 'テスト初日（空なら学校の日程）'), start, el('span', null, '最後の日（あれば）'), end);
-    const spk = el('textarea', 'gb-out'); spk.rows = 2; spk.placeholder = 'スピーキング（例：Unit6-1　Unit6-2）';
-    const wrt = el('textarea', 'gb-out'); wrt.rows = 2; wrt.placeholder = 'ライティング（例：Unit6-1　Unit6-2）';
+    const spk = el('textarea', 'gb-out'); spk.rows = 2; spk.placeholder = 'スピーキング（例：Lesson6-1　Lesson6-2）';
+    const wrt = el('textarea', 'gb-out'); wrt.rows = 2; wrt.placeholder = 'ライティング（例：Lesson6-1　Lesson6-2）';
     const unitHint = el('small', 'muted', d.units.length ? `音読に登録ずみの単元：${d.units.slice(0, 20).join('・')}${d.units.length > 20 ? ' ほか' : ''}` : '音読の単元はまだ登録されていません');
     const rangeBox = el('div', 'gb-row'); const rangeIn = {};
     for (const sub of (d.subjects.length ? d.subjects : ['英語', '数学'])) { const i = el('input'); i.placeholder = `${sub}の範囲（例：新ワーク p.40〜55）`; i.maxLength = 80; rangeIn[sub] = i; rangeBox.append(el('span', null, sub), i); }
@@ -78,7 +78,7 @@
       [t.school, t.grade, t.termName, `${md(t.start)}${t.end ? '〜' + md(t.end) : ''}${t.fromSchool ? '（学校の日程）' : ''}`, t.speaking.join('・') || '–', t.writing.join('・') || '–'].forEach(v => tr.append(el('td', null, v)));
       const td = el('td');
       const e = el('button', 'btn small secondary', '直す'); e.type = 'button'; e.onclick = () => fill(t);
-      const c = el('button', 'btn small', '✅ Unitチェック表'); c.type = 'button'; c.onclick = () => swTable(t);
+      const c = el('button', 'btn small', '✅ Lessonチェック表'); c.type = 'button'; c.onclick = () => swTable(t);
       td.append(e, c); tr.append(td); lt.append(tr);
     }
     if (!d.schoolTests.length) { const tr = el('tr'); const c = el('td', 'empty', 'まだ日程がありません'); c.colSpan = 7; tr.append(c); lt.append(tr); }

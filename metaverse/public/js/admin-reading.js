@@ -25,7 +25,7 @@
     // ── 単元を追加・直す ──
     const fs = section('📖 単元を登録する', '英語の行のすぐ下に、その日本語訳の行を書いてください。行の頭の「Jin:」のような話す人の名前は、読まない・数えない部分になります。教科書の本文は塾の中だけで使ってください。');
     const gsel = el('select'); d.grades.forEach(g => { const o = el('option', null, g); o.value = g; gsel.append(o); }); gsel.value = '中3';
-    const title = el('input'); title.placeholder = '単元の名前（例：Unit 1 Part 1）。大人は空なら「11/24の文」'; title.maxLength = 60;
+    const title = el('input'); title.placeholder = '単元の名前（例：Lesson 1 Part 1）。大人は空なら「11/24の文」'; title.maxLength = 60;
     // 大人英会話：だれ用の文か（1人ずつ自由に入れられる）
     const psel = el('select'); [['', '👥 大人みんな'], ...(d.adults || []).map(a => [String(a.id), '👤 ' + a.name + 'さんだけ'])].forEach(([v, t]) => { const o = el('option', null, t); o.value = v; psel.append(o); });
     // 📘 教科書（一度えらぶと、この端末で覚えておく → 続けて同じ教科書の単元を登録できる）

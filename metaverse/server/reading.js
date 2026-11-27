@@ -21,6 +21,20 @@ if (getSetting('reading_tb_nc_once', '') !== '1') {
   db.prepare("UPDATE reading_units SET textbook = 'ニュークラウン' WHERE textbook IS NULL AND grade IN ('中1', '中2', '中3')").run();
   setSetting('reading_tb_nc_once', '1');
 }
+// 1回だけ：ニュークラウンの単元の名前「Unit」を「Lesson」に（テスト対策の課題・✅もいっしょに。オーナーの依頼 11/27）
+if (getSetting('reading_unit_to_lesson', '') !== '1') {
+  db.exec('BEGIN');
+  try {
+    db.prepare("UPDATE reading_units SET title = REPLACE(title, 'Unit', 'Lesson') WHERE textbook = 'ニュークラウン' AND title LIKE '%Unit%'").run();
+    const hasPrep = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'prep_school_tests'").get();
+    if (hasPrep) {
+      db.prepare("UPDATE prep_school_tests SET speaking = REPLACE(speaking, 'Unit', 'Lesson'), writing = REPLACE(writing, 'Unit', 'Lesson')").run();
+      db.prepare("UPDATE OR IGNORE prep_checks SET item = REPLACE(item, 'Unit', 'Lesson') WHERE item LIKE 'sw:%Unit%'").run();
+    }
+    setSetting('reading_unit_to_lesson', '1');
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); console.error('Unit→Lesson に失敗:', e.message); }
+}
 if (!db.prepare('PRAGMA table_info(reading_units)').all().some(c => c.name === 'sort_order')) db.exec('ALTER TABLE reading_units ADD COLUMN sort_order INTEGER');
 // 練習が「英文を見て」か「訳だけで」か（テストを受けられるのは、訳だけで合格したとき）
 if (!db.prepare('PRAGMA table_info(reading_practice)').all().some(c => c.name === 'ja_only')) db.exec('ALTER TABLE reading_practice ADD COLUMN ja_only INTEGER NOT NULL DEFAULT 0');
@@ -111,7 +125,7 @@ function addUnit(p, actorId) {
   const title = clean(p.title, 60) || (p.grade === '大人' ? `${Number(j.day.slice(5, 7))}/${Number(j.day.slice(8))}の文` : '');
   const who = personOf(p);
   if (who.error) return who;
-  if (!title) return { error: '単元の名前を入れてください（例：Unit 1 Part 1）' };
+  if (!title) return { error: '単元の名前を入れてください（例：Lesson 1 Part 1）' };
   const lines = parseText(p.text);
   if (!lines.length) return { error: '英語の本文を入れてください' };
   if (lines.length > 60) return { error: '本文が長すぎます（60行まで）' };
