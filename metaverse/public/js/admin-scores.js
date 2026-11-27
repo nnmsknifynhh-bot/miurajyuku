@@ -90,13 +90,18 @@
         });
         const al = el('button', 'btn small secondary', '＋ 段階'); al.type = 'button'; al.onclick = () => { t.levels.push({ name: '', pct: null }); t._open = true; draw(); };
         lr.append(al); box.append(lr);
+        // 換算内申の重み（内申1点＝偏差値いくつ分）
+        const nr2 = el('div', 'gb-row'); const rate = numIn(t.naishinRate == null ? 0.5 : t.naishinRate, '70px'); rate.min = 0; rate.max = 5; rate.oninput = () => { t.naishinRate = rate.value === '' ? 0.5 : Number(rate.value); };
+        nr2.append(el('b', null, '換算内申の重み：内申1点 ＝ 偏差値'), rate, el('small', 'muted', '分（初期0.5。0にすると内申は判定に使いません。学校の「換算内申」と生徒の換算内申の差 × この数を、偏差値に足して判定します）'));
+        box.append(nr2);
         // 志望校
         box.append(el('b', null, '志望校と判定ラインの偏差値'));
         const tw = el('div', 'table-wrap'); const tb = el('table', 'logs');
-        const h = el('tr'); h.append(el('th', null, '学校')); t.levels.forEach(l => h.append(el('th', null, `${l.name}（${l.pct ?? ''}%）`))); h.append(el('th')); tb.append(h);
+        const h = el('tr'); h.append(el('th', null, '学校')); t.levels.forEach(l => h.append(el('th', null, `${l.name}（${l.pct ?? ''}%）`))); h.append(el('th', null, '換算内申'), el('th')); tb.append(h);
         t.schools.forEach((sc, si) => {
           const tr = el('tr'); const td = el('td'); const sn = el('input'); sn.value = sc.name; sn.maxLength = 30; sn.oninput = () => { sc.name = sn.value; }; td.append(sn); tr.append(td);
           t.levels.forEach(l => { const c = el('td'); const i = numIn(sc.devs[l.name]); i.oninput = () => { if (i.value === '') delete sc.devs[l.name]; else sc.devs[l.name] = Number(i.value); }; c.append(i); tr.append(c); });
+          { const c = el('td'); const i = numIn(sc.naishin); i.oninput = () => { if (i.value === '') delete sc.naishin; else sc.naishin = Number(i.value); }; c.append(i); tr.append(c); }
           const c = el('td'); const x = el('button', 'btn small secondary', '×'); x.type = 'button'; x.onclick = () => { t.schools.splice(si, 1); draw(); }; c.append(x); tr.append(c);
           tb.append(tr);
         });
@@ -105,14 +110,15 @@
         const as = el('button', 'btn small secondary', '＋ 志望校'); as.type = 'button'; as.onclick = () => { t.schools.push({ name: '', devs: {} }); t._open = true; draw(); };
         // まとめて貼り付け（表計算ソフトから：学校名、S、A、B…の順）
         const pa = el('details'); pa.append(el('summary', null, '📋 まとめて貼り付け'));
-        const ta = el('textarea', 'gb-out'); ta.rows = 5; ta.placeholder = `学校名と、判定ラインの偏差値を ${t.levels.map(l => l.name).join('・')} の順に（タブ区切り・カンマ区切り）\n例：〇〇高校\t65\t62\t59\t56\t53`;
+        const ta = el('textarea', 'gb-out'); ta.rows = 5; ta.placeholder = `学校名と、判定ラインの偏差値を ${t.levels.map(l => l.name).join('・')} の順に。最後に換算内申を足してもOK（タブ区切り・カンマ区切り）\n例：〇〇高校\t65\t62\t59\t56\t53\t48`;
         const pb = el('button', 'btn small', '追加する'); pb.type = 'button';
         pb.onclick = () => {
           let n = 0;
           for (const line of ta.value.split(/\r?\n/)) {
             const cols = line.split(/\t|,/).map(x => x.trim()); if (!cols[0]) continue;
             const devs = {}; t.levels.forEach((l, i) => { const v = Number(cols[i + 1]); if (cols[i + 1] && Number.isFinite(v)) devs[l.name] = v; });
-            const ex = t.schools.find(x => x.name === cols[0]); if (ex) ex.devs = devs; else t.schools.push({ name: cols[0], devs }); n++;
+            const nv = Number(cols[t.levels.length + 1]), naishin = cols[t.levels.length + 1] && Number.isFinite(nv) ? nv : undefined;
+            const ex = t.schools.find(x => x.name === cols[0]); if (ex) { ex.devs = devs; if (naishin !== undefined) ex.naishin = naishin; } else t.schools.push(naishin !== undefined ? { name: cols[0], devs, naishin } : { name: cols[0], devs }); n++;
           }
           ta.value = ''; t._open = true; draw(); toast(`${n}校を入れました（下の「保存する」で保存）`);
         };

@@ -66,10 +66,13 @@ function setTypes(list, actorId) {
       if (sn.has(n)) return { error: `${name}：「${n}」が2つあります` }; sn.add(n);
       const devs = {};
       for (const l of levels) { const d = num(sc.devs && sc.devs[l.name], 20, 90, `${n}の${l.name}判定の偏差値`); if (d.error) return d; if (d.v != null) devs[l.name] = d.v; }
-      schools.push({ name: n, devs });
+      const ns = num(sc.naishin, 0, 100, `${n}の換算内申`); if (ns.error) return ns;
+      schools.push(ns.v != null ? { name: n, devs, naishin: ns.v } : { name: n, devs });
     }
+    // 換算内申1点を、偏差値いくつ分とみなすか（初期 0.5。0 なら内申は判定に使わない）
+    const rate = num(t.naishinRate == null || t.naishinRate === '' ? 0.5 : t.naishinRate, 0, 5, `${name}の内申の重み`); if (rate.error) return rate;
     const id = /^m[0-9a-z]+$/.test(String(t.id || '')) ? String(t.id) : 'm' + Date.now().toString(36) + out.length;
-    out.push({ id, name, levels, schools });
+    out.push({ id, name, levels, schools, naishinRate: rate.v });
   }
   setSetting('moshi_types', JSON.stringify(out));
   audit(actorId, 'scores.moshi_types', null, { count: out.length });
@@ -93,14 +96,32 @@ if (getSetting('moshi_seed_1127', '') !== '1') {
     if (r.error) console.error('志望校の読みこみに失敗:', r.error); else setSetting('moshi_seed_1127', '1');
   } catch (e) { console.error('志望校の読みこみに失敗:', e.message); }
 }
+// 1回だけ：CSVの換算内申を、志望校に入れる（判定に内申も使えるように）
+if (getSetting('moshi_naishin_1127', '') !== '1') {
+  try {
+    const seed = require('./moshi_seed'), types = getTypes();
+    const t = types.find(x => /V|Ｖ/i.test(x.name)) || types[0];
+    if (t) {
+      for (const row of seed) { const sc = t.schools.find(x => x.name === row[0]); if (sc && row[7] != null) sc.naishin = row[7]; }
+      const r = setTypes(types, null);
+      if (r.error) console.error('換算内申の読みこみに失敗:', r.error); else setSetting('moshi_naishin_1127', '1');
+    } else setSetting('moshi_naishin_1127', '1');
+  } catch (e) { console.error('換算内申の読みこみに失敗:', e.message); }
+}
 /** 合計の偏差値から、その学校の判定（いちばん上の段階から順に、判定ラインをこえているか） */
-function judgeOf(type, schoolName, dev) {
+// 換算内申（kansan）があり、学校に換算内申の目安があれば、内申の差を偏差値になおして足してから判定する
+// 例：重み0.5・学校の目安50・自分54 → 偏差値に +2（内申込み）
+function judgeOf(type, schoolName, dev, kansan) {
   const sc = type.schools.find(x => x.name === schoolName);
   if (!sc) return null;
   if (dev == null) return { school: schoolName, judge: null, pct: null };
-  for (const l of type.levels) { const t = sc.devs[l.name]; if (t != null && dev >= t) return { school: schoolName, judge: l.name, pct: l.pct }; }
+  const rate = type.naishinRate == null ? 0.5 : type.naishinRate;
+  const useN = kansan != null && sc.naishin != null && rate > 0;
+  const eff = useN ? Math.round((dev + (kansan - sc.naishin) * rate) * 10) / 10 : dev;
+  const extra = useN ? { naishin: true, effDev: eff } : {};
+  for (const l of type.levels) { const t = sc.devs[l.name]; if (t != null && eff >= t) return { school: schoolName, judge: l.name, pct: l.pct, ...extra }; }
   const last = type.levels[type.levels.length - 1];
-  return { school: schoolName, judge: null, pct: null, below: last ? last.pct : null };
+  return { school: schoolName, judge: null, pct: null, below: last ? last.pct : null, ...extra };
 }
 
 /** 入力をたしかめて、保存する形にする */
@@ -152,12 +173,13 @@ function normalize(kind, body, gradeNow) {
   }
   if (kind === 'moshi') {
     const d = num(body.totalDev, 10, 100, '合計の偏差値'); if (d.error) return d; data.totalDev = d.v;
+    const kn = num(body.kansan, 0, 100, '換算内申'); if (kn.error) return kn; if (kn.v != null) data.kansan = kn.v; // 判定に使う換算内申（なければ偏差値だけ）
     if (type) { // 志望校をえらぶと、判定は合計の偏差値から自動で決まる
       data.typeId = type.id; data.round = round;
       const js = [];
       for (const n of (Array.isArray(body.schools) ? body.schools : []).slice(0, 3)) {
         if (!n) continue;
-        const j = judgeOf(type, String(n), data.totalDev);
+        const j = judgeOf(type, String(n), data.totalDev, data.kansan);
         if (!j) return { error: `「${n}」は、この模試の志望校の一覧にありません` };
         if (!js.some(x => x.school === j.school)) js.push(j);
       }

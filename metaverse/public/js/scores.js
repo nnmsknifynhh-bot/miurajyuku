@@ -12,15 +12,27 @@
   const isJH = (g) => /^中/.test(g || '');
   const GRADES_JHHS = /^[中高][1-3]$/;
   // 志望校の判定の表示（例：〇〇高校 A判定（80%））
-  const judgeText = (j) => `${j.school} ${j.judge ? `${j.judge}判定${j.pct != null ? `（${j.pct}%）` : ''}` : j.below != null ? `判定なし（${j.below}%未満）` : '–'}`;
+  const judgeText = (j) => `${j.school} ${j.judge ? `${j.judge}判定${j.pct != null ? `（${j.pct}%）` : ''}` : j.below != null ? `判定なし（${j.below}%未満）` : '–'}${j.naishin ? '〔内申込み〕' : ''}`;
+  // 換算内申（東京都：5教科はそのまま＋実技4教科は2倍。65点満点）。9教科そろっているときだけ
+  const kansanOf = (rec) => {
+    if (!rec) return null;
+    const v = (n) => { const x = (rec.subjects || []).find(s => s.name === n); return x && x.value != null ? Number(x.value) : null; };
+    const all = NINE.map(v); if (all.some(x => x == null)) return null;
+    return all.slice(0, 5).reduce((a, b) => a + b, 0) + all.slice(5).reduce((a, b) => a + b, 0) * 2;
+  };
   // 合計の偏差値から判定（サーバーと同じ決め方。入れている途中に見せる）
-  function judgeOf(type, school, dev) {
+  function judgeOf(type, school, dev, kansan) {
     const sc = type && type.schools.find(x => x.name === school);
     if (!sc) return null;
     if (dev == null || dev === '' || !Number.isFinite(Number(dev))) return { school, judge: null, pct: null };
-    for (const l of type.levels) { const t = sc.devs[l.name]; if (t != null && Number(dev) >= t) return { school, judge: l.name, pct: l.pct }; }
+    const rate = type.naishinRate == null ? 0.5 : type.naishinRate;
+    const k = kansan === '' || kansan == null || !Number.isFinite(Number(kansan)) ? null : Number(kansan);
+    const useN = k != null && sc.naishin != null && rate > 0;
+    const eff = useN ? Math.round((Number(dev) + (k - sc.naishin) * rate) * 10) / 10 : Number(dev);
+    const extra = useN ? { naishin: true, effDev: eff } : {};
+    for (const l of type.levels) { const t = sc.devs[l.name]; if (t != null && eff >= t) return { school, judge: l.name, pct: l.pct, ...extra }; }
     const last = type.levels[type.levels.length - 1];
-    return { school, judge: null, pct: null, below: last ? last.pct : null };
+    return { school, judge: null, pct: null, below: last ? last.pct : null, ...extra };
   }
   const fmt = (n) => n == null ? '–' : String(n);
   const diffEl = (cur, prev) => {
@@ -218,13 +230,17 @@
       }
       if (kind === 'teiki') { const s4 = el('button', 'btn small secondary', '＋ 副教科（音・美・保体・技家）'); s4.type = 'button'; s4.onclick = () => SUB4.filter(n => !rows.some(o => o.nm.value === n)).forEach(name => addRow({ name })); more.append(s4); }
       f.append(list, more);
-      let rank, rankOf, tdev; const judges = [];
+      let rank, rankOf, tdev, kansan; const judges = [];
       if (kind === 'teiki') {
         const rr = el('div', 'gb-row'); rank = numIn(r.rank, '順位', '1'); rankOf = numIn(r.rankOf, '人数', '1');
         rr.append(el('span', null, '学年順位（あれば）'), rank, el('span', null, '位 /'), rankOf, el('span', null, '人')); f.append(rr);
       }
       if (kind === 'moshi') {
         const rr = el('div', 'gb-row'); tdev = numIn(r.totalDev, '偏差値'); rr.append(el('span', null, '合計の偏差値'), tdev); f.append(rr);
+        // 換算内申（入れると、内申も使って判定する）。はじめは、いちばん新しい内申から自動で入れる
+        const lastN = [...data.records].reverse().find(x => x.kind === 'naishin');
+        kansan = numIn(r.kansan != null ? r.kansan : r.id ? null : kansanOf(lastN), '換算内申');
+        const kr = el('div', 'gb-row'); kr.append(el('span', null, '換算内申（65点満点）'), kansan, el('small', 'muted', '入れると、内申も使って判定します（空なら偏差値だけ）')); f.append(kr);
         const jbox = el('div', 'sr-judges'); f.append(jbox);
         const typeOf = () => types.find(t => t.id === tsel.value) || null;
         let picks = (r.judges || []).map(j => j.school);
@@ -250,12 +266,13 @@
             const sel = el('select'); sel.append(new Option(`志望校${i + 1}`, '')); t.schools.forEach(x => sel.append(new Option(x.name, x.name)));
             sel.value = t.schools.some(x => x.name === picks[i]) ? picks[i] : '';
             const out = el('b', 'sr-judge-out');
-            const upd = () => { picks[i] = sel.value; const j = sel.value ? judgeOf(t, sel.value, tdev.value) : null; out.textContent = j ? (j.judge ? `${j.judge}判定（${j.pct}%）` : j.below != null && tdev.value ? `判定なし（${j.below}%未満）` : '合計の偏差値を入れてね') : ''; };
+            const upd = () => { picks[i] = sel.value; const j = sel.value ? judgeOf(t, sel.value, tdev.value, kansan.value) : null; out.textContent = j ? (j.judge ? `${j.judge}判定（${j.pct}%）` : j.below != null && tdev.value ? `判定なし（${j.below}%未満）` : '合計の偏差値を入れてね') + (j.naishin && tdev.value ? `〔内申込み：偏差値${j.effDev}あつかい〕` : '') : ''; };
             sel.onchange = upd; upd(); jr.append(sel, out); jbox.append(jr); judges.push([sel, null, upd]);
           }
         }
         tsel.onchange = drawJudges;
         tdev.addEventListener('input', () => judges.forEach(x => x[2] && x[2]()));
+        kansan.addEventListener('input', () => judges.forEach(x => x[2] && x[2]()));
         drawJudges();
       }
       const acts = el('div', 'gb-row');
@@ -269,7 +286,7 @@
         if (userId) body.userId = userId;
         if (ts) body.term = ts.value;
         if (kind === 'moshi') {
-          Object.assign(body, { past: past.checked, takenOn: day.value || null, totalDev: tdev.value });
+          Object.assign(body, { past: past.checked, takenOn: day.value || null, totalDev: tdev.value, kansan: kansan.value });
           if (tsel.value === '_other') Object.assign(body, { title: title.value, judges: judges.map(([a, b]) => ({ school: a.value, judge: b.value })) });
           else Object.assign(body, { typeId: tsel.value, round: round.value, schools: judges.map(([a]) => a.value).filter(Boolean) });
           if (!tsel.value) { toast('模試をえらんでください'); return; }

@@ -113,6 +113,26 @@ test('模試の種類（オーナーが登録）：生徒はえらぶだけ。�
   assert.match((await http('POST', '/api/scores', { kind: 'moshi', grade: '中2', typeId: 'mxxx', subjects: S5 }, stu)).data.error, /見つかりません/);
 });
 
+test('換算内申も判定に使う：学校の換算内申との差 × 重み（初期0.5）を偏差値に足す。換算内申がなければ偏差値だけ', async () => {
+  const r = await http('PUT', '/api/admin/moshi-types', { types: [{ name: 'Vもぎ', schools: [{ name: '〇〇高校', naishin: 50, devs: { S: 65, A: 62, B: 59, C: 56, D: 53 } }] }] }, owner);
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  const t = r.data.types[0];
+  assert.equal(t.naishinRate, 0.5); assert.equal(t.schools[0].naishin, 50);
+  const S5 = ['国語', '数学', '英語', '理科', '社会'].map(name => ({ name, score: 70 }));
+  const judge = async (kansan) => {
+    const s = await http('POST', '/api/scores', { kind: 'moshi', grade: '中2', typeId: t.id, round: 'k' + kansan, totalDev: 60, kansan, subjects: S5, schools: ['〇〇高校'] }, stu);
+    assert.equal(s.status, 201, JSON.stringify(s.data));
+    return (await http('GET', '/api/scores', null, stu)).data.records.find(x => x.id === s.data.id).judges[0];
+  };
+  assert.equal((await judge(null)).judge, 'B', '偏差値60だけならB');
+  let j = await judge(54); assert.equal(j.judge, 'A'); assert.equal(j.naishin, true); assert.equal(j.effDev, 62, '内申+4 → 偏差値+2');
+  j = await judge(40); assert.equal(j.judge, 'D', '内申-10 → 偏差値-5 → 55');
+  // 重み0なら内申は使わない
+  await http('PUT', '/api/admin/moshi-types', { types: [{ ...t, naishinRate: 0 }] }, owner);
+  assert.equal((await judge(64)).judge, 'B');
+  assert.match((await http('POST', '/api/scores', { kind: 'moshi', grade: '中2', typeId: t.id, totalDev: 60, kansan: 200, subjects: S5, schools: ['〇〇高校'] }, stu)).data.error, /換算内申/);
+});
+
 test('テストの日：生徒が入れる → 左上に「あと○日」・テスト中。終わって2週間たっても成績がないと「入れてね」', async () => {
   const SC = require('../server/scores.js');
   const { db } = require('../server/db.js');
