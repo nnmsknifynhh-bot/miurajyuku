@@ -487,8 +487,8 @@ body.is-trial .not-trial { display: none !important; }
 
 .me-menu button.locked { color: #9a8f86; }
 
-/* 保護者：わが子・5問のボタンは使わない（右上の「わが子」から） */
-body.is-parent #btn-family, body.is-parent #btn-pquiz { display: none !important; }
+/* 保護者：わが子のボタンは使わない（右上の「わが子」から）。5問は下のボタンから（やりたい人だけ） */
+body.is-parent #btn-family { display: none !important; }
 .family-more { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 
 /* 👪 保護者の左上：わが子のいま */
